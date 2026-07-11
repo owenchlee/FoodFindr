@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FoodFindr</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="wordmark">Food<span>Findr</span></div>
+
+    <p class="location-banner" id="location-banner" hidden>
+      <span id="location-banner-text"></span>
+      <button type="button" id="location-banner-dismiss" aria-label="Dismiss">×</button>
+    </p>
+
+    <div class="filters-block">
+      <div class="filter-group">
+        <span class="filter-label">Price</span>
+        <div class="price-toggle">
+          <button type="button" data-price="1">$</button>
+          <button type="button" data-price="2" class="active">$$</button>
+          <button type="button" data-price="3">$$$</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Cuisine</span>
+        <select id="cuisine-select" class="cuisine-select">
+          <option value="">All cuisines</option>
+          <option value="Thai">Thai</option>
+          <option value="Mexican">Mexican</option>
+          <option value="Italian">Italian</option>
+          <option value="Vegan">Vegan</option>
+          <option value="Chinese">Chinese</option>
+          <option value="American">American</option>
+          <option value="Japanese">Japanese</option>
+          <option value="Indian">Indian</option>
+          <option value="Mediterranean">Mediterranean</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Distance</span>
+        <div class="distance-row">
+          <input type="range" id="distance-range" min="0.5" max="10" step="0.5" value="3" />
+          <span class="distance-value" id="distance-value">3 mi</span>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="cta" id="recommend-btn">Get Recommendation</button>
+
+    <div class="how-it-works">
+      <span class="filter-label">How it works</span>
+      <ol>
+        <li><strong>1</strong> Set your filters</li>
+        <li><strong>2</strong> We scan nearby spots</li>
+        <li><strong>3</strong> Get one pick + dish</li>
+      </ol>
+    </div>
+  </aside>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
+
+  <div class="ticket" id="ticket">
+    <p class="ticket-eyebrow">Today's Pick</p>
+    <h2 class="ticket-name" id="ticket-name"></h2>
+    <div class="ticket-meta">
+      <span id="ticket-cuisine"></span>
+      <span class="price" id="ticket-price"></span>
+      <span id="ticket-rating"></span>
+      <span id="ticket-distance"></span>
+    </div>
+    <div class="ticket-divider"></div>
+    <p class="ticket-dish" id="ticket-dish"></p>
+    <p class="ticket-reason" id="ticket-reason"></p>
+  </div>
+</div>
+
+<script src="/js/map.js"></script>
+<script src="/js/app.js"></script>
+<script>
+(async function bootstrapMap() {
+  const response = await fetch('/api/config');
+  const config = await response.json();
+  const defaultCenter = { lat: 40.7300, lng: -73.9950 };
+
+  if (!config.mapsBrowserKey) {
+    document.getElementById('map').innerHTML =
+      '<div class="map-placeholder">Add your Google Maps API key to .env to see the live map here.</div>';
+    window.dispatchEvent(new Event('maps-loaded'));
+    return;
+  }
+
+  window.onGoogleMapsReady = () => {
+    initMap(defaultCenter, config.mapId);
+    window.dispatchEvent(new Event('maps-loaded'));
+  };
+
+  const script = document.createElement('script');
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsBrowserKey)}&libraries=marker&v=weekly&callback=onGoogleMapsReady`;
+  script.onerror = () => {
+    document.getElementById('map').innerHTML =
+      '<div class="map-placeholder">Couldn\'t load Google Maps — check your API key and internet connection.</div>';
+    window.dispatchEvent(new Event('maps-loaded'));
+  };
+  document.head.appendChild(script);
+})();
+</script>
+</body>
+</html>

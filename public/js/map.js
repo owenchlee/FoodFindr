@@ -1,0 +1,46 @@
+let map;
+let markersById = {};
+
+function initMap(center, mapId) {
+  map = new google.maps.Map(document.getElementById('map'), {
+    center,
+    zoom: 14,
+    mapId: mapId || undefined
+  });
+}
+
+function recenterMap(lat, lng) {
+  if (map) map.setCenter({ lat, lng });
+}
+
+function markerContent(restaurant, isPick) {
+  const div = document.createElement('div');
+  div.className = isPick ? 'marker marker--pick' : 'marker';
+  div.textContent = isPick ? `${'$'.repeat(restaurant.price)} · pick` : '$'.repeat(restaurant.price);
+  return div;
+}
+
+function renderMarkers(restaurants) {
+  if (!map) return;
+
+  Object.values(markersById).forEach(marker => { marker.map = null; });
+  markersById = {};
+
+  restaurants.forEach(restaurant => {
+    const marker = new google.maps.marker.AdvancedMarkerElement({
+      map,
+      position: { lat: restaurant.lat, lng: restaurant.lng },
+      content: markerContent(restaurant, false)
+    });
+    markersById[restaurant.id] = marker;
+  });
+}
+
+function highlightPick(pickId, restaurants) {
+  if (!map) return;
+
+  Object.entries(markersById).forEach(([id, marker]) => {
+    const restaurant = restaurants.find(r => r.id === Number(id));
+    marker.content = markerContent(restaurant, Number(id) === pickId);
+  });
+}

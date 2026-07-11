@@ -1,0 +1,167 @@
+{
+  "cityCenter": { "lat": 40.7300, "lng": -73.9950, "name": "Mock City" },
+  "restaurants": [
+    {
+      "id": 1,
+      "name": "Bua Thai Kitchen",
+      "cuisine": "Thai",
+      "price": 2,
+      "rating": 4.6,
+      "lat": 40.7325,
+      "lng": -73.9930,
+      "reviews": [
+        "The khao soi is the best I've had outside of Chiang Mai.",
+        "Small place, big flavor. Get the spring rolls as a starter."
+      ],
+      "dishes": [
+        { "name": "Khao Soi", "price": 14 },
+        { "name": "Pad Thai", "price": 12 },
+        { "name": "Spring Rolls", "price": 6 }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Taco Alma",
+      "cuisine": "Mexican",
+      "price": 1,
+      "rating": 4.3,
+      "lat": 40.7280,
+      "lng": -73.9975,
+      "reviews": [
+        "Al pastor tacos are cheap and taste like street food back home.",
+        "Cash only, worth the ATM trip."
+      ],
+      "dishes": [
+        { "name": "Al Pastor Tacos (3)", "price": 8 },
+        { "name": "Elote", "price": 5 },
+        { "name": "Horchata", "price": 3 }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Nonna's Table",
+      "cuisine": "Italian",
+      "price": 3,
+      "rating": 4.7,
+      "lat": 40.7340,
+      "lng": -73.9990,
+      "reviews": [
+        "Truffle tagliatelle is worth the splurge for an anniversary dinner.",
+        "Excellent wine list, attentive service."
+      ],
+      "dishes": [
+        { "name": "Truffle Tagliatelle", "price": 28 },
+        { "name": "Margherita Pizza", "price": 18 },
+        { "name": "Tiramisu", "price": 9 }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Green Leaf Vegan",
+      "cuisine": "Vegan",
+      "price": 2,
+      "rating": 4.4,
+      "lat": 40.7295,
+      "lng": -73.9920,
+      "reviews": [
+        "The jackfruit tacos actually taste like carnitas.",
+        "Great spot if you're eating with someone who has dietary restrictions."
+      ],
+      "dishes": [
+        { "name": "Buddha Bowl", "price": 15 },
+        { "name": "Jackfruit Tacos", "price": 13 },
+        { "name": "Kale Caesar", "price": 10 }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Dragon Wok",
+      "cuisine": "Chinese",
+      "price": 1,
+      "rating": 4.1,
+      "lat": 40.7310,
+      "lng": -74.0010,
+      "reviews": [
+        "Fast, cheap, and the dumplings are surprisingly good.",
+        "Not fancy but reliable takeout."
+      ],
+      "dishes": [
+        { "name": "General Tso's Chicken", "price": 11 },
+        { "name": "Dumplings (6)", "price": 8 },
+        { "name": "Fried Rice", "price": 9 }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Burger Foundry",
+      "cuisine": "American",
+      "price": 2,
+      "rating": 4.5,
+      "lat": 40.7265,
+      "lng": -73.9945,
+      "reviews": [
+        "The Foundry Burger with loaded fries is a full meal.",
+        "Milkshakes are huge, split one with a friend."
+      ],
+      "dishes": [
+        { "name": "Foundry Burger", "price": 14 },
+        { "name": "Loaded Fries", "price": 8 },
+        { "name": "Milkshake", "price": 6 }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Sakura Sushi",
+      "cuisine": "Japanese",
+      "price": 3,
+      "rating": 4.8,
+      "lat": 40.7350,
+      "lng": -73.9950,
+      "reviews": [
+        "Omakase here rivals places twice the price.",
+        "Book ahead, only eight seats at the counter."
+      ],
+      "dishes": [
+        { "name": "Omakase", "price": 65 },
+        { "name": "Salmon Roll", "price": 9 },
+        { "name": "Miso Soup", "price": 4 }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Curry House",
+      "cuisine": "Indian",
+      "price": 2,
+      "rating": 4.2,
+      "lat": 40.7288,
+      "lng": -74.0005,
+      "reviews": [
+        "Butter chicken and garlic naan is the move every time.",
+        "Portions are generous, good for sharing."
+      ],
+      "dishes": [
+        { "name": "Butter Chicken", "price": 16 },
+        { "name": "Garlic Naan", "price": 4 },
+        { "name": "Samosas (2)", "price": 6 }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Mediterraneo",
+      "cuisine": "Mediterranean",
+      "price": 2,
+      "rating": 4.5,
+      "lat": 40.7318,
+      "lng": -73.9960,
+      "reviews": [
+        "The lamb kebab plate is enough for two people.",
+        "Hummus trio is a great shareable starter."
+      ],
+      "dishes": [
+        { "name": "Lamb Kebab Plate", "price": 17 },
+        { "name": "Hummus Trio", "price": 9 },
+        { "name": "Baklava", "price": 5 }
+      ]
+    }
+  ]
+}
