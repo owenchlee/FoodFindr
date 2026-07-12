@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { cityCenter } = require('./mockRestaurants.json');
+const { insertVisit, listVisits } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -227,6 +228,48 @@ app.post('/api/recommend', async (req, res) => {
   } catch (err) {
     console.error('Recommendation failed:', err);
     res.status(502).json({ error: "Couldn't generate a recommendation right now. Try again in a moment." });
+  }
+});
+
+function shapeVisit(row) {
+  return {
+    id: row.id,
+    restaurantName: row.restaurant_name,
+    dish: row.dish,
+    rating: row.rating,
+    loggedAt: row.logged_at
+  };
+}
+
+app.post('/api/visits', (req, res) => {
+  const { restaurantName, dish, rating } = req.body;
+
+  if (!restaurantName || typeof restaurantName !== 'string' || !restaurantName.trim()) {
+    return res.status(400).json({ error: 'Restaurant name is required.' });
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'Rating must be a whole number from 1 to 5.' });
+  }
+
+  try {
+    const visit = insertVisit({
+      restaurantName: restaurantName.trim(),
+      dish: dish && String(dish).trim() ? String(dish).trim() : null,
+      rating
+    });
+    res.status(201).json({ visit: shapeVisit(visit) });
+  } catch (err) {
+    console.error('Failed to save visit:', err);
+    res.status(500).json({ error: 'Could not save your visit right now.' });
+  }
+});
+
+app.get('/api/visits', (req, res) => {
+  try {
+    res.json({ visits: listVisits().map(shapeVisit) });
+  } catch (err) {
+    console.error('Failed to load visits:', err);
+    res.status(500).json({ error: 'Could not load past visits.', visits: [] });
   }
 });
 

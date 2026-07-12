@@ -1,6 +1,8 @@
 let currentFilters = { price: 2, cuisine: '', maxDistance: 3 };
 let lastFilteredRestaurants = [];
 let userLocation = null;
+let recentVisits = [];
+let lastRecommendation = null;
 
 function init() {
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
@@ -33,7 +35,30 @@ function init() {
 
   document.getElementById('recommend-btn').addEventListener('click', getRecommendation);
 
+  document.querySelectorAll('.star-rating button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = Number(btn.dataset.star);
+      const container = document.getElementById('visit-rating');
+      container.dataset.value = value;
+      document.querySelectorAll('.star-rating button').forEach(b => {
+        const filled = Number(b.dataset.star) <= value;
+        b.classList.toggle('filled', filled);
+        b.textContent = filled ? '★' : '☆';
+      });
+    });
+  });
+
+  document.getElementById('visit-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitVisit();
+  });
+
+  document.getElementById('ticket-log-btn').addEventListener('click', () => {
+    prefillVisitForm(lastRecommendation);
+  });
+
   requestUserLocation();
+  loadRecentVisits();
 }
 
 function requestUserLocation() {
@@ -120,6 +145,7 @@ async function getRecommendation() {
 }
 
 function showTicket(data) {
+  lastRecommendation = data;
   const ticket = document.getElementById('ticket');
   document.getElementById('ticket-name').textContent = data.restaurant.name;
   document.getElementById('ticket-cuisine').textContent = data.restaurant.cuisine;
@@ -141,6 +167,110 @@ function showTicketError(message) {
 
 function hideTicket() {
   document.getElementById('ticket').classList.remove('visible');
+}
+
+async function loadRecentVisits() {
+  const response = await fetch('/api/visits');
+  const data = await response.json();
+  recentVisits = data.visits || [];
+  renderVisitList();
+}
+
+function visitItemElement(visit) {
+  const li = document.createElement('li');
+  li.className = 'visit-item';
+
+  const top = document.createElement('div');
+  top.className = 'visit-item-top';
+
+  const name = document.createElement('span');
+  name.className = 'visit-item-name';
+  name.textContent = visit.restaurantName;
+
+  const rating = document.createElement('span');
+  rating.className = 'visit-item-rating';
+  rating.textContent = '★'.repeat(visit.rating);
+
+  top.appendChild(name);
+  top.appendChild(rating);
+  li.appendChild(top);
+
+  if (visit.dish) {
+    const dish = document.createElement('div');
+    dish.className = 'visit-item-dish';
+    dish.textContent = visit.dish;
+    li.appendChild(dish);
+  }
+
+  const date = document.createElement('div');
+  date.className = 'visit-item-date';
+  date.textContent = new Date(visit.loggedAt).toLocaleDateString();
+  li.appendChild(date);
+
+  return li;
+}
+
+function renderVisitList() {
+  const list = document.getElementById('visit-list');
+  const empty = document.getElementById('visit-empty');
+
+  list.replaceChildren();
+  recentVisits.forEach(visit => list.appendChild(visitItemElement(visit)));
+  empty.hidden = recentVisits.length > 0;
+}
+
+function resetVisitForm() {
+  document.getElementById('visit-restaurant').value = '';
+  document.getElementById('visit-dish').value = '';
+  const container = document.getElementById('visit-rating');
+  container.dataset.value = 0;
+  document.querySelectorAll('.star-rating button').forEach(b => {
+    b.classList.remove('filled');
+    b.textContent = '☆';
+  });
+}
+
+function prefillVisitForm(data) {
+  if (!data) return;
+  document.getElementById('visit-restaurant').value = data.restaurant.name;
+  document.getElementById('visit-dish').value = data.dish.name;
+  document.getElementById('visit-restaurant').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function submitVisit() {
+  const status = document.getElementById('visit-status');
+  const restaurantName = document.getElementById('visit-restaurant').value.trim();
+  const dish = document.getElementById('visit-dish').value.trim();
+  const rating = Number(document.getElementById('visit-rating').dataset.value);
+
+  if (!restaurantName || rating < 1) {
+    status.textContent = 'Enter a restaurant name and pick a star rating.';
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+    return;
+  }
+
+  const response = await fetch('/api/visits', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ restaurantName, dish, rating })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    status.textContent = data.error;
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+    return;
+  }
+
+  recentVisits.unshift(data.visit);
+  renderVisitList();
+  resetVisitForm();
+  status.textContent = 'Visit logged!';
+  status.className = 'visit-status visit-status--ok';
+  status.hidden = false;
 }
 
 window.addEventListener('maps-loaded', init);

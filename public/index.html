@@ -65,6 +65,29 @@
         <li><strong>3</strong> Get one pick + dish</li>
       </ol>
     </div>
+
+    <div class="log-visit-block">
+      <span class="filter-label">Log a Visit</span>
+      <form id="visit-form" class="visit-form">
+        <input type="text" id="visit-restaurant" class="visit-input" placeholder="Restaurant name" />
+        <input type="text" id="visit-dish" class="visit-input" placeholder="What did you order? (optional)" />
+        <div class="star-rating" id="visit-rating" data-value="0">
+          <button type="button" data-star="1" aria-label="1 star">☆</button>
+          <button type="button" data-star="2" aria-label="2 stars">☆</button>
+          <button type="button" data-star="3" aria-label="3 stars">☆</button>
+          <button type="button" data-star="4" aria-label="4 stars">☆</button>
+          <button type="button" data-star="5" aria-label="5 stars">☆</button>
+        </div>
+        <button type="submit" class="cta cta--secondary" id="visit-save-btn">Save Visit</button>
+        <p class="visit-status" id="visit-status" hidden></p>
+      </form>
+    </div>
+
+    <div class="recent-visits-block" id="recent-visits-block">
+      <span class="filter-label">Recent Visits</span>
+      <ul class="visit-list" id="visit-list"></ul>
+      <p class="visit-empty" id="visit-empty" hidden>No visits logged yet.</p>
+    </div>
   </aside>
 
   <div class="map-wrap">
@@ -83,6 +106,7 @@
     <div class="ticket-divider"></div>
     <p class="ticket-dish" id="ticket-dish"></p>
     <p class="ticket-reason" id="ticket-reason"></p>
+    <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
   </div>
 </div>
 
