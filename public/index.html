@@ -14,6 +14,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="wordmark">Food<span>Findr</span></div>
+    <button type="button" class="prefs-link" id="edit-preferences-btn">Edit food preferences</button>
 
     <p class="location-banner" id="location-banner" hidden>
       <span id="location-banner-text"></span>
@@ -23,7 +24,7 @@
     <div class="filters-block">
       <div class="filter-group">
         <span class="filter-label">Price</span>
-        <div class="price-toggle">
+        <div class="price-toggle" id="price-filter-toggle">
           <button type="button" data-price="1">$</button>
           <button type="button" data-price="2" class="active">$$</button>
           <button type="button" data-price="3">$$$</button>
@@ -51,6 +52,23 @@
         <div class="distance-row">
           <input type="range" id="distance-range" min="0.5" max="10" step="0.5" value="3" />
           <span class="distance-value" id="distance-value">3 mi</span>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Group Size</span>
+        <div class="group-size-row">
+          <button type="button" id="group-size-minus" aria-label="Decrease group size">−</button>
+          <span class="group-size-value" id="group-size-value">1</span>
+          <button type="button" id="group-size-plus" aria-label="Increase group size">+</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Ordering Style</span>
+        <div class="price-toggle" id="sharing-toggle">
+          <button type="button" data-sharing="false" class="active">Separate mains</button>
+          <button type="button" data-sharing="true">Sharing</button>
         </div>
       </div>
     </div>
@@ -109,6 +127,57 @@
     <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
   </div>
 </div>
+
+<dialog class="prefs-dialog" id="prefs-dialog">
+  <form id="prefs-form" class="prefs-form">
+    <p class="ticket-eyebrow">Tell us your taste</p>
+    <h2 class="prefs-title">Food Preferences</h2>
+
+    <div class="filter-group">
+      <span class="filter-label">Favorite Cuisines</span>
+      <div class="chip-group" id="prefs-cuisine-chips"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Dietary Restrictions</span>
+      <div class="chip-group" id="prefs-dietary-chips">
+        <button type="button" class="chip" data-restriction="Vegetarian">Vegetarian</button>
+        <button type="button" class="chip" data-restriction="Vegan">Vegan</button>
+        <button type="button" class="chip" data-restriction="Gluten-Free">Gluten-Free</button>
+        <button type="button" class="chip" data-restriction="Dairy-Free">Dairy-Free</button>
+        <button type="button" class="chip" data-restriction="Nut-Free">Nut-Free</button>
+        <button type="button" class="chip" data-restriction="Halal">Halal</button>
+        <button type="button" class="chip" data-restriction="Kosher">Kosher</button>
+        <button type="button" class="chip" data-restriction="Shellfish-Free">Shellfish-Free</button>
+      </div>
+      <p class="prefs-disclaimer">Google doesn't give us menu/ingredient data, so we can only try to avoid conflicts based on what reviews happen to mention — not a guarantee. Always double check with the restaurant.</p>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Spice Tolerance</span>
+      <div class="price-toggle" id="prefs-spice-toggle">
+        <button type="button" data-spice="mild">Mild</button>
+        <button type="button" data-spice="medium" class="active">Medium</button>
+        <button type="button" data-spice="hot">Hot</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Price Tolerance</span>
+      <div class="price-toggle" id="prefs-price-toggle">
+        <button type="button" data-price-tolerance="1">$</button>
+        <button type="button" data-price-tolerance="2" class="active">$$</button>
+        <button type="button" data-price-tolerance="3">$$$</button>
+      </div>
+    </div>
+
+    <p class="visit-status" id="prefs-status" hidden></p>
+    <div class="prefs-actions">
+      <button type="button" class="prefs-skip" id="prefs-skip-btn">Skip for now</button>
+      <button type="submit" class="cta" id="prefs-save-btn">Save Preferences</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="/js/map.js"></script>
 <script src="/js/app.js"></script>

@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { cityCenter } = require('./mockRestaurants.json');
-const { insertVisit, listVisits } = require('./db');
+const { insertVisit, listVisits, getVisitHighlights, getPreferences, savePreferences } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -141,10 +141,52 @@ async function fetchPlaceReviews(placeId) {
   return (data.result.reviews || []).map(r => r.text).filter(Boolean);
 }
 
-async function askClaudeForRecommendation(candidates, targetPrice) {
+function groupInstruction(groupSize, sharing) {
+  if (groupSize <= 1) {
+    return 'This is for one person — suggest a single dish for them to order.';
+  }
+  if (sharing) {
+    return `This is for a group of ${groupSize} people who want to share — suggest a shareable order ` +
+      `(e.g. a couple of appetizers plus a main or two to split) that works for the whole group within the budget.`;
+  }
+  return `This is for a group of ${groupSize} people who each want their own main — suggest one dish that ` +
+    `works well as an individual order at this budget, since everyone will be ordering their own.`;
+}
+
+function personalizationInstruction(preferences, visitHighlights) {
+  const parts = [];
+
+  if (preferences) {
+    if (preferences.favoriteCuisines.length > 0) {
+      parts.push(`They especially enjoy these cuisines: ${preferences.favoriteCuisines.join(', ')}.`);
+    }
+    if (preferences.dietaryRestrictions.length > 0) {
+      parts.push(
+        `They have these dietary restrictions: ${preferences.dietaryRestrictions.join(', ')}. ` +
+        `Avoid suggesting a dish that clearly conflicts with these based on what the reviews say — ` +
+        `but menu/ingredient data isn't available, so this is best-effort, not a guarantee.`
+      );
+    }
+    parts.push(`Their spice tolerance is: ${preferences.spiceTolerance}.`);
+  }
+
+  if (visitHighlights.length > 0) {
+    const summary = visitHighlights
+      .map(v => `${v.restaurant_name} (rated ${v.rating}/5${v.dish ? `, ordered: ${v.dish}` : ''})`)
+      .join('; ');
+    parts.push(`Their recent dining history: ${summary}. Use this to gauge what they tend to like or dislike.`);
+  }
+
+  return parts.length > 0 ? ' ' + parts.join(' ') : '';
+}
+
+async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, preferences, visitHighlights }) {
   const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
-    `Suggest one specific dish to order, based only on what's actually mentioned in the reviews provided — don't invent a dish that isn't referenced. ` +
-    `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up.\n\n` +
+    `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
+    `actually mentioned in the reviews provided — don't invent a dish that isn't referenced. ` +
+    `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
+    `${groupInstruction(groupSize, sharing)}` +
+    `${personalizationInstruction(preferences, visitHighlights)}\n\n` +
     JSON.stringify(candidates, null, 2);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -194,11 +236,14 @@ app.post('/api/recommend', async (req, res) => {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY — add it to .env.' });
   }
 
-  const { restaurants: candidates, price } = req.body;
+  const { restaurants: candidates, price, groupSize, sharing } = req.body;
 
   if (!candidates || candidates.length === 0) {
     return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters.' });
   }
+
+  const clampedGroupSize = Math.min(8, Math.max(1, Number.isInteger(groupSize) ? groupSize : 1));
+  const isSharing = sharing === true;
 
   const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
   const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
@@ -217,7 +262,12 @@ app.post('/api/recommend', async (req, res) => {
       reviews: await fetchPlaceReviews(r.id)
     })));
 
-    const { place_id, dish_suggestion, reason } = await askClaudeForRecommendation(withReviews, targetPrice);
+    const { place_id, dish_suggestion, reason } = await askClaudeForRecommendation(withReviews, targetPrice, {
+      groupSize: clampedGroupSize,
+      sharing: isSharing,
+      preferences: getPreferences(),
+      visitHighlights: getVisitHighlights()
+    });
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
     res.json({
@@ -270,6 +320,48 @@ app.get('/api/visits', (req, res) => {
   } catch (err) {
     console.error('Failed to load visits:', err);
     res.status(500).json({ error: 'Could not load past visits.', visits: [] });
+  }
+});
+
+const SPICE_TOLERANCES = new Set(['mild', 'medium', 'hot']);
+
+function isStringArray(value) {
+  return Array.isArray(value) && value.every(item => typeof item === 'string');
+}
+
+app.get('/api/preferences', (req, res) => {
+  try {
+    res.json({ preferences: getPreferences() });
+  } catch (err) {
+    console.error('Failed to load preferences:', err);
+    res.status(500).json({ error: 'Could not load preferences right now.', preferences: null });
+  }
+});
+
+app.post('/api/preferences', (req, res) => {
+  const { favoriteCuisines, dietaryRestrictions, spiceTolerance, priceTolerance } = req.body;
+
+  if (!isStringArray(favoriteCuisines) || !isStringArray(dietaryRestrictions)) {
+    return res.status(400).json({ error: 'favoriteCuisines and dietaryRestrictions must both be arrays of text.' });
+  }
+  if (!SPICE_TOLERANCES.has(spiceTolerance)) {
+    return res.status(400).json({ error: 'spiceTolerance must be one of: mild, medium, hot.' });
+  }
+  if (!Number.isInteger(priceTolerance) || priceTolerance < 1 || priceTolerance > 3) {
+    return res.status(400).json({ error: 'priceTolerance must be a whole number from 1 to 3.' });
+  }
+
+  try {
+    const preferences = savePreferences({
+      favoriteCuisines: favoriteCuisines.map(c => c.trim()).filter(Boolean).slice(0, 10),
+      dietaryRestrictions: dietaryRestrictions.map(d => d.trim()).filter(Boolean).slice(0, 10),
+      spiceTolerance,
+      priceTolerance
+    });
+    res.json({ preferences });
+  } catch (err) {
+    console.error('Failed to save preferences:', err);
+    res.status(500).json({ error: 'Could not save preferences right now.' });
   }
 });
 
