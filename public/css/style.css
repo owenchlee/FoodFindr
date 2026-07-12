@@ -176,6 +176,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 .cta:hover { background: var(--color-chili-dim); box-shadow: 0 8px 20px rgba(200, 57, 30, 0.45); }
 .cta:active { transform: translateY(1px); }
 .cta:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+.cta:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 
 .how-it-works { padding-top: var(--space-4); border-top: 1px solid var(--color-hairline); }
 .how-it-works ol {

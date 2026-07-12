@@ -75,8 +75,12 @@ async function loadRestaurants() {
   const response = await fetch(`/api/restaurants?${params.toString()}`);
   const data = await response.json();
 
-  lastFilteredRestaurants = data.restaurants;
-  renderMarkers(data.restaurants);
+  if (!response.ok) {
+    showLocationBanner(data.error || "Couldn't load restaurants nearby. Try again in a moment.");
+  }
+
+  lastFilteredRestaurants = data.restaurants || [];
+  renderMarkers(lastFilteredRestaurants);
   hideTicket();
 }
 
@@ -86,21 +90,33 @@ async function getRecommendation() {
     return;
   }
 
-  const response = await fetch('/api/recommend', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ restaurants: lastFilteredRestaurants, price: currentFilters.price })
-  });
+  const button = document.getElementById('recommend-btn');
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = 'Thinking...';
 
-  const data = await response.json();
+  try {
+    const response = await fetch('/api/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurants: lastFilteredRestaurants, price: currentFilters.price })
+    });
 
-  if (!response.ok) {
-    showTicketError(data.error);
-    return;
+    const data = await response.json();
+
+    if (!response.ok) {
+      showTicketError(data.error);
+      return;
+    }
+
+    showTicket(data);
+    highlightPick(data.restaurant.id, lastFilteredRestaurants);
+  } catch (err) {
+    showTicketError("Couldn't reach the server. Check your connection and try again.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
-
-  showTicket(data);
-  highlightPick(data.restaurant.id, lastFilteredRestaurants);
 }
 
 function showTicket(data) {

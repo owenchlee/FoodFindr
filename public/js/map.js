@@ -5,7 +5,8 @@ function initMap(center, mapId) {
   map = new google.maps.Map(document.getElementById('map'), {
     center,
     zoom: 14,
-    mapId: mapId || undefined
+    mapId: mapId || undefined,
+    colorScheme: google.maps.ColorScheme.DARK
   });
 }
 
@@ -40,7 +41,9 @@ function highlightPick(pickId, restaurants) {
   if (!map) return;
 
   Object.entries(markersById).forEach(([id, marker]) => {
-    const restaurant = restaurants.find(r => r.id === Number(id));
-    marker.content = markerContent(restaurant, Number(id) === pickId);
+    const restaurant = restaurants.find(r => r.id === id);
+    if (restaurant) {
+      marker.content = markerContent(restaurant, id === pickId);
+    }
   });
 }
