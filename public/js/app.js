@@ -1,17 +1,18 @@
-let currentFilters = { price: 2, cuisine: '', maxDistance: 3 };
+let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false };
 let lastFilteredRestaurants = [];
 let userLocation = null;
 let recentVisits = [];
 let lastRecommendation = null;
+let preferences = null;
 
 function init() {
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
     document.getElementById('location-banner').hidden = true;
   });
 
-  document.querySelectorAll('.price-toggle button').forEach(btn => {
+  document.querySelectorAll('#price-filter-toggle button').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.price-toggle button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#price-filter-toggle button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentFilters.price = Number(btn.dataset.price);
       loadRestaurants();
@@ -35,6 +36,23 @@ function init() {
 
   document.getElementById('recommend-btn').addEventListener('click', getRecommendation);
 
+  document.getElementById('group-size-minus').addEventListener('click', () => {
+    currentFilters.groupSize = Math.max(1, currentFilters.groupSize - 1);
+    document.getElementById('group-size-value').textContent = currentFilters.groupSize;
+  });
+  document.getElementById('group-size-plus').addEventListener('click', () => {
+    currentFilters.groupSize = Math.min(8, currentFilters.groupSize + 1);
+    document.getElementById('group-size-value').textContent = currentFilters.groupSize;
+  });
+
+  document.querySelectorAll('#sharing-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#sharing-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilters.sharing = btn.dataset.sharing === 'true';
+    });
+  });
+
   document.querySelectorAll('.star-rating button').forEach(btn => {
     btn.addEventListener('click', () => {
       const value = Number(btn.dataset.star);
@@ -57,8 +75,43 @@ function init() {
     prefillVisitForm(lastRecommendation);
   });
 
+  document.getElementById('edit-preferences-btn').addEventListener('click', () => {
+    openPreferencesDialog();
+  });
+
+  document.getElementById('prefs-skip-btn').addEventListener('click', skipPreferences);
+
+  document.getElementById('prefs-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitPreferences();
+  });
+
+  const prefsDialog = document.getElementById('prefs-dialog');
+  prefsDialog.addEventListener('click', (event) => {
+    if (event.target === prefsDialog) prefsDialog.close();
+  });
+
+  document.querySelectorAll('#prefs-spice-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#prefs-spice-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('#prefs-price-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#prefs-price-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('#prefs-dietary-chips .chip').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('active'));
+  });
+
   requestUserLocation();
   loadRecentVisits();
+  loadPreferences();
 }
 
 function requestUserLocation() {
@@ -124,7 +177,12 @@ async function getRecommendation() {
     const response = await fetch('/api/recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurants: lastFilteredRestaurants, price: currentFilters.price })
+      body: JSON.stringify({
+        restaurants: lastFilteredRestaurants,
+        price: currentFilters.price,
+        groupSize: currentFilters.groupSize,
+        sharing: currentFilters.sharing
+      })
     });
 
     const data = await response.json();
@@ -271,6 +329,93 @@ async function submitVisit() {
   status.textContent = 'Visit logged!';
   status.className = 'visit-status visit-status--ok';
   status.hidden = false;
+}
+
+async function loadPreferences() {
+  const response = await fetch('/api/preferences');
+  const data = await response.json();
+  preferences = data.preferences;
+
+  if (!preferences && !localStorage.getItem('ff_prefs_skipped')) {
+    openPreferencesDialog();
+  }
+}
+
+function populateCuisineChips() {
+  const container = document.getElementById('prefs-cuisine-chips');
+  container.replaceChildren();
+
+  const cuisineOptions = Array.from(document.getElementById('cuisine-select').options)
+    .map(option => option.value)
+    .filter(Boolean);
+
+  const selected = new Set(preferences ? preferences.favoriteCuisines : []);
+
+  cuisineOptions.forEach(cuisine => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.dataset.cuisine = cuisine;
+    chip.textContent = cuisine;
+    if (selected.has(cuisine)) chip.classList.add('active');
+    chip.addEventListener('click', () => chip.classList.toggle('active'));
+    container.appendChild(chip);
+  });
+}
+
+function openPreferencesDialog() {
+  populateCuisineChips();
+
+  document.querySelectorAll('#prefs-dietary-chips .chip').forEach(chip => {
+    const isSelected = preferences && preferences.dietaryRestrictions.includes(chip.dataset.restriction);
+    chip.classList.toggle('active', Boolean(isSelected));
+  });
+
+  const spice = preferences ? preferences.spiceTolerance : 'medium';
+  document.querySelectorAll('#prefs-spice-toggle button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.spice === spice);
+  });
+
+  const priceTolerance = preferences ? String(preferences.priceTolerance) : '2';
+  document.querySelectorAll('#prefs-price-toggle button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.priceTolerance === priceTolerance);
+  });
+
+  document.getElementById('prefs-dialog').showModal();
+}
+
+function skipPreferences() {
+  localStorage.setItem('ff_prefs_skipped', '1');
+  document.getElementById('prefs-dialog').close();
+}
+
+async function submitPreferences() {
+  const favoriteCuisines = Array.from(document.querySelectorAll('#prefs-cuisine-chips .chip.active'))
+    .map(chip => chip.dataset.cuisine);
+  const dietaryRestrictions = Array.from(document.querySelectorAll('#prefs-dietary-chips .chip.active'))
+    .map(chip => chip.dataset.restriction);
+  const spiceTolerance = document.querySelector('#prefs-spice-toggle button.active').dataset.spice;
+  const priceTolerance = Number(document.querySelector('#prefs-price-toggle button.active').dataset.priceTolerance);
+
+  const response = await fetch('/api/preferences', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ favoriteCuisines, dietaryRestrictions, spiceTolerance, priceTolerance })
+  });
+
+  const data = await response.json();
+  const status = document.getElementById('prefs-status');
+
+  if (!response.ok) {
+    status.textContent = data.error;
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+    return;
+  }
+
+  preferences = data.preferences;
+  status.hidden = true;
+  document.getElementById('prefs-dialog').close();
 }
 
 window.addEventListener('maps-loaded', init);

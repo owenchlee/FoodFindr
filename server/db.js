@@ -44,8 +44,7 @@ function getVisitHighlights(limit = 5) {
   ).all(limit);
 }
 
-function getPreferences() {
-  const row = db.prepare('SELECT * FROM preferences WHERE id = 1').get();
+function shapePreferences(row) {
   if (!row) return null;
   return {
     favoriteCuisines: JSON.parse(row.favorite_cuisines),
@@ -54,6 +53,10 @@ function getPreferences() {
     priceTolerance: row.price_tolerance,
     updatedAt: row.updated_at
   };
+}
+
+function getPreferences() {
+  return shapePreferences(db.prepare('SELECT * FROM preferences WHERE id = 1').get());
 }
 
 function savePreferences({ favoriteCuisines, dietaryRestrictions, spiceTolerance, priceTolerance }) {
@@ -75,13 +78,7 @@ function savePreferences({ favoriteCuisines, dietaryRestrictions, spiceTolerance
     new Date().toISOString()
   );
 
-  return {
-    favoriteCuisines: JSON.parse(row.favorite_cuisines),
-    dietaryRestrictions: JSON.parse(row.dietary_restrictions),
-    spiceTolerance: row.spice_tolerance,
-    priceTolerance: row.price_tolerance,
-    updatedAt: row.updated_at
-  };
+  return shapePreferences(row);
 }
 
 module.exports = { insertVisit, listVisits, getVisitHighlights, getPreferences, savePreferences };
