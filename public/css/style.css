@@ -163,6 +163,10 @@ select.cuisine-select {
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
 }
+select.cuisine-select option {
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
 
 .distance-row { display: flex; align-items: center; gap: var(--space-3); }
 input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
@@ -240,11 +244,42 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   color: var(--color-turmeric);
 }
 
+.progress-block,
 .log-visit-block,
 .recent-visits-block {
   padding-top: var(--space-4);
   margin-top: var(--space-4);
   border-top: 1px solid var(--color-hairline);
+}
+.progress-block[hidden] { display: none; }
+
+.progress-city {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-paper);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.progress-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(242, 234, 225, 0.1);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--color-turmeric);
+  border-radius: 999px;
+  transition: width 300ms ease;
+}
+
+.progress-count {
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  color: var(--color-paper-dim);
+  margin: var(--space-2) 0 0;
 }
 
 .visit-form { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
@@ -260,6 +295,11 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 }
 .visit-input::placeholder { color: var(--color-paper-dim); }
 .visit-input:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+select.visit-input { cursor: pointer; }
+select.visit-input option {
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
 
 .star-rating { display: flex; gap: var(--space-1); }
 .star-rating button {
@@ -332,6 +372,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 
 .visit-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin: var(--space-3) 0 0; }
 
+.ticket-map-link,
 .ticket-log-btn {
   display: block;
   margin-top: var(--space-3);
@@ -342,9 +383,12 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-chili);
+  text-decoration: none;
   cursor: pointer;
 }
+.ticket-map-link:hover,
 .ticket-log-btn:hover { color: var(--color-chili-dim); }
+.ticket--error .ticket-map-link,
 .ticket--error .ticket-log-btn { display: none; }
 
 /* ---------- Preferences dialog ---------- */
@@ -491,8 +535,15 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
     0 0, 100% 0, 100% 70%, 85% 100%, 70% 70%,
     55% 100%, 40% 70%, 25% 100%, 10% 70%, 0 100%
   );
+  animation: pick-pulse 1.8s ease-out infinite;
 }
 .marker--pick::after { content: none; }
+
+@keyframes pick-pulse {
+  0% { box-shadow: 0 0 0 4px rgba(200, 57, 30, 0.25), 0 4px 14px rgba(0, 0, 0, 0.55); }
+  50% { box-shadow: 0 0 0 10px rgba(200, 57, 30, 0.12), 0 4px 14px rgba(0, 0, 0, 0.55); }
+  100% { box-shadow: 0 0 0 4px rgba(200, 57, 30, 0.25), 0 4px 14px rgba(0, 0, 0, 0.55); }
+}
 
 /* ---------- Recommendation ticket ---------- */
 .ticket {
@@ -603,5 +654,5 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { transition: none !important; animation: none !important; }
 }

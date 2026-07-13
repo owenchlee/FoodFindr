@@ -14,6 +14,12 @@ function recenterMap(lat, lng) {
   if (map) map.setCenter({ lat, lng });
 }
 
+function centerOnPick(lat, lng) {
+  if (!map) return;
+  map.panTo({ lat, lng });
+  if (map.getZoom() < 16) map.setZoom(16);
+}
+
 function markerContent(restaurant, isPick) {
   const div = document.createElement('div');
   div.className = isPick ? 'marker marker--pick' : 'marker';
@@ -31,7 +37,8 @@ function renderMarkers(restaurants) {
     const marker = new google.maps.marker.AdvancedMarkerElement({
       map,
       position: { lat: restaurant.lat, lng: restaurant.lng },
-      content: markerContent(restaurant, false)
+      content: markerContent(restaurant, false),
+      title: restaurant.name
     });
     markersById[restaurant.id] = marker;
   });

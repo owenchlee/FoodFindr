@@ -24,6 +24,17 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS discovered_restaurants (
+    place_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    city TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    first_seen_at TEXT NOT NULL
+  )
+`);
+
 function insertVisit({ restaurantName, dish, rating }) {
   return db.prepare(`
     INSERT INTO visits (restaurant_name, dish, rating, logged_at)
@@ -81,4 +92,36 @@ function savePreferences({ favoriteCuisines, dietaryRestrictions, spiceTolerance
   return shapePreferences(row);
 }
 
-module.exports = { insertVisit, listVisits, getVisitHighlights, getPreferences, savePreferences };
+function recordDiscovered(restaurants, city) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO discovered_restaurants (place_id, name, city, lat, lng, first_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const now = new Date().toISOString();
+  for (const r of restaurants) {
+    insert.run(r.id, r.name, city, r.lat, r.lng, now);
+  }
+}
+
+function getProgress(city) {
+  const discovered = db.prepare(
+    'SELECT COUNT(*) AS count FROM discovered_restaurants WHERE city = ?'
+  ).get(city).count;
+
+  const visited = db.prepare(`
+    SELECT COUNT(*) AS count FROM discovered_restaurants d
+    WHERE d.city = ?
+    AND EXISTS (
+      SELECT 1 FROM visits v
+      WHERE LOWER(TRIM(v.restaurant_name)) = LOWER(TRIM(d.name))
+    )
+  `).get(city).count;
+
+  return { city, discovered, visited };
+}
+
+module.exports = {
+  insertVisit, listVisits, getVisitHighlights,
+  getPreferences, savePreferences,
+  recordDiscovered, getProgress
+};
