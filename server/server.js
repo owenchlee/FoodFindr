@@ -2,7 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { cityCenter } = require('./mockRestaurants.json');
-const { insertVisit, listVisits, getVisitHighlights, getPreferences, savePreferences } = require('./db');
+const {
+  insertVisit, listVisits, getVisitHighlights,
+  getPreferences, savePreferences,
+  recordDiscovered, getProgress
+} = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,6 +87,48 @@ async function fetchPlaces(lat, lng, radiusMeters, cuisine) {
   return data.results || [];
 }
 
+// Caches lat/lng (rounded to ~1.1km) -> city name so repeated searches in the
+// same area don't re-hit the Geocoding API.
+const cityCache = new Map();
+
+function cityCacheKey(lat, lng) {
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
+}
+
+async function geocodeCity(lat, lng) {
+  const key = cityCacheKey(lat, lng);
+  if (cityCache.has(key)) {
+    return cityCache.get(key);
+  }
+
+  const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+  url.searchParams.set('latlng', `${lat},${lng}`);
+  url.searchParams.set('key', PLACES_SERVER_KEY);
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== 'OK') {
+      console.error('Geocoding error:', data.status, data.error_message || '');
+      return null;
+    }
+
+    const components = (data.results[0] && data.results[0].address_components) || [];
+    const findType = type => {
+      const match = components.find(c => c.types.includes(type));
+      return match ? match.long_name : null;
+    };
+    const city = findType('locality') || findType('postal_town') || findType('administrative_area_level_2') || 'Unknown Area';
+
+    cityCache.set(key, city);
+    return city;
+  } catch (err) {
+    console.error('Geocoding request failed:', err);
+    return null;
+  }
+}
+
 app.get('/api/restaurants', async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', restaurants: [] });
@@ -117,10 +163,39 @@ app.get('/api/restaurants', async (req, res) => {
       results = results.filter(r => r.distance <= Number(maxDistance));
     }
 
-    res.json({ cityCenter: { lat, lng }, restaurants: results });
+    const city = await geocodeCity(lat, lng);
+    if (city && results.length > 0) {
+      recordDiscovered(results, city);
+    }
+
+    res.json({ cityCenter: { lat, lng }, city, restaurants: results });
   } catch (err) {
     console.error('Places API request failed:', err);
     res.status(502).json({ error: 'Could not reach Google Places right now. Try again in a moment.', restaurants: [] });
+  }
+});
+
+app.get('/api/progress', async (req, res) => {
+  if (!PLACES_SERVER_KEY) {
+    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', city: null });
+  }
+
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return res.status(400).json({ error: 'lat and lng are required.', city: null });
+  }
+
+  try {
+    const city = await geocodeCity(lat, lng);
+    if (!city) {
+      return res.json({ city: null, discovered: 0, visited: 0 });
+    }
+    res.json(getProgress(city));
+  } catch (err) {
+    console.error('Failed to compute progress:', err);
+    res.status(500).json({ error: 'Could not load progress right now.', city: null });
   }
 });
 

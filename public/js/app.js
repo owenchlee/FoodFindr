@@ -71,6 +71,12 @@ function init() {
     submitVisit();
   });
 
+  document.getElementById('visit-restaurant').addEventListener('change', (event) => {
+    const otherInput = document.getElementById('visit-restaurant-other');
+    otherInput.hidden = event.target.value !== '__other__';
+    if (!otherInput.hidden) otherInput.focus();
+  });
+
   document.getElementById('ticket-log-btn').addEventListener('click', () => {
     prefillVisitForm(lastRecommendation);
   });
@@ -112,6 +118,28 @@ function init() {
   requestUserLocation();
   loadRecentVisits();
   loadPreferences();
+}
+
+async function loadProgress() {
+  if (!userLocation) return;
+
+  const params = new URLSearchParams({ lat: userLocation.lat, lng: userLocation.lng });
+  const response = await fetch(`/api/progress?${params.toString()}`);
+  const data = await response.json();
+
+  const block = document.getElementById('progress-block');
+
+  if (!response.ok || !data.city || data.discovered === 0) {
+    block.hidden = true;
+    return;
+  }
+
+  const percent = Math.round((data.visited / data.discovered) * 100);
+  document.getElementById('progress-city').textContent = `in ${data.city}`;
+  document.getElementById('progress-bar-fill').style.width = `${percent}%`;
+  document.getElementById('progress-count').textContent =
+    `${data.visited} of ${data.discovered} restaurants you've searched up so far — not the whole city`;
+  block.hidden = false;
 }
 
 function requestUserLocation() {
@@ -159,7 +187,36 @@ async function loadRestaurants() {
 
   lastFilteredRestaurants = data.restaurants || [];
   renderMarkers(lastFilteredRestaurants);
+  populateVisitRestaurantOptions();
   hideTicket();
+  loadProgress();
+}
+
+function populateVisitRestaurantOptions() {
+  const select = document.getElementById('visit-restaurant');
+  const previousValue = select.value;
+  select.replaceChildren();
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select a restaurant…';
+  select.appendChild(placeholder);
+
+  lastFilteredRestaurants.forEach(restaurant => {
+    const option = document.createElement('option');
+    option.value = restaurant.name;
+    option.textContent = restaurant.name;
+    select.appendChild(option);
+  });
+
+  const other = document.createElement('option');
+  other.value = '__other__';
+  other.textContent = 'Other (not listed)';
+  select.appendChild(other);
+
+  if (Array.from(select.options).some(o => o.value === previousValue)) {
+    select.value = previousValue;
+  }
 }
 
 async function getRecommendation() {
@@ -194,6 +251,7 @@ async function getRecommendation() {
 
     showTicket(data);
     highlightPick(data.restaurant.id, lastFilteredRestaurants);
+    centerOnPick(data.restaurant.lat, data.restaurant.lng);
   } catch (err) {
     showTicketError("Couldn't reach the server. Check your connection and try again.");
   } finally {
@@ -212,6 +270,9 @@ function showTicket(data) {
   document.getElementById('ticket-distance').textContent = `${data.restaurant.distance} mi`;
   document.getElementById('ticket-dish').textContent = `Order: ${data.dish.name}`;
   document.getElementById('ticket-reason').textContent = data.reason;
+  const mapLink = document.getElementById('ticket-map-link');
+  const query = `${data.restaurant.lat},${data.restaurant.lng}`;
+  mapLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}&query_place_id=${encodeURIComponent(data.restaurant.id)}`;
   ticket.classList.remove('ticket--error');
   ticket.classList.add('visible');
 }
@@ -279,6 +340,9 @@ function renderVisitList() {
 
 function resetVisitForm() {
   document.getElementById('visit-restaurant').value = '';
+  const otherInput = document.getElementById('visit-restaurant-other');
+  otherInput.value = '';
+  otherInput.hidden = true;
   document.getElementById('visit-dish').value = '';
   const container = document.getElementById('visit-rating');
   container.dataset.value = 0;
@@ -290,19 +354,33 @@ function resetVisitForm() {
 
 function prefillVisitForm(data) {
   if (!data) return;
-  document.getElementById('visit-restaurant').value = data.restaurant.name;
+  const select = document.getElementById('visit-restaurant');
+  const otherInput = document.getElementById('visit-restaurant-other');
+  const isListed = Array.from(select.options).some(o => o.value === data.restaurant.name);
+
+  if (isListed) {
+    select.value = data.restaurant.name;
+    otherInput.hidden = true;
+  } else {
+    select.value = '__other__';
+    otherInput.hidden = false;
+    otherInput.value = data.restaurant.name;
+  }
+
   document.getElementById('visit-dish').value = data.dish.name;
-  document.getElementById('visit-restaurant').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  select.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function submitVisit() {
   const status = document.getElementById('visit-status');
-  const restaurantName = document.getElementById('visit-restaurant').value.trim();
+  const select = document.getElementById('visit-restaurant');
+  const otherInput = document.getElementById('visit-restaurant-other');
+  const restaurantName = (select.value === '__other__' ? otherInput.value : select.value).trim();
   const dish = document.getElementById('visit-dish').value.trim();
   const rating = Number(document.getElementById('visit-rating').dataset.value);
 
   if (!restaurantName || rating < 1) {
-    status.textContent = 'Enter a restaurant name and pick a star rating.';
+    status.textContent = 'Pick a restaurant and a star rating.';
     status.className = 'visit-status visit-status--error';
     status.hidden = false;
     return;
@@ -329,6 +407,7 @@ async function submitVisit() {
   status.textContent = 'Visit logged!';
   status.className = 'visit-status visit-status--ok';
   status.hidden = false;
+  loadProgress();
 }
 
 async function loadPreferences() {
