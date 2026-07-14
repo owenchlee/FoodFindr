@@ -1,4 +1,4 @@
-let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false };
+let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false, dish: '' };
 let lastFilteredRestaurants = [];
 let userLocation = null;
 let recentVisits = [];
@@ -22,6 +22,18 @@ function init() {
   document.getElementById('cuisine-select').addEventListener('change', (event) => {
     currentFilters.cuisine = event.target.value;
     loadRestaurants();
+  });
+
+  const dishInput = document.getElementById('dish-search');
+  dishInput.addEventListener('change', (event) => {
+    currentFilters.dish = event.target.value.trim();
+    loadRestaurants();
+  });
+  dishInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      dishInput.blur();
+    }
   });
 
   const distanceInput = document.getElementById('distance-range');
@@ -78,10 +90,13 @@ function init() {
   });
 
   document.getElementById('ticket-log-btn').addEventListener('click', () => {
+    openDrawer('reviews');
     prefillVisitForm(lastRecommendation);
   });
 
   document.getElementById('edit-preferences-btn').addEventListener('click', () => {
+    document.getElementById('tab-menu').hidden = true;
+    document.getElementById('tabs-toggle').setAttribute('aria-expanded', 'false');
     openPreferencesDialog();
   });
 
@@ -104,20 +119,62 @@ function init() {
     });
   });
 
-  document.querySelectorAll('#prefs-price-toggle button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#prefs-price-toggle button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
-
   document.querySelectorAll('#prefs-dietary-chips .chip').forEach(chip => {
     chip.addEventListener('click', () => chip.classList.toggle('active'));
   });
 
+  document.getElementById('tabs-toggle').addEventListener('click', toggleTabMenu);
+  document.querySelectorAll('.tab-menu-item[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => openDrawer(btn.dataset.tab));
+  });
+  document.getElementById('tab-drawer-close').addEventListener('click', closeDrawer);
+
   requestUserLocation();
   loadRecentVisits();
   loadPreferences();
+}
+
+function toggleTabMenu() {
+  const menu = document.getElementById('tab-menu');
+  const toggle = document.getElementById('tabs-toggle');
+  const isOpen = !menu.hidden;
+  menu.hidden = isOpen;
+  toggle.setAttribute('aria-expanded', String(!isOpen));
+}
+
+function openDrawer(tab) {
+  const drawer = document.getElementById('tab-drawer');
+  const toggle = document.getElementById('tabs-toggle');
+  const alreadyShowingThis = !drawer.hidden && drawer.dataset.activeTab === tab;
+
+  document.getElementById('tab-menu').hidden = true;
+  toggle.setAttribute('aria-expanded', 'false');
+
+  if (alreadyShowingThis) {
+    closeDrawer();
+    return;
+  }
+
+  document.getElementById('tab-panel-reviews').hidden = tab !== 'reviews';
+  document.getElementById('tab-panel-progress').hidden = tab !== 'progress';
+  drawer.dataset.activeTab = tab;
+  drawer.hidden = false;
+  toggle.classList.add('active');
+}
+
+function closeDrawer() {
+  document.getElementById('tab-drawer').hidden = true;
+  document.getElementById('tabs-toggle').classList.remove('active');
+}
+
+function showLoading(message) {
+  const overlay = document.getElementById('loading-overlay');
+  document.querySelector('.loading-text').textContent = message;
+  overlay.hidden = false;
+}
+
+function hideLoading() {
+  document.getElementById('loading-overlay').hidden = true;
 }
 
 async function loadProgress() {
@@ -128,9 +185,11 @@ async function loadProgress() {
   const data = await response.json();
 
   const block = document.getElementById('progress-block');
+  const empty = document.getElementById('progress-empty');
 
   if (!response.ok || !data.city || data.discovered === 0) {
     block.hidden = true;
+    empty.hidden = false;
     return;
   }
 
@@ -140,6 +199,7 @@ async function loadProgress() {
   document.getElementById('progress-count').textContent =
     `${data.visited} of ${data.discovered} restaurants you've searched up so far — not the whole city`;
   block.hidden = false;
+  empty.hidden = true;
 }
 
 function requestUserLocation() {
@@ -177,19 +237,25 @@ async function loadRestaurants() {
   if (currentFilters.price) params.set('price', currentFilters.price);
   if (currentFilters.cuisine) params.set('cuisine', currentFilters.cuisine);
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
+  if (currentFilters.dish) params.set('dish', currentFilters.dish);
 
-  const response = await fetch(`/api/restaurants?${params.toString()}`);
-  const data = await response.json();
+  showLoading('Scanning nearby spots…');
+  try {
+    const response = await fetch(`/api/restaurants?${params.toString()}`);
+    const data = await response.json();
 
-  if (!response.ok) {
-    showLocationBanner(data.error || "Couldn't load restaurants nearby. Try again in a moment.");
+    if (!response.ok) {
+      showLocationBanner(data.error || "Couldn't load restaurants nearby. Try again in a moment.");
+    }
+
+    lastFilteredRestaurants = data.restaurants || [];
+    renderMarkers(lastFilteredRestaurants);
+    populateVisitRestaurantOptions();
+    hideTicket();
+    loadProgress();
+  } finally {
+    hideLoading();
   }
-
-  lastFilteredRestaurants = data.restaurants || [];
-  renderMarkers(lastFilteredRestaurants);
-  populateVisitRestaurantOptions();
-  hideTicket();
-  loadProgress();
 }
 
 function populateVisitRestaurantOptions() {
@@ -229,6 +295,7 @@ async function getRecommendation() {
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = 'Thinking...';
+  showLoading('Reading reviews and picking a spot…');
 
   try {
     const response = await fetch('/api/recommend', {
@@ -238,7 +305,8 @@ async function getRecommendation() {
         restaurants: lastFilteredRestaurants,
         price: currentFilters.price,
         groupSize: currentFilters.groupSize,
-        sharing: currentFilters.sharing
+        sharing: currentFilters.sharing,
+        dish: currentFilters.dish
       })
     });
 
@@ -257,6 +325,7 @@ async function getRecommendation() {
   } finally {
     button.disabled = false;
     button.textContent = originalLabel;
+    hideLoading();
   }
 }
 
@@ -269,6 +338,16 @@ function showTicket(data) {
   document.getElementById('ticket-rating').textContent = `★ ${data.restaurant.rating}`;
   document.getElementById('ticket-distance').textContent = `${data.restaurant.distance} mi`;
   document.getElementById('ticket-dish').textContent = `Order: ${data.dish.name}`;
+
+  const flavorsContainer = document.getElementById('ticket-flavors');
+  flavorsContainer.replaceChildren();
+  (data.dish.flavorTags || []).forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = tag;
+    flavorsContainer.appendChild(chip);
+  });
+
   document.getElementById('ticket-reason').textContent = data.reason;
   const mapLink = document.getElementById('ticket-map-link');
   const query = `${data.restaurant.lat},${data.restaurant.lng}`;
@@ -386,10 +465,13 @@ async function submitVisit() {
     return;
   }
 
+  const matchesRecommendation = lastRecommendation && restaurantName === lastRecommendation.restaurant.name;
+  const flavorTags = matchesRecommendation ? lastRecommendation.dish.flavorTags : [];
+
   const response = await fetch('/api/visits', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ restaurantName, dish, rating })
+    body: JSON.stringify({ restaurantName, dish, rating, flavorTags })
   });
 
   const data = await response.json();
@@ -455,12 +537,32 @@ function openPreferencesDialog() {
     btn.classList.toggle('active', btn.dataset.spice === spice);
   });
 
-  const priceTolerance = preferences ? String(preferences.priceTolerance) : '2';
-  document.querySelectorAll('#prefs-price-toggle button').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.priceTolerance === priceTolerance);
-  });
-
+  loadTopFlavors();
   document.getElementById('prefs-dialog').showModal();
+}
+
+async function loadTopFlavors() {
+  const container = document.getElementById('top-flavors-chips');
+  const empty = document.getElementById('top-flavors-empty');
+
+  try {
+    const response = await fetch('/api/flavors');
+    const data = await response.json();
+    const topFlavors = data.topFlavors || [];
+
+    container.replaceChildren();
+    topFlavors.forEach(({ tag, count }) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = `${tag} (${count})`;
+      container.appendChild(chip);
+    });
+
+    empty.hidden = topFlavors.length > 0;
+  } catch (err) {
+    container.replaceChildren();
+    empty.hidden = false;
+  }
 }
 
 function skipPreferences() {
@@ -474,12 +576,11 @@ async function submitPreferences() {
   const dietaryRestrictions = Array.from(document.querySelectorAll('#prefs-dietary-chips .chip.active'))
     .map(chip => chip.dataset.restriction);
   const spiceTolerance = document.querySelector('#prefs-spice-toggle button.active').dataset.spice;
-  const priceTolerance = Number(document.querySelector('#prefs-price-toggle button.active').dataset.priceTolerance);
 
   const response = await fetch('/api/preferences', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ favoriteCuisines, dietaryRestrictions, spiceTolerance, priceTolerance })
+    body: JSON.stringify({ favoriteCuisines, dietaryRestrictions, spiceTolerance })
   });
 
   const data = await response.json();

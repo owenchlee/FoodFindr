@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>FoodFindr</title>
+<link rel="icon" href="/images/logo.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -12,15 +13,30 @@
 <body>
 
 <div class="shell">
-  <aside class="sidebar">
-    <div class="wordmark">Food<span>Findr</span></div>
-    <button type="button" class="prefs-link" id="edit-preferences-btn">Edit food preferences</button>
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
 
-    <p class="location-banner" id="location-banner" hidden>
-      <span id="location-banner-text"></span>
-      <button type="button" id="location-banner-dismiss" aria-label="Dismiss">×</button>
-    </p>
+  <div class="floating-card brand-card">
+    <div class="tabs-control">
+      <button type="button" class="tabs-toggle" id="tabs-toggle" aria-label="Choose a panel" aria-haspopup="true" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="tab-menu" id="tab-menu" hidden>
+        <button type="button" class="tab-menu-item" data-tab="reviews">Past Reviews</button>
+        <button type="button" class="tab-menu-item" data-tab="progress">Game Progress</button>
+        <button type="button" class="tab-menu-item" id="edit-preferences-btn">My Taste Profile</button>
+      </div>
+    </div>
+    <div class="wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
+  </div>
 
+  <p class="floating-card location-banner" id="location-banner" hidden>
+    <span id="location-banner-text"></span>
+    <button type="button" id="location-banner-dismiss" aria-label="Dismiss">×</button>
+  </p>
+
+  <div class="floating-card filters-card">
     <div class="filters-block">
       <div class="filter-group">
         <span class="filter-label">Price</span>
@@ -29,6 +45,12 @@
           <button type="button" data-price="2" class="active">$$</button>
           <button type="button" data-price="3">$$$</button>
         </div>
+        <p class="price-hint">$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)</p>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Craving Something Specific?</span>
+        <input type="text" id="dish-search" class="visit-input" placeholder="e.g. ramen, tacos, pad thai" maxlength="60" />
       </div>
 
       <div class="filter-group">
@@ -83,46 +105,51 @@
         <li><strong>3</strong> Get one pick + dish</li>
       </ol>
     </div>
+  </div>
 
-    <div class="progress-block" id="progress-block" hidden>
-      <span class="filter-label">Restaurants Explored</span>
-      <p class="progress-city" id="progress-city"></p>
-      <div class="progress-bar-track">
-        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+  <div class="tab-drawer" id="tab-drawer" hidden>
+    <button type="button" class="tab-drawer-close" id="tab-drawer-close" aria-label="Close panel">×</button>
+
+    <div class="tab-drawer-panel" id="tab-panel-reviews">
+      <div class="log-visit-block">
+        <span class="filter-label">Log a Visit</span>
+        <form id="visit-form" class="visit-form">
+          <select id="visit-restaurant" class="visit-input">
+            <option value="">Select a restaurant…</option>
+            <option value="__other__">Other (not listed)</option>
+          </select>
+          <input type="text" id="visit-restaurant-other" class="visit-input" placeholder="Restaurant name" hidden />
+          <input type="text" id="visit-dish" class="visit-input" placeholder="What did you order? (optional)" />
+          <div class="star-rating" id="visit-rating" data-value="0">
+            <button type="button" data-star="1" aria-label="1 star">☆</button>
+            <button type="button" data-star="2" aria-label="2 stars">☆</button>
+            <button type="button" data-star="3" aria-label="3 stars">☆</button>
+            <button type="button" data-star="4" aria-label="4 stars">☆</button>
+            <button type="button" data-star="5" aria-label="5 stars">☆</button>
+          </div>
+          <button type="submit" class="cta cta--secondary" id="visit-save-btn">Save Visit</button>
+          <p class="visit-status" id="visit-status" hidden></p>
+        </form>
       </div>
-      <p class="progress-count" id="progress-count"></p>
+
+      <div class="recent-visits-block" id="recent-visits-block">
+        <span class="filter-label">Recent Visits</span>
+        <ul class="visit-list" id="visit-list"></ul>
+        <p class="visit-empty" id="visit-empty" hidden>No visits logged yet.</p>
+      </div>
     </div>
 
-    <div class="log-visit-block">
-      <span class="filter-label">Log a Visit</span>
-      <form id="visit-form" class="visit-form">
-        <select id="visit-restaurant" class="visit-input">
-          <option value="">Select a restaurant…</option>
-          <option value="__other__">Other (not listed)</option>
-        </select>
-        <input type="text" id="visit-restaurant-other" class="visit-input" placeholder="Restaurant name" hidden />
-        <input type="text" id="visit-dish" class="visit-input" placeholder="What did you order? (optional)" />
-        <div class="star-rating" id="visit-rating" data-value="0">
-          <button type="button" data-star="1" aria-label="1 star">☆</button>
-          <button type="button" data-star="2" aria-label="2 stars">☆</button>
-          <button type="button" data-star="3" aria-label="3 stars">☆</button>
-          <button type="button" data-star="4" aria-label="4 stars">☆</button>
-          <button type="button" data-star="5" aria-label="5 stars">☆</button>
+    <div class="tab-drawer-panel" id="tab-panel-progress" hidden>
+      <div class="progress-block" id="progress-block" hidden>
+        <span class="filter-label">Restaurants Explored</span>
+        <p class="progress-city" id="progress-city"></p>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-bar-fill"></div>
         </div>
-        <button type="submit" class="cta cta--secondary" id="visit-save-btn">Save Visit</button>
-        <p class="visit-status" id="visit-status" hidden></p>
-      </form>
+        <p class="progress-count" id="progress-count"></p>
+      </div>
+      <p class="progress-empty" id="progress-empty">Search a few spots first — your progress will show up here once we know your city.</p>
     </div>
-
-    <div class="recent-visits-block" id="recent-visits-block">
-      <span class="filter-label">Recent Visits</span>
-      <ul class="visit-list" id="visit-list"></ul>
-      <p class="visit-empty" id="visit-empty" hidden>No visits logged yet.</p>
-    </div>
-  </aside>
-
-  <div class="map-wrap">
-    <div id="map"></div>
   </div>
 
   <div class="ticket" id="ticket">
@@ -136,6 +163,7 @@
     </div>
     <div class="ticket-divider"></div>
     <p class="ticket-dish" id="ticket-dish"></p>
+    <div class="chip-group ticket-flavors" id="ticket-flavors"></div>
     <p class="ticket-reason" id="ticket-reason"></p>
     <a class="ticket-map-link" id="ticket-map-link" href="#" target="_blank" rel="noopener">View on Google Maps →</a>
     <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
@@ -144,8 +172,8 @@
 
 <dialog class="prefs-dialog" id="prefs-dialog">
   <form id="prefs-form" class="prefs-form">
-    <p class="ticket-eyebrow">Tell us your taste</p>
-    <h2 class="prefs-title">Food Preferences</h2>
+    <p class="ticket-eyebrow">Your taste, saved</p>
+    <h2 class="prefs-title">My Taste Profile</h2>
 
     <div class="filter-group">
       <span class="filter-label">Favorite Cuisines</span>
@@ -177,12 +205,9 @@
     </div>
 
     <div class="filter-group">
-      <span class="filter-label">Price Tolerance</span>
-      <div class="price-toggle" id="prefs-price-toggle">
-        <button type="button" data-price-tolerance="1">$</button>
-        <button type="button" data-price-tolerance="2" class="active">$$</button>
-        <button type="button" data-price-tolerance="3">$$$</button>
-      </div>
+      <span class="filter-label">Your Top Flavors</span>
+      <div class="chip-group" id="top-flavors-chips"></div>
+      <p class="prefs-disclaimer" id="top-flavors-empty">Log a few 4-5★ visits from a recommendation to see your top flavors here.</p>
     </div>
 
     <p class="visit-status" id="prefs-status" hidden></p>
@@ -192,6 +217,11 @@
     </div>
   </form>
 </dialog>
+
+<div class="loading-overlay" id="loading-overlay" hidden aria-live="polite">
+  <div class="loading-spinner"></div>
+  <p class="loading-text">Finding something good…</p>
+</div>
 
 <script src="/js/map.js"></script>
 <script src="/js/app.js"></script>

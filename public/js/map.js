@@ -6,7 +6,9 @@ function initMap(center, mapId) {
     center,
     zoom: 14,
     mapId: mapId || undefined,
-    colorScheme: google.maps.ColorScheme.DARK
+    colorScheme: google.maps.ColorScheme.DARK,
+    mapTypeControl: false,
+    fullscreenControl: false
   });
 }
 

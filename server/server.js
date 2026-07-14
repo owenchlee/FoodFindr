@@ -3,7 +3,7 @@ const express = require('express');
 const path = require('path');
 const { cityCenter } = require('./mockRestaurants.json');
 const {
-  insertVisit, listVisits, getVisitHighlights,
+  insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress
 } = require('./db');
@@ -12,6 +12,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const PLACES_SERVER_KEY = process.env.GOOGLE_PLACES_SERVER_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+// Fixed vocabulary (not free-form) so tags can actually be aggregated into
+// "top flavors" later — free text from Claude would fragment across
+// synonyms like "tangy" vs "zesty" vs "sour".
+const FLAVOR_TAGS = ['Spicy', 'Tangy', 'Sweet', 'Savory', 'Umami', 'Sour', 'Smoky', 'Creamy', 'Fresh', 'Rich', 'Herby', 'Crispy'];
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -60,31 +65,73 @@ function placeToRestaurant(place, cuisineHint) {
   };
 }
 
-async function fetchPlaces(lat, lng, radiusMeters, cuisine) {
-  const url = new URL(cuisine
-    ? 'https://maps.googleapis.com/maps/api/place/textsearch/json'
-    : 'https://maps.googleapis.com/maps/api/place/nearbysearch/json');
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  if (cuisine) {
-    url.searchParams.set('query', `${cuisine} restaurants`);
+// Google returns at most 20 results per call; a `next_page_token` unlocks up
+// to 2 more pages (60 total, Google's hard cap — there's no way to get
+// "every" restaurant in a city from this API). Each extra page is a
+// separate billed Places Search request, so this roughly triples search
+// cost versus a single page.
+const MAX_PLACES_PAGES = 3;
+
+async function fetchPlacesPage(endpoint, params, pageToken) {
+  const url = new URL(endpoint);
+  if (pageToken) {
+    // Per Google's docs, a pagetoken request only needs the token + key —
+    // other search params are ignored anyway when it's present.
+    url.searchParams.set('pagetoken', pageToken);
   } else {
-    url.searchParams.set('type', 'restaurant');
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
   }
-  url.searchParams.set('location', `${lat},${lng}`);
-  url.searchParams.set('radius', String(Math.round(radiusMeters)));
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
   const response = await fetch(url);
-  const data = await response.json();
+  return response.json();
+}
 
-  if (data.status === 'ZERO_RESULTS') {
-    return [];
-  }
-  if (data.status !== 'OK') {
-    throw new Error(`Places API error: ${data.status}${data.error_message ? ' — ' + data.error_message : ''}`);
+async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish) {
+  const useTextSearch = Boolean(cuisine || dish);
+  const endpoint = useTextSearch
+    ? 'https://maps.googleapis.com/maps/api/place/textsearch/json'
+    : 'https://maps.googleapis.com/maps/api/place/nearbysearch/json';
+
+  const params = { location: `${lat},${lng}`, radius: String(Math.round(radiusMeters)) };
+  if (useTextSearch) {
+    params.query = [dish, cuisine, 'restaurants'].filter(Boolean).join(' ');
+  } else {
+    params.type = 'restaurant';
   }
 
-  return data.results || [];
+  const allResults = [];
+  let pageToken = null;
+
+  for (let page = 0; page < MAX_PLACES_PAGES; page++) {
+    let data = await fetchPlacesPage(endpoint, params, pageToken);
+
+    if (data.status === 'INVALID_REQUEST' && pageToken) {
+      // A fresh next_page_token isn't active immediately on Google's side — retry once after a beat.
+      await delay(1500);
+      data = await fetchPlacesPage(endpoint, params, pageToken);
+    }
+
+    if (data.status === 'ZERO_RESULTS') break;
+    if (data.status !== 'OK') {
+      if (page === 0) {
+        throw new Error(`Places API error: ${data.status}${data.error_message ? ' — ' + data.error_message : ''}`);
+      }
+      break; // keep whatever earlier pages already returned instead of discarding it
+    }
+
+    allResults.push(...(data.results || []));
+
+    if (!data.next_page_token) break;
+    pageToken = data.next_page_token;
+    await delay(2000); // Google requires a short delay before a page token becomes valid
+  }
+
+  return allResults;
 }
 
 // Caches lat/lng (rounded to ~1.1km) -> city name so repeated searches in the
@@ -137,16 +184,18 @@ app.get('/api/restaurants', async (req, res) => {
   const lat = parseFloat(req.query.lat) || cityCenter.lat;
   const lng = parseFloat(req.query.lng) || cityCenter.lng;
   const { price, cuisine, maxDistance } = req.query;
+  const dish = typeof req.query.dish === 'string' ? req.query.dish.trim().slice(0, 60) : '';
 
   const distanceMiles = maxDistance ? Number(maxDistance) : 3;
   const radiusMeters = Math.min(distanceMiles * 1609.34, 50000);
 
   try {
-    const places = await fetchPlaces(lat, lng, radiusMeters, cuisine);
+    const places = await fetchPlaces(lat, lng, radiusMeters, cuisine, dish);
 
     let results = places
       .filter(place => place.geometry && place.geometry.location)
       .filter(place => !(place.types || []).some(t => NON_RESTAURANT_TYPES.has(t)))
+      .filter(place => !place.business_status || place.business_status === 'OPERATIONAL')
       .map(place => {
         const restaurant = placeToRestaurant(place, cuisine);
         return {
@@ -255,13 +304,26 @@ function personalizationInstruction(preferences, visitHighlights) {
   return parts.length > 0 ? ' ' + parts.join(' ') : '';
 }
 
-async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, preferences, visitHighlights }) {
+function dishCravingInstruction(dish) {
+  if (!dish) return '';
+  return ` The user is specifically craving "${dish}" today. Only pick a restaurant whose reviews actually support ` +
+    `serving something like that, and suggest that as the dish. If NONE of the candidates' reviews support "${dish}" ` +
+    `at all, do not pick one and pretend it's a fallback for it — instead pick the best-reviewed candidate on its own ` +
+    `merits, suggest a dish its reviews actually back up, and say plainly in your reason that you couldn't find ` +
+    `"${dish}" nearby so you're suggesting this instead. Never describe an unrelated dish as similar to or a ` +
+    `substitute for "${dish}" — that's more misleading than just admitting the craving wasn't found.`;
+}
+
+async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, preferences, visitHighlights, dish }) {
   const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided — don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
+    `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
+    `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
     `${groupInstruction(groupSize, sharing)}` +
-    `${personalizationInstruction(preferences, visitHighlights)}\n\n` +
+    `${personalizationInstruction(preferences, visitHighlights)}` +
+    `${dishCravingInstruction(dish)}\n\n` +
     JSON.stringify(candidates, null, 2);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -282,9 +344,16 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
           properties: {
             place_id: { type: 'string', description: 'The place_id of the chosen restaurant, copied exactly from one of the candidates.' },
             dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order.' },
-            reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' }
+            reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' },
+            flavor_tags: {
+              type: 'array',
+              description: 'Exactly 3 flavor descriptors for the suggested dish, from the fixed list.',
+              items: { type: 'string', enum: FLAVOR_TAGS },
+              minItems: 3,
+              maxItems: 3
+            }
           },
-          required: ['place_id', 'dish_suggestion', 'reason']
+          required: ['place_id', 'dish_suggestion', 'reason', 'flavor_tags']
         }
       }],
       tool_choice: { type: 'tool', name: 'recommend_restaurant' },
@@ -311,7 +380,7 @@ app.post('/api/recommend', async (req, res) => {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY — add it to .env.' });
   }
 
-  const { restaurants: candidates, price, groupSize, sharing } = req.body;
+  const { restaurants: candidates, price, groupSize, sharing, dish } = req.body;
 
   if (!candidates || candidates.length === 0) {
     return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters.' });
@@ -319,13 +388,19 @@ app.post('/api/recommend', async (req, res) => {
 
   const clampedGroupSize = Math.min(8, Math.max(1, Number.isInteger(groupSize) ? groupSize : 1));
   const isSharing = sharing === true;
+  const dishCraving = typeof dish === 'string' ? dish.trim().slice(0, 60) : '';
 
   const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
   const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
-  const pool = (inBudget.length > 0 ? inBudget : candidates)
-    .slice()
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    .slice(0, 8);
+  const budgetPool = inBudget.length > 0 ? inBudget : candidates;
+  // When there's a specific-dish craving, `candidates` already arrives ranked
+  // by Google's Text Search relevance to that dish — re-sorting by star
+  // rating here would throw that relevance away and let an unrelated but
+  // highly-rated restaurant crowd out actually-relevant ones. Only re-rank
+  // by rating for the generic (no-craving) case.
+  const pool = dishCraving
+    ? budgetPool.slice(0, 8)
+    : budgetPool.slice().sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8);
 
   try {
     const withReviews = await Promise.all(pool.map(async r => ({
@@ -337,17 +412,18 @@ app.post('/api/recommend', async (req, res) => {
       reviews: await fetchPlaceReviews(r.id)
     })));
 
-    const { place_id, dish_suggestion, reason } = await askClaudeForRecommendation(withReviews, targetPrice, {
+    const { place_id, dish_suggestion, reason, flavor_tags } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
       preferences: getPreferences(),
-      visitHighlights: getVisitHighlights()
+      visitHighlights: getVisitHighlights(),
+      dish: dishCraving
     });
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
     res.json({
       restaurant: pick,
-      dish: { name: dish_suggestion },
+      dish: { name: dish_suggestion, flavorTags: flavor_tags },
       reason
     });
   } catch (err) {
@@ -367,7 +443,7 @@ function shapeVisit(row) {
 }
 
 app.post('/api/visits', (req, res) => {
-  const { restaurantName, dish, rating } = req.body;
+  const { restaurantName, dish, rating, flavorTags } = req.body;
 
   if (!restaurantName || typeof restaurantName !== 'string' || !restaurantName.trim()) {
     return res.status(400).json({ error: 'Restaurant name is required.' });
@@ -376,11 +452,14 @@ app.post('/api/visits', (req, res) => {
     return res.status(400).json({ error: 'Rating must be a whole number from 1 to 5.' });
   }
 
+  const cleanFlavorTags = Array.isArray(flavorTags) ? flavorTags.filter(t => FLAVOR_TAGS.includes(t)) : [];
+
   try {
     const visit = insertVisit({
       restaurantName: restaurantName.trim(),
       dish: dish && String(dish).trim() ? String(dish).trim() : null,
-      rating
+      rating,
+      flavorTags: cleanFlavorTags
     });
     res.status(201).json({ visit: shapeVisit(visit) });
   } catch (err) {
@@ -395,6 +474,15 @@ app.get('/api/visits', (req, res) => {
   } catch (err) {
     console.error('Failed to load visits:', err);
     res.status(500).json({ error: 'Could not load past visits.', visits: [] });
+  }
+});
+
+app.get('/api/flavors', (req, res) => {
+  try {
+    res.json({ topFlavors: getTopFlavors() });
+  } catch (err) {
+    console.error('Failed to load top flavors:', err);
+    res.status(500).json({ error: 'Could not load top flavors right now.', topFlavors: [] });
   }
 });
 
@@ -414,7 +502,7 @@ app.get('/api/preferences', (req, res) => {
 });
 
 app.post('/api/preferences', (req, res) => {
-  const { favoriteCuisines, dietaryRestrictions, spiceTolerance, priceTolerance } = req.body;
+  const { favoriteCuisines, dietaryRestrictions, spiceTolerance } = req.body;
 
   if (!isStringArray(favoriteCuisines) || !isStringArray(dietaryRestrictions)) {
     return res.status(400).json({ error: 'favoriteCuisines and dietaryRestrictions must both be arrays of text.' });
@@ -422,16 +510,12 @@ app.post('/api/preferences', (req, res) => {
   if (!SPICE_TOLERANCES.has(spiceTolerance)) {
     return res.status(400).json({ error: 'spiceTolerance must be one of: mild, medium, hot.' });
   }
-  if (!Number.isInteger(priceTolerance) || priceTolerance < 1 || priceTolerance > 3) {
-    return res.status(400).json({ error: 'priceTolerance must be a whole number from 1 to 3.' });
-  }
 
   try {
     const preferences = savePreferences({
       favoriteCuisines: favoriteCuisines.map(c => c.trim()).filter(Boolean).slice(0, 10),
       dietaryRestrictions: dietaryRestrictions.map(d => d.trim()).filter(Boolean).slice(0, 10),
-      spiceTolerance,
-      priceTolerance
+      spiceTolerance
     });
     res.json({ preferences });
   } catch (err) {
