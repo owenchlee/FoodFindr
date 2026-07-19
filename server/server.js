@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { cityCenter } = require('./mockRestaurants.json');
 const {
@@ -18,8 +20,32 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // synonyms like "tangy" vs "zesty" vs "sour".
 const FLAVOR_TAGS = ['Spicy', 'Tangy', 'Sweet', 'Savory', 'Umami', 'Sour', 'Smoky', 'Creamy', 'Fresh', 'Rich', 'Herby', 'Crispy'];
 
+// Per-person dollar ceilings for each price tier — must match the UI hint text in
+// index.html: "$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)".
+const PRICE_TIER_MAX_USD = { 1: 15, 2: 30, 3: 60 };
+
+function totalGroupBudget(groupSize, targetPrice) {
+  const perPerson = PRICE_TIER_MAX_USD[targetPrice] || PRICE_TIER_MAX_USD[2];
+  return groupSize * perPerson;
+}
+
+// CSP is left off for now — the app loads Google Maps/Places/Fonts scripts
+// from several external hosts, and a wrong CSP fails silently in the
+// browser. Revisit once the production domain is final.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// /api/restaurants and /api/recommend hit billed Google Places/Anthropic
+// calls per request, so an unlimited public endpoint is a cost-abuse risk.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/restaurants', apiLimiter);
+app.use('/api/recommend', apiLimiter);
 
 // Hands the browser-restricted Maps key + Map ID to the frontend, so the
 // key never has to be hardcoded into a static HTML file.
@@ -176,6 +202,41 @@ async function geocodeCity(lat, lng) {
   }
 }
 
+// Forward geocoding (address text -> lat/lng) for the "search a location"
+// picker. Client-side google.maps.Geocoder can't be used here since the
+// browser Maps key is deliberately restricted to Maps JavaScript API only
+// (see .env.example) — this reuses the server key, which already has
+// Geocoding API access for the reverse-geocoding done in geocodeCity above.
+app.get('/api/geocode', apiLimiter, async (req, res) => {
+  if (!PLACES_SERVER_KEY) {
+    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.' });
+  }
+
+  const address = typeof req.query.address === 'string' ? req.query.address.trim().slice(0, 200) : '';
+  if (!address) {
+    return res.status(400).json({ error: 'address is required.' });
+  }
+
+  const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+  url.searchParams.set('address', address);
+  url.searchParams.set('key', PLACES_SERVER_KEY);
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.results[0]) {
+      return res.status(404).json({ error: `Couldn't find "${address}".` });
+    }
+
+    const location = data.results[0].geometry.location;
+    res.json({ lat: location.lat, lng: location.lng, formattedAddress: data.results[0].formatted_address });
+  } catch (err) {
+    console.error('Forward geocoding request failed:', err);
+    res.status(502).json({ error: 'Could not look up that location right now. Try again in a moment.' });
+  }
+});
+
 app.get('/api/restaurants', async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', restaurants: [] });
@@ -265,13 +326,21 @@ async function fetchPlaceReviews(placeId) {
   return (data.result.reviews || []).map(r => r.text).filter(Boolean);
 }
 
-function groupInstruction(groupSize, sharing) {
+function groupInstruction(groupSize, sharing, targetPrice) {
   if (groupSize <= 1) {
     return 'This is for one person — suggest a single dish for them to order.';
   }
   if (sharing) {
-    return `This is for a group of ${groupSize} people who want to share — suggest a shareable order ` +
-      `(e.g. a couple of appetizers plus a main or two to split) that works for the whole group within the budget.`;
+    const totalBudget = totalGroupBudget(groupSize, targetPrice);
+    const perPerson = PRICE_TIER_MAX_USD[targetPrice] || PRICE_TIER_MAX_USD[2];
+    return `This is for a group of ${groupSize} people who want to share dishes family-style, with a total budget ` +
+      `for the table of roughly $${totalBudget} (about $${perPerson} per person) — use that budget to judge how many ` +
+      `items is reasonable, but do NOT invent or state prices, since real menu prices aren't available to you. ` +
+      `Suggest 3-5 specific shareable item names in the shared_items field — a mix of appetizers and mains to split — ` +
+      `and set dish_suggestion to a short one-line summary of the whole shared order. Every item must be grounded in ` +
+      `dishes the reviews actually mention — if the reviews only support one or two specific dishes, suggest fewer ` +
+      `items (or fill out the order with something generic like "a couple of their most popular appetizers") rather ` +
+      `than inventing dishes.`;
   }
   return `This is for a group of ${groupSize} people who each want their own main — suggest one dish that ` +
     `works well as an individual order at this budget, since everyone will be ordering their own.`;
@@ -319,9 +388,10 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided — don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
+    `Only populate the shared_items field if the instructions below say this is a sharing group — otherwise omit it entirely. ` +
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
     `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
-    `${groupInstruction(groupSize, sharing)}` +
+    `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationInstruction(preferences, visitHighlights)}` +
     `${dishCravingInstruction(dish)}\n\n` +
     JSON.stringify(candidates, null, 2);
@@ -335,7 +405,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+      max_tokens: 1024,
       tools: [{
         name: 'recommend_restaurant',
         description: 'Return the single best restaurant recommendation with a specific dish suggestion.',
@@ -343,7 +413,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
           type: 'object',
           properties: {
             place_id: { type: 'string', description: 'The place_id of the chosen restaurant, copied exactly from one of the candidates.' },
-            dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order.' },
+            dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order. For a sharing group, a short one-line summary of the whole shared order (e.g. "Dumplings, mapo tofu, and scallion pancakes to share").' },
             reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' },
             flavor_tags: {
               type: 'array',
@@ -351,6 +421,11 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
               items: { type: 'string', enum: FLAVOR_TAGS },
               minItems: 3,
               maxItems: 3
+            },
+            shared_items: {
+              type: 'array',
+              description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices — real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely — do not include an empty array.',
+              items: { type: 'string', description: 'The name of a dish or menu item to share.' }
             }
           },
           required: ['place_id', 'dish_suggestion', 'reason', 'flavor_tags']
@@ -412,7 +487,7 @@ app.post('/api/recommend', async (req, res) => {
       reviews: await fetchPlaceReviews(r.id)
     })));
 
-    const { place_id, dish_suggestion, reason, flavor_tags } = await askClaudeForRecommendation(withReviews, targetPrice, {
+    const { place_id, dish_suggestion, reason, flavor_tags, shared_items } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
       preferences: getPreferences(),
@@ -421,9 +496,16 @@ app.post('/api/recommend', async (req, res) => {
     });
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
+    // Only surface shared items in sharing mode, and drop any malformed entries
+    // Claude might return (missing/empty name). No prices — real menu prices
+    // aren't available, so we never show an invented dollar figure per item.
+    const sharedItems = (isSharing && Array.isArray(shared_items))
+      ? shared_items.filter(item => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
+      : [];
+
     res.json({
       restaurant: pick,
-      dish: { name: dish_suggestion, flavorTags: flavor_tags },
+      dish: { name: dish_suggestion, flavorTags: flavor_tags, sharedItems },
       reason
     });
   } catch (err) {

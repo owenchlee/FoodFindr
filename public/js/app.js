@@ -1,6 +1,7 @@
 let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false, dish: '' };
 let lastFilteredRestaurants = [];
 let userLocation = null;
+let usingCustomLocation = false;
 let recentVisits = [];
 let lastRecommendation = null;
 let preferences = null;
@@ -8,6 +9,27 @@ let preferences = null;
 function init() {
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
     document.getElementById('location-banner').hidden = true;
+    if (usingCustomLocation) {
+      usingCustomLocation = false;
+      clearDropMarker();
+      requestUserLocation();
+    }
+  });
+
+  document.getElementById('pick-location-btn').addEventListener('click', () => {
+    if (pinDropActive) {
+      closeLocationPicker();
+    } else {
+      openLocationPicker();
+    }
+  });
+
+  document.getElementById('location-search-input').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const query = event.target.value.trim();
+    if (!query) return;
+    searchLocation(query, event.target);
   });
 
   document.querySelectorAll('#price-filter-toggle button').forEach(btn => {
@@ -90,13 +112,13 @@ function init() {
   });
 
   document.getElementById('ticket-log-btn').addEventListener('click', () => {
-    openDrawer('reviews');
+    openDrawer('log-review');
     prefillVisitForm(lastRecommendation);
   });
 
   document.getElementById('edit-preferences-btn').addEventListener('click', () => {
-    document.getElementById('tab-menu').hidden = true;
-    document.getElementById('tabs-toggle').setAttribute('aria-expanded', 'false');
+    setRailExpanded(false);
+    closeDrawer();
     openPreferencesDialog();
   });
 
@@ -123,48 +145,79 @@ function init() {
     chip.addEventListener('click', () => chip.classList.toggle('active'));
   });
 
-  document.getElementById('tabs-toggle').addEventListener('click', toggleTabMenu);
-  document.querySelectorAll('.tab-menu-item[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => openDrawer(btn.dataset.tab));
+  document.getElementById('tabs-toggle').addEventListener('click', toggleRailExpanded);
+  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setRailExpanded(false);
+      openDrawer(btn.dataset.tab);
+    });
   });
-  document.getElementById('tab-drawer-close').addEventListener('click', closeDrawer);
+  document.getElementById('filters-toggle').addEventListener('click', () => openDrawer('filters'));
 
   requestUserLocation();
   loadRecentVisits();
   loadPreferences();
 }
 
-function toggleTabMenu() {
-  const menu = document.getElementById('tab-menu');
-  const toggle = document.getElementById('tabs-toggle');
-  const isOpen = !menu.hidden;
-  menu.hidden = isOpen;
-  toggle.setAttribute('aria-expanded', String(!isOpen));
-}
+const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'faq'];
 
 function openDrawer(tab) {
   const drawer = document.getElementById('tab-drawer');
-  const toggle = document.getElementById('tabs-toggle');
-  const alreadyShowingThis = !drawer.hidden && drawer.dataset.activeTab === tab;
-
-  document.getElementById('tab-menu').hidden = true;
-  toggle.setAttribute('aria-expanded', 'false');
+  const filtersToggle = document.getElementById('filters-toggle');
+  const alreadyShowingThis = drawer.classList.contains('open') && drawer.dataset.activeTab === tab;
 
   if (alreadyShowingThis) {
     closeDrawer();
     return;
   }
 
-  document.getElementById('tab-panel-reviews').hidden = tab !== 'reviews';
-  document.getElementById('tab-panel-progress').hidden = tab !== 'progress';
+  DRAWER_PANEL_TABS.forEach(panelTab => {
+    document.getElementById(`tab-panel-${panelTab}`).hidden = panelTab !== tab;
+  });
   drawer.dataset.activeTab = tab;
+
   drawer.hidden = false;
-  toggle.classList.add('active');
+  // Force a layout pass so the transform transition animates in from the
+  // off-screen starting position instead of jumping straight to open.
+  void drawer.offsetHeight;
+  drawer.classList.add('open');
+
+  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  filtersToggle.classList.toggle('active', tab === 'filters');
+  filtersToggle.setAttribute('aria-expanded', String(tab === 'filters'));
+
+  document.getElementById('left-column').classList.add('hidden-by-drawer');
+  document.getElementById('location-banner').classList.add('hidden-by-drawer');
 }
 
 function closeDrawer() {
-  document.getElementById('tab-drawer').hidden = true;
-  document.getElementById('tabs-toggle').classList.remove('active');
+  const drawer = document.getElementById('tab-drawer');
+  drawer.classList.remove('open');
+  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => btn.classList.remove('active'));
+  const filtersToggle = document.getElementById('filters-toggle');
+  filtersToggle.classList.remove('active');
+  filtersToggle.setAttribute('aria-expanded', 'false');
+  document.getElementById('left-column').classList.remove('hidden-by-drawer');
+  document.getElementById('location-banner').classList.remove('hidden-by-drawer');
+
+  drawer.addEventListener('transitionend', function onClosed() {
+    drawer.removeEventListener('transitionend', onClosed);
+    if (!drawer.classList.contains('open')) drawer.hidden = true;
+  });
+}
+
+function toggleRailExpanded() {
+  const rail = document.getElementById('side-rail');
+  setRailExpanded(!rail.classList.contains('expanded'));
+}
+
+function setRailExpanded(expanded) {
+  document.getElementById('side-rail').classList.toggle('expanded', expanded);
+  const toggle = document.getElementById('tabs-toggle');
+  toggle.classList.toggle('active', expanded);
+  toggle.setAttribute('aria-expanded', String(expanded));
 }
 
 function showLoading(message) {
@@ -211,11 +264,16 @@ function requestUserLocation() {
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
+      // A custom pin may have been dropped while this request was still
+      // pending (geolocation can take a few seconds to resolve) — don't let
+      // a stale result silently override the user's explicit choice.
+      if (usingCustomLocation) return;
       userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
       recenterMap(userLocation.lat, userLocation.lng);
       loadRestaurants();
     },
     () => {
+      if (usingCustomLocation) return;
       showLocationBanner('Location access denied — showing spots near Mock City.');
       loadRestaurants();
     },
@@ -226,6 +284,53 @@ function requestUserLocation() {
 function showLocationBanner(message) {
   document.getElementById('location-banner-text').textContent = message;
   document.getElementById('location-banner').hidden = false;
+}
+
+function openLocationPicker() {
+  enablePinDrop();
+  document.getElementById('pick-location-btn').classList.add('active');
+  document.getElementById('pick-location-btn').setAttribute('aria-expanded', 'true');
+  document.getElementById('location-picker-popover').hidden = false;
+  document.getElementById('location-search-input').focus();
+  showLocationBanner('Search a location, or click anywhere on the map.');
+}
+
+function closeLocationPicker() {
+  disablePinDrop();
+  document.getElementById('pick-location-btn').classList.remove('active');
+  document.getElementById('pick-location-btn').setAttribute('aria-expanded', 'false');
+  document.getElementById('location-picker-popover').hidden = true;
+  document.getElementById('location-banner').hidden = true;
+}
+
+async function searchLocation(query, inputEl) {
+  inputEl.disabled = true;
+  try {
+    const response = await fetch(`/api/geocode?address=${encodeURIComponent(query)}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      showLocationBanner(data.error || `Couldn't find "${query}" — try a different search.`);
+      return;
+    }
+
+    inputEl.value = '';
+    setDropMarker(data.lat, data.lng);
+    recenterMap(data.lat, data.lng);
+    onLocationPicked(data.lat, data.lng);
+  } catch (err) {
+    showLocationBanner("Couldn't reach the server. Check your connection and try again.");
+  } finally {
+    inputEl.disabled = false;
+  }
+}
+
+function onLocationPicked(lat, lng) {
+  userLocation = { lat, lng };
+  usingCustomLocation = true;
+  closeLocationPicker();
+  showLocationBanner('Searching near your dropped pin — dismiss to switch back to your current location.');
+  loadRestaurants();
 }
 
 async function loadRestaurants() {
@@ -337,7 +442,21 @@ function showTicket(data) {
   document.getElementById('ticket-price').textContent = '$'.repeat(data.restaurant.price);
   document.getElementById('ticket-rating').textContent = `★ ${data.restaurant.rating}`;
   document.getElementById('ticket-distance').textContent = `${data.restaurant.distance} mi`;
-  document.getElementById('ticket-dish').textContent = `Order: ${data.dish.name}`;
+
+  const dishEl = document.getElementById('ticket-dish');
+  const sharedList = document.getElementById('ticket-shared-items');
+  sharedList.replaceChildren();
+  const sharedItems = Array.isArray(data.dish.sharedItems) ? data.dish.sharedItems : [];
+  if (sharedItems.length > 0) {
+    dishEl.textContent = 'Order for the table:';
+    sharedItems.forEach(itemName => {
+      const li = document.createElement('li');
+      li.textContent = itemName;
+      sharedList.appendChild(li);
+    });
+  } else {
+    dishEl.textContent = `Order: ${data.dish.name}`;
+  }
 
   const flavorsContainer = document.getElementById('ticket-flavors');
   flavorsContainer.replaceChildren();

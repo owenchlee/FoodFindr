@@ -3,8 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FoodFindr</title>
-<link rel="icon" href="/images/logo.png" />
+<title>FoodFindr — Find your next meal</title>
+<meta name="description" content="FoodFindr picks one restaurant and one specific dish near you, tailored to your budget, cravings, group, and taste — then tracks how much of your city you've explored." />
+<meta name="theme-color" content="#1c1512" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="FoodFindr — Find your next meal" />
+<meta property="og:description" content="One restaurant, one dish, picked for your budget, cravings, and taste." />
+<meta property="og:image" content="/images/logo.png" />
+
+<link rel="icon" type="image/png" href="/images/favicon.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -17,18 +25,74 @@
     <div id="map"></div>
   </div>
 
+  <div class="side-rail" id="side-rail">
+    <button type="button" class="tabs-toggle" id="tabs-toggle" title="Menu" aria-label="Expand menu" aria-expanded="false" aria-controls="side-rail">
+      <span></span><span></span><span></span>
+    </button>
+    <button type="button" class="rail-btn" data-tab="log-review" title="Log a Review" aria-label="Log a Review">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+      <span class="rail-btn-label">Log a Review</span>
+    </button>
+    <button type="button" class="rail-btn" data-tab="past-reviews" title="Past Reviews" aria-label="Past Reviews">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9 12 2" /></svg>
+      <span class="rail-btn-label">Past Reviews</span>
+    </button>
+    <button type="button" class="rail-btn" data-tab="progress" title="Game Progress" aria-label="Game Progress">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="12" /><line x1="12" y1="20" x2="12" y2="6" /><line x1="18" y1="20" x2="18" y2="14" /></svg>
+      <span class="rail-btn-label">Game Progress</span>
+    </button>
+    <button type="button" class="rail-btn" id="edit-preferences-btn" title="My Taste Profile" aria-label="My Taste Profile">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+      <span class="rail-btn-label">My Taste Profile</span>
+    </button>
+    <button type="button" class="rail-btn" data-tab="faq" title="How It Works / FAQ" aria-label="How It Works / FAQ">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.3.9-1.3 1.9" /><line x1="12" y1="17" x2="12" y2="17.1" /></svg>
+      <span class="rail-btn-label">FAQ</span>
+    </button>
+  </div>
+
   <div class="floating-card brand-card">
-    <div class="tabs-control">
-      <button type="button" class="tabs-toggle" id="tabs-toggle" aria-label="Choose a panel" aria-haspopup="true" aria-expanded="false">
-        <span></span><span></span><span></span>
-      </button>
-      <div class="tab-menu" id="tab-menu" hidden>
-        <button type="button" class="tab-menu-item" data-tab="reviews">Past Reviews</button>
-        <button type="button" class="tab-menu-item" data-tab="progress">Game Progress</button>
-        <button type="button" class="tab-menu-item" id="edit-preferences-btn">My Taste Profile</button>
-      </div>
-    </div>
     <div class="wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
+  </div>
+
+  <div class="left-column" id="left-column">
+    <div class="floating-card search-card">
+      <div class="search-row">
+        <input type="text" id="dish-search" class="visit-input" placeholder="Craving something?" maxlength="60" aria-label="Craving something specific?" />
+        <div class="location-picker">
+          <button type="button" class="filters-toggle" id="pick-location-btn" title="Choose a different search location" aria-label="Choose a different search location" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg>
+          </button>
+          <div class="location-picker-popover" id="location-picker-popover" hidden>
+            <input type="text" id="location-search-input" class="visit-input" placeholder="Search a city or address…" />
+            <p class="location-picker-hint">or click anywhere on the map</p>
+          </div>
+        </div>
+        <button type="button" class="filters-toggle" id="filters-toggle" aria-controls="tab-drawer" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6" /><circle cx="9" cy="6" r="2" /><line x1="4" y1="12" x2="20" y2="12" /><circle cx="15" cy="12" r="2" /><line x1="4" y1="18" x2="20" y2="18" /><circle cx="9" cy="18" r="2" /></svg>
+          Filters
+        </button>
+      </div>
+      <button type="button" class="cta" id="recommend-btn">Get Recommendation</button>
+    </div>
+
+    <div class="ticket" id="ticket">
+      <p class="ticket-eyebrow">Today's Pick</p>
+      <h2 class="ticket-name" id="ticket-name"></h2>
+      <div class="ticket-meta">
+        <span id="ticket-cuisine"></span>
+        <span class="price" id="ticket-price"></span>
+        <span id="ticket-rating"></span>
+        <span id="ticket-distance"></span>
+      </div>
+      <div class="ticket-divider"></div>
+      <p class="ticket-dish" id="ticket-dish"></p>
+      <ul class="ticket-shared-list" id="ticket-shared-items"></ul>
+      <div class="chip-group ticket-flavors" id="ticket-flavors"></div>
+      <p class="ticket-reason" id="ticket-reason"></p>
+      <a class="ticket-map-link" id="ticket-map-link" href="#" target="_blank" rel="noopener">View on Google Maps →</a>
+      <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
+    </div>
   </div>
 
   <p class="floating-card location-banner" id="location-banner" hidden>
@@ -36,81 +100,64 @@
     <button type="button" id="location-banner-dismiss" aria-label="Dismiss">×</button>
   </p>
 
-  <div class="floating-card filters-card">
-    <div class="filters-block">
-      <div class="filter-group">
-        <span class="filter-label">Price</span>
-        <div class="price-toggle" id="price-filter-toggle">
-          <button type="button" data-price="1">$</button>
-          <button type="button" data-price="2" class="active">$$</button>
-          <button type="button" data-price="3">$$$</button>
-        </div>
-        <p class="price-hint">$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)</p>
-      </div>
-
-      <div class="filter-group">
-        <span class="filter-label">Craving Something Specific?</span>
-        <input type="text" id="dish-search" class="visit-input" placeholder="e.g. ramen, tacos, pad thai" maxlength="60" />
-      </div>
-
-      <div class="filter-group">
-        <span class="filter-label">Cuisine</span>
-        <select id="cuisine-select" class="cuisine-select">
-          <option value="">All cuisines</option>
-          <option value="Thai">Thai</option>
-          <option value="Mexican">Mexican</option>
-          <option value="Italian">Italian</option>
-          <option value="Vegan">Vegan</option>
-          <option value="Chinese">Chinese</option>
-          <option value="American">American</option>
-          <option value="Japanese">Japanese</option>
-          <option value="Indian">Indian</option>
-          <option value="Mediterranean">Mediterranean</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <span class="filter-label">Distance</span>
-        <div class="distance-row">
-          <input type="range" id="distance-range" min="0.5" max="10" step="0.5" value="3" />
-          <span class="distance-value" id="distance-value">3 mi</span>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <span class="filter-label">Group Size</span>
-        <div class="group-size-row">
-          <button type="button" id="group-size-minus" aria-label="Decrease group size">−</button>
-          <span class="group-size-value" id="group-size-value">1</span>
-          <button type="button" id="group-size-plus" aria-label="Increase group size">+</button>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <span class="filter-label">Ordering Style</span>
-        <div class="price-toggle" id="sharing-toggle">
-          <button type="button" data-sharing="false" class="active">Separate mains</button>
-          <button type="button" data-sharing="true">Sharing</button>
-        </div>
-      </div>
-    </div>
-
-    <button type="button" class="cta" id="recommend-btn">Get Recommendation</button>
-
-    <div class="how-it-works">
-      <span class="filter-label">How it works</span>
-      <ol>
-        <li><strong>1</strong> Set your filters</li>
-        <li><strong>2</strong> We scan nearby spots</li>
-        <li><strong>3</strong> Get one pick + dish</li>
-      </ol>
-    </div>
-  </div>
-
   <div class="tab-drawer" id="tab-drawer" hidden>
-    <button type="button" class="tab-drawer-close" id="tab-drawer-close" aria-label="Close panel">×</button>
 
-    <div class="tab-drawer-panel" id="tab-panel-reviews">
+    <div class="tab-drawer-panel" id="tab-panel-filters" hidden>
+      <div class="filters-block">
+        <div class="filter-group">
+          <span class="filter-label">Price</span>
+          <div class="price-toggle" id="price-filter-toggle">
+            <button type="button" data-price="1">$</button>
+            <button type="button" data-price="2" class="active">$$</button>
+            <button type="button" data-price="3">$$$</button>
+          </div>
+          <p class="price-hint">$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)</p>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">Cuisine</span>
+          <select id="cuisine-select" class="cuisine-select">
+            <option value="">All cuisines</option>
+            <option value="Thai">Thai</option>
+            <option value="Mexican">Mexican</option>
+            <option value="Italian">Italian</option>
+            <option value="Vegan">Vegan</option>
+            <option value="Chinese">Chinese</option>
+            <option value="American">American</option>
+            <option value="Japanese">Japanese</option>
+            <option value="Indian">Indian</option>
+            <option value="Mediterranean">Mediterranean</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">Distance</span>
+          <div class="distance-row">
+            <input type="range" id="distance-range" min="0.5" max="10" step="0.5" value="3" />
+            <span class="distance-value" id="distance-value">3 mi</span>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">Group Size</span>
+          <div class="group-size-row">
+            <button type="button" id="group-size-minus" aria-label="Decrease group size">−</button>
+            <span class="group-size-value" id="group-size-value">1</span>
+            <button type="button" id="group-size-plus" aria-label="Increase group size">+</button>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">Ordering Style</span>
+          <div class="price-toggle" id="sharing-toggle">
+            <button type="button" data-sharing="false" class="active">Separate mains</button>
+            <button type="button" data-sharing="true">Sharing</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-drawer-panel" id="tab-panel-log-review" hidden>
       <div class="log-visit-block">
         <span class="filter-label">Log a Visit</span>
         <form id="visit-form" class="visit-form">
@@ -131,7 +178,9 @@
           <p class="visit-status" id="visit-status" hidden></p>
         </form>
       </div>
+    </div>
 
+    <div class="tab-drawer-panel" id="tab-panel-past-reviews" hidden>
       <div class="recent-visits-block" id="recent-visits-block">
         <span class="filter-label">Recent Visits</span>
         <ul class="visit-list" id="visit-list"></ul>
@@ -150,24 +199,48 @@
       </div>
       <p class="progress-empty" id="progress-empty">Search a few spots first — your progress will show up here once we know your city.</p>
     </div>
+
+    <div class="tab-drawer-panel" id="tab-panel-faq" hidden>
+      <div class="how-it-works">
+        <span class="filter-label">How it works</span>
+        <ol>
+          <li><strong>1</strong> Set your filters</li>
+          <li><strong>2</strong> We scan nearby spots</li>
+          <li><strong>3</strong> Get one pick + dish</li>
+        </ol>
+      </div>
+
+      <div class="faq-block">
+        <span class="filter-label">FAQ &amp; disclaimers</span>
+
+        <div class="faq-item">
+          <p class="faq-question">Are the dish suggestions real?</p>
+          <p class="faq-answer">Claude reads each restaurant's actual reviews and only suggests a dish the reviews genuinely mention. If nothing specific comes up, it says so honestly instead of inventing one.</p>
+        </div>
+
+        <div class="faq-item">
+          <p class="faq-question">Is the price filter exact?</p>
+          <p class="faq-answer">It's a ceiling based on Google's 0–4 price tier, not an exact per-item price — the $/$$/$$$ ranges shown are approximate, per-person guides, not guarantees.</p>
+        </div>
+
+        <div class="faq-item">
+          <p class="faq-question">Does "Sharing" show real prices?</p>
+          <p class="faq-answer">No. Google doesn't provide real menu prices, so we only calculate a total budget for the group to guide how many items make sense — we never invent or display a per-item dollar figure.</p>
+        </div>
+
+        <div class="faq-item">
+          <p class="faq-question">How accurate are dietary restriction matches?</p>
+          <p class="faq-answer">Best-effort only, based on whatever reviews happen to mention — there's no real ingredient or allergen data, so always double-check with the restaurant directly.</p>
+        </div>
+
+        <div class="faq-item">
+          <p class="faq-question">What does the progress bar count?</p>
+          <p class="faq-answer">Restaurants FoodFindr has shown you in your city so far — not every restaurant that exists. It grows as you search rather than starting from a true city-wide total.</p>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="ticket" id="ticket">
-    <p class="ticket-eyebrow">Today's Pick</p>
-    <h2 class="ticket-name" id="ticket-name"></h2>
-    <div class="ticket-meta">
-      <span id="ticket-cuisine"></span>
-      <span class="price" id="ticket-price"></span>
-      <span id="ticket-rating"></span>
-      <span id="ticket-distance"></span>
-    </div>
-    <div class="ticket-divider"></div>
-    <p class="ticket-dish" id="ticket-dish"></p>
-    <div class="chip-group ticket-flavors" id="ticket-flavors"></div>
-    <p class="ticket-reason" id="ticket-reason"></p>
-    <a class="ticket-map-link" id="ticket-map-link" href="#" target="_blank" rel="noopener">View on Google Maps →</a>
-    <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
-  </div>
 </div>
 
 <dialog class="prefs-dialog" id="prefs-dialog">
@@ -219,7 +292,10 @@
 </dialog>
 
 <div class="loading-overlay" id="loading-overlay" hidden aria-live="polite">
-  <div class="loading-spinner"></div>
+  <div class="loading-dog-track">
+    <img src="/images/logo.png" alt="" class="loading-dog" />
+    <div class="loading-dog-shadow"></div>
+  </div>
   <p class="loading-text">Finding something good…</p>
 </div>
 
