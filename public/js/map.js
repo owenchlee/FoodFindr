@@ -1,5 +1,7 @@
 let map;
 let markersById = {};
+let pinDropActive = false;
+let dropMarker = null;
 
 function initMap(center, mapId) {
   map = new google.maps.Map(document.getElementById('map'), {
@@ -10,7 +12,49 @@ function initMap(center, mapId) {
     mapTypeControl: false,
     fullscreenControl: false
   });
+
+  map.addListener('click', (event) => {
+    if (!pinDropActive) return;
+    const lat = event.latLng.lat();
+    const lng = event.latLng.lng();
+    disablePinDrop();
+    setDropMarker(lat, lng);
+    if (typeof onLocationPicked === 'function') onLocationPicked(lat, lng);
+  });
 }
+
+function enablePinDrop() {
+  if (!map) return;
+  pinDropActive = true;
+  map.setOptions({ draggableCursor: 'crosshair' });
+}
+
+function disablePinDrop() {
+  if (!map) return;
+  pinDropActive = false;
+  map.setOptions({ draggableCursor: null });
+}
+
+function setDropMarker(lat, lng) {
+  if (!map) return;
+  if (dropMarker) dropMarker.map = null;
+  const div = document.createElement('div');
+  div.className = 'marker marker--dropped';
+  dropMarker = new google.maps.marker.AdvancedMarkerElement({
+    map,
+    position: { lat, lng },
+    content: div,
+    title: 'Search location'
+  });
+}
+
+function clearDropMarker() {
+  if (dropMarker) {
+    dropMarker.map = null;
+    dropMarker = null;
+  }
+}
+
 
 function recenterMap(lat, lng) {
   if (map) map.setCenter({ lat, lng });
@@ -25,7 +69,6 @@ function centerOnPick(lat, lng) {
 function markerContent(restaurant, isPick) {
   const div = document.createElement('div');
   div.className = isPick ? 'marker marker--pick' : 'marker';
-  div.textContent = isPick ? `${'$'.repeat(restaurant.price)} · pick` : '$'.repeat(restaurant.price);
   return div;
 }
 
@@ -40,7 +83,7 @@ function renderMarkers(restaurants) {
       map,
       position: { lat: restaurant.lat, lng: restaurant.lng },
       content: markerContent(restaurant, false),
-      title: restaurant.name
+      title: `${restaurant.name} · ${'$'.repeat(restaurant.price)}`
     });
     markersById[restaurant.id] = marker;
   });
