@@ -5,6 +5,12 @@ let usingCustomLocation = false;
 let recentVisits = [];
 let lastRecommendation = null;
 let preferences = null;
+let currentUser = null;
+let mapsReady = false;
+let appStarted = false;
+let restaurantsLoading = false;
+let pendingRecommendation = false;
+let authMode = 'login';
 
 function init() {
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
@@ -145,6 +151,8 @@ function init() {
     chip.addEventListener('click', () => chip.classList.toggle('active'));
   });
 
+  document.getElementById('drawer-close-btn').addEventListener('click', closeDrawer);
+
   document.getElementById('tabs-toggle').addEventListener('click', toggleRailExpanded);
   document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -153,13 +161,118 @@ function init() {
     });
   });
   document.getElementById('filters-toggle').addEventListener('click', () => openDrawer('filters'));
+}
 
+// Bound immediately (not gated behind maps-loaded/init) since a user can
+// already be authenticated, or interacting with the login form, well before
+// the Maps script — which can take a couple seconds — finishes loading.
+function bindAuthEvents() {
+  document.getElementById('logout-btn').addEventListener('click', logout);
+  document.getElementById('auth-toggle-mode').addEventListener('click', toggleAuthMode);
+  document.getElementById('auth-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitAuthForm();
+  });
+}
+
+function startAppData() {
   requestUserLocation();
   loadRecentVisits();
   loadPreferences();
 }
 
+function tryStartApp() {
+  if (currentUser && mapsReady && !appStarted) {
+    appStarted = true;
+    startAppData();
+  }
+}
+
+async function checkAuth() {
+  try {
+    const response = await fetch('/api/auth/me');
+    if (response.ok) {
+      const data = await response.json();
+      onAuthenticated(data.user);
+    } else {
+      showAuthGate();
+    }
+  } catch (err) {
+    showAuthGate();
+  }
+}
+
+function onAuthenticated(user) {
+  currentUser = user;
+  document.getElementById('auth-gate').hidden = true;
+  document.getElementById('rail-account').hidden = false;
+  document.getElementById('account-email').textContent = user.email;
+  tryStartApp();
+}
+
+function showAuthGate() {
+  document.getElementById('auth-gate').hidden = false;
+}
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('auth-submit-btn').textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
+  document.getElementById('auth-toggle-mode').textContent =
+    authMode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in';
+  document.getElementById('auth-status').hidden = true;
+}
+
+async function submitAuthForm() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const status = document.getElementById('auth-status');
+  const button = document.getElementById('auth-submit-btn');
+
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/auth/${authMode}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      status.textContent = data.error;
+      status.className = 'visit-status visit-status--error';
+      status.hidden = false;
+      return;
+    }
+
+    status.hidden = true;
+    onAuthenticated(data.user);
+  } catch (err) {
+    status.textContent = "Couldn't reach the server. Check your connection and try again.";
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function logout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } finally {
+    location.reload();
+  }
+}
+
 const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'faq'];
+const DRAWER_TAB_LABELS = {
+  filters: 'Filters',
+  'log-review': 'Log a Review',
+  'past-reviews': 'Past Reviews',
+  progress: 'Game Progress',
+  faq: 'How It Works & FAQ'
+};
+
+let drawerTriggerEl = null;
 
 function openDrawer(tab) {
   const drawer = document.getElementById('tab-drawer');
@@ -171,10 +284,13 @@ function openDrawer(tab) {
     return;
   }
 
+  drawerTriggerEl = document.activeElement;
+
   DRAWER_PANEL_TABS.forEach(panelTab => {
     document.getElementById(`tab-panel-${panelTab}`).hidden = panelTab !== tab;
   });
   drawer.dataset.activeTab = tab;
+  document.getElementById('drawer-title').textContent = DRAWER_TAB_LABELS[tab] || '';
 
   drawer.hidden = false;
   // Force a layout pass so the transform transition animates in from the
@@ -183,7 +299,9 @@ function openDrawer(tab) {
   drawer.classList.add('open');
 
   document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
+    const isActiveTab = btn.dataset.tab === tab;
+    btn.classList.toggle('active', isActiveTab);
+    btn.setAttribute('aria-expanded', String(isActiveTab));
   });
   filtersToggle.classList.toggle('active', tab === 'filters');
   filtersToggle.setAttribute('aria-expanded', String(tab === 'filters'));
@@ -195,7 +313,10 @@ function openDrawer(tab) {
 function closeDrawer() {
   const drawer = document.getElementById('tab-drawer');
   drawer.classList.remove('open');
-  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
+    btn.classList.remove('active');
+    btn.setAttribute('aria-expanded', 'false');
+  });
   const filtersToggle = document.getElementById('filters-toggle');
   filtersToggle.classList.remove('active');
   filtersToggle.setAttribute('aria-expanded', 'false');
@@ -204,7 +325,11 @@ function closeDrawer() {
 
   drawer.addEventListener('transitionend', function onClosed() {
     drawer.removeEventListener('transitionend', onClosed);
-    if (!drawer.classList.contains('open')) drawer.hidden = true;
+    if (!drawer.classList.contains('open')) {
+      drawer.hidden = true;
+      if (drawerTriggerEl && document.body.contains(drawerTriggerEl)) drawerTriggerEl.focus();
+      drawerTriggerEl = null;
+    }
   });
 }
 
@@ -344,6 +469,7 @@ async function loadRestaurants() {
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
   if (currentFilters.dish) params.set('dish', currentFilters.dish);
 
+  restaurantsLoading = true;
   showLoading('Scanning nearby spots…');
   try {
     const response = await fetch(`/api/restaurants?${params.toString()}`);
@@ -359,7 +485,16 @@ async function loadRestaurants() {
     hideTicket();
     loadProgress();
   } finally {
+    restaurantsLoading = false;
     hideLoading();
+    // A "Get Recommendation" click that landed while this search was still in
+    // flight (e.g. right after dropping a pin) previously got silently
+    // swallowed by the loading overlay — this replays it now that fresh
+    // restaurant data for the new location is actually in lastFilteredRestaurants.
+    if (pendingRecommendation) {
+      pendingRecommendation = false;
+      getRecommendation();
+    }
   }
 }
 
@@ -391,6 +526,11 @@ function populateVisitRestaurantOptions() {
 }
 
 async function getRecommendation() {
+  if (restaurantsLoading) {
+    pendingRecommendation = true;
+    return;
+  }
+
   if (lastFilteredRestaurants.length === 0) {
     showTicketError('No restaurants match your filters. Try widening your distance or price range.');
     return;
@@ -616,7 +756,7 @@ async function loadPreferences() {
   const data = await response.json();
   preferences = data.preferences;
 
-  if (!preferences && !localStorage.getItem('ff_prefs_skipped')) {
+  if (!preferences && !localStorage.getItem(`ff_prefs_skipped_${currentUser.id}`)) {
     openPreferencesDialog();
   }
 }
@@ -685,7 +825,7 @@ async function loadTopFlavors() {
 }
 
 function skipPreferences() {
-  localStorage.setItem('ff_prefs_skipped', '1');
+  localStorage.setItem(`ff_prefs_skipped_${currentUser.id}`, '1');
   document.getElementById('prefs-dialog').close();
 }
 
@@ -717,4 +857,11 @@ async function submitPreferences() {
   document.getElementById('prefs-dialog').close();
 }
 
-window.addEventListener('maps-loaded', init);
+window.addEventListener('maps-loaded', () => {
+  mapsReady = true;
+  init();
+  tryStartApp();
+});
+
+bindAuthEvents();
+checkAuth();

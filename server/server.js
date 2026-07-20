@@ -9,11 +9,24 @@ const {
   getPreferences, savePreferences,
   recordDiscovered, getProgress
 } = require('./db');
+const {
+  SESSION_COOKIE_NAME,
+  isValidEmail, isValidPassword,
+  signup, login,
+  startSession, setSessionCookie, clearSessionCookie, endSession,
+  parseCookies, requireAuth
+} = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PLACES_SERVER_KEY = process.env.GOOGLE_PLACES_SERVER_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (process.env.NODE_ENV === 'production') {
+  // Needed behind the deploy host's reverse proxy so express-rate-limit and
+  // secure-cookie logic see the real client IP/protocol instead of the proxy's.
+  app.set('trust proxy', 1);
+}
 
 // Fixed vocabulary (not free-form) so tags can actually be aggregated into
 // "top flavors" later — free text from Claude would fragment across
@@ -34,6 +47,7 @@ function totalGroupBudget(groupSize, targetPrice) {
 // browser. Revisit once the production domain is final.
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
+app.use(parseCookies);
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // /api/restaurants and /api/recommend hit billed Google Places/Anthropic
@@ -47,6 +61,16 @@ const apiLimiter = rateLimit({
 app.use('/api/restaurants', apiLimiter);
 app.use('/api/recommend', apiLimiter);
 
+// Login/signup get their own stricter limiter — separate from the billed-API
+// limiter above, since brute-forcing credentials isn't a cost concern, it's
+// an account-security one.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Hands the browser-restricted Maps key + Map ID to the frontend, so the
 // key never has to be hardcoded into a static HTML file.
 app.get('/api/config', (req, res) => {
@@ -54,6 +78,63 @@ app.get('/api/config', (req, res) => {
     mapsBrowserKey: process.env.GOOGLE_MAPS_BROWSER_KEY || null,
     mapId: process.env.GOOGLE_MAPS_MAP_ID || null
   });
+});
+
+app.post('/api/auth/signup', authLimiter, async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Enter a valid email address.' });
+  }
+  if (!isValidPassword(password)) {
+    return res.status(400).json({ error: 'Password must be 8-128 characters.' });
+  }
+
+  try {
+    const result = await signup(email, password);
+    if (result.error) {
+      return res.status(409).json({ error: result.error });
+    }
+
+    const { token } = startSession(result.user.id);
+    setSessionCookie(res, token);
+    res.status(201).json({ user: { id: result.user.id, email: result.user.email } });
+  } catch (err) {
+    console.error('Signup failed:', err);
+    res.status(500).json({ error: 'Could not create your account right now.' });
+  }
+});
+
+app.post('/api/auth/login', authLimiter, async (req, res) => {
+  const { email, password } = req.body;
+
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'Invalid email or password.' });
+  }
+
+  try {
+    const result = await login(email, password);
+    if (result.error) {
+      return res.status(401).json({ error: result.error });
+    }
+
+    const { token } = startSession(result.user.id);
+    setSessionCookie(res, token);
+    res.json({ user: { id: result.user.id, email: result.user.email } });
+  } catch (err) {
+    console.error('Login failed:', err);
+    res.status(500).json({ error: 'Could not sign you in right now.' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  endSession(req.cookies && req.cookies[SESSION_COOKIE_NAME]);
+  clearSessionCookie(res);
+  res.status(204).end();
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ user: req.user });
 });
 
 function distanceInMiles(lat1, lng1, lat2, lng2) {
@@ -207,7 +288,7 @@ async function geocodeCity(lat, lng) {
 // browser Maps key is deliberately restricted to Maps JavaScript API only
 // (see .env.example) — this reuses the server key, which already has
 // Geocoding API access for the reverse-geocoding done in geocodeCity above.
-app.get('/api/geocode', apiLimiter, async (req, res) => {
+app.get('/api/geocode', requireAuth, apiLimiter, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.' });
   }
@@ -237,7 +318,7 @@ app.get('/api/geocode', apiLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/restaurants', async (req, res) => {
+app.get('/api/restaurants', requireAuth, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', restaurants: [] });
   }
@@ -275,7 +356,7 @@ app.get('/api/restaurants', async (req, res) => {
 
     const city = await geocodeCity(lat, lng);
     if (city && results.length > 0) {
-      recordDiscovered(results, city);
+      recordDiscovered(req.user.id, results, city);
     }
 
     res.json({ cityCenter: { lat, lng }, city, restaurants: results });
@@ -285,7 +366,7 @@ app.get('/api/restaurants', async (req, res) => {
   }
 });
 
-app.get('/api/progress', async (req, res) => {
+app.get('/api/progress', requireAuth, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', city: null });
   }
@@ -302,7 +383,7 @@ app.get('/api/progress', async (req, res) => {
     if (!city) {
       return res.json({ city: null, discovered: 0, visited: 0 });
     }
-    res.json(getProgress(city));
+    res.json(getProgress(req.user.id, city));
   } catch (err) {
     console.error('Failed to compute progress:', err);
     res.status(500).json({ error: 'Could not load progress right now.', city: null });
@@ -450,7 +531,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   return toolUse.input;
 }
 
-app.post('/api/recommend', async (req, res) => {
+app.post('/api/recommend', requireAuth, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY — add it to .env.' });
   }
@@ -490,8 +571,8 @@ app.post('/api/recommend', async (req, res) => {
     const { place_id, dish_suggestion, reason, flavor_tags, shared_items } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
-      preferences: getPreferences(),
-      visitHighlights: getVisitHighlights(),
+      preferences: getPreferences(req.user.id),
+      visitHighlights: getVisitHighlights(req.user.id),
       dish: dishCraving
     });
     const pick = pool.find(r => r.id === place_id) || pool[0];
@@ -524,7 +605,7 @@ function shapeVisit(row) {
   };
 }
 
-app.post('/api/visits', (req, res) => {
+app.post('/api/visits', requireAuth, (req, res) => {
   const { restaurantName, dish, rating, flavorTags } = req.body;
 
   if (!restaurantName || typeof restaurantName !== 'string' || !restaurantName.trim()) {
@@ -538,6 +619,7 @@ app.post('/api/visits', (req, res) => {
 
   try {
     const visit = insertVisit({
+      userId: req.user.id,
       restaurantName: restaurantName.trim(),
       dish: dish && String(dish).trim() ? String(dish).trim() : null,
       rating,
@@ -550,18 +632,18 @@ app.post('/api/visits', (req, res) => {
   }
 });
 
-app.get('/api/visits', (req, res) => {
+app.get('/api/visits', requireAuth, (req, res) => {
   try {
-    res.json({ visits: listVisits().map(shapeVisit) });
+    res.json({ visits: listVisits(req.user.id).map(shapeVisit) });
   } catch (err) {
     console.error('Failed to load visits:', err);
     res.status(500).json({ error: 'Could not load past visits.', visits: [] });
   }
 });
 
-app.get('/api/flavors', (req, res) => {
+app.get('/api/flavors', requireAuth, (req, res) => {
   try {
-    res.json({ topFlavors: getTopFlavors() });
+    res.json({ topFlavors: getTopFlavors(req.user.id) });
   } catch (err) {
     console.error('Failed to load top flavors:', err);
     res.status(500).json({ error: 'Could not load top flavors right now.', topFlavors: [] });
@@ -574,16 +656,16 @@ function isStringArray(value) {
   return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
 
-app.get('/api/preferences', (req, res) => {
+app.get('/api/preferences', requireAuth, (req, res) => {
   try {
-    res.json({ preferences: getPreferences() });
+    res.json({ preferences: getPreferences(req.user.id) });
   } catch (err) {
     console.error('Failed to load preferences:', err);
     res.status(500).json({ error: 'Could not load preferences right now.', preferences: null });
   }
 });
 
-app.post('/api/preferences', (req, res) => {
+app.post('/api/preferences', requireAuth, (req, res) => {
   const { favoriteCuisines, dietaryRestrictions, spiceTolerance } = req.body;
 
   if (!isStringArray(favoriteCuisines) || !isStringArray(dietaryRestrictions)) {
@@ -594,7 +676,7 @@ app.post('/api/preferences', (req, res) => {
   }
 
   try {
-    const preferences = savePreferences({
+    const preferences = savePreferences(req.user.id, {
       favoriteCuisines: favoriteCuisines.map(c => c.trim()).filter(Boolean).slice(0, 10),
       dietaryRestrictions: dietaryRestrictions.map(d => d.trim()).filter(Boolean).slice(0, 10),
       spiceTolerance
