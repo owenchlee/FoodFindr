@@ -14,7 +14,7 @@
 
   --font-display: 'Fraunces', Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
   --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-data: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+  --font-data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --radius-sm: 6px;
   --radius-lg: 12px;
@@ -24,6 +24,12 @@
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.5rem;
+
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+
+  --top-bar-height: 68px;
 }
 
 * { box-sizing: border-box; }
@@ -52,9 +58,29 @@ body {
   background: var(--color-char-2);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-md);
   padding: var(--space-4);
 }
+
+/* ---------- Top bar (wordmark + search + CTA, one strip instead of two floating cards) ---------- */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 56px;
+  right: 0;
+  z-index: 9;
+  min-height: var(--top-bar-height);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-char);
+  border-bottom: 1px solid var(--color-hairline);
+  box-shadow: var(--shadow-sm);
+}
+.top-bar .search-row { flex: 1 1 320px; }
+.top-bar .cta { margin: 0; flex-shrink: 0; }
 
 .side-rail {
   position: fixed;
@@ -74,16 +100,16 @@ body {
 }
 .side-rail.expanded {
   width: 210px;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--shadow-lg);
 }
 
 .left-column {
   position: fixed;
-  top: var(--space-5);
+  top: calc(var(--top-bar-height) + var(--space-4));
   left: calc(56px + var(--space-4));
   z-index: 5;
   width: 300px;
-  max-height: calc(100vh - var(--space-5) * 2);
+  max-height: calc(100vh - var(--top-bar-height) - var(--space-4) * 2);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -92,26 +118,10 @@ body {
   transition: opacity 200ms ease;
 }
 .left-column > * { pointer-events: auto; }
-.left-column .floating-card {
-  position: static;
-  flex-shrink: 0;
-}
 .left-column.hidden-by-drawer,
 .location-banner.hidden-by-drawer {
   opacity: 0;
   pointer-events: none;
-}
-
-.brand-card {
-  position: fixed;
-  top: var(--space-5);
-  right: var(--space-5);
-  z-index: 4;
-  width: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
 }
 
 .wordmark {
@@ -130,11 +140,6 @@ body {
   object-fit: contain;
 }
 
-.search-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
 .search-row {
   display: flex;
   gap: var(--space-2);
@@ -163,7 +168,6 @@ body {
   border-color: var(--color-turmeric);
 }
 .filters-toggle:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
-.search-card .cta { margin: 0; }
 
 .location-picker { position: relative; flex-shrink: 0; }
 .location-picker-popover {
@@ -176,7 +180,7 @@ body {
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-sm);
   padding: var(--space-3);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-md);
 }
 .location-picker-popover[hidden] { display: none; }
 .location-picker-hint {
@@ -187,7 +191,7 @@ body {
 }
 
 .location-banner {
-  top: var(--space-5);
+  top: calc(var(--top-bar-height) + var(--space-3));
   left: 50%;
   transform: translateX(-50%);
   max-width: min(420px, calc(100vw - 2 * var(--space-5)));
@@ -447,22 +451,59 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 /* ---------- Tab drawer (slides out from behind the side rail) ---------- */
 .tab-drawer {
   position: fixed;
-  top: 0;
+  top: var(--top-bar-height);
   left: 56px;
   z-index: 8;
   width: 360px;
   max-width: calc(100vw - 56px);
-  height: 100vh;
+  height: calc(100vh - var(--top-bar-height));
   overflow-y: auto;
   background: var(--color-char-2);
   color: var(--color-paper);
   border-right: 1px solid var(--color-hairline);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--shadow-lg);
   transform: translateX(-110%);
   transition: transform 280ms ease;
 }
 .tab-drawer.open { transform: translateX(0); }
 .tab-drawer[hidden] { display: none; }
+
+.drawer-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-char-2);
+  border-bottom: 1px solid var(--color-hairline);
+}
+.drawer-title {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-paper);
+}
+.drawer-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-paper-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.drawer-close:hover { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
+.drawer-close:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
 
 .tab-drawer-panel { padding: var(--space-4); }
 .tab-drawer-panel[hidden] { display: none; }
@@ -619,6 +660,74 @@ select.visit-input option {
 .ticket--error .ticket-map-link,
 .ticket--error .ticket-log-btn { display: none; }
 
+/* ---------- Rail account slot ---------- */
+.rail-account {
+  margin-top: auto;
+  padding: var(--space-3) 0 var(--space-2);
+  border-top: 1px solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.rail-account[hidden] { display: none; }
+.rail-account-email {
+  display: none;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  color: var(--color-paper-dim);
+  padding: 0 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-rail.expanded .rail-account-email { display: block; }
+
+/* ---------- Auth gate (login/signup, blocks the app until signed in) ---------- */
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(28, 21, 18, 0.92);
+  backdrop-filter: blur(3px);
+}
+.auth-gate[hidden] { display: none; }
+
+.auth-card {
+  width: min(360px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-char-2);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5) var(--space-4) var(--space-4);
+}
+.auth-wordmark { justify-content: center; margin: 0 0 var(--space-2); }
+.auth-subtitle {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--color-paper-dim);
+  text-align: center;
+  margin: 0 0 var(--space-2);
+}
+.auth-card .cta { margin: var(--space-1) 0 0; }
+.auth-toggle-mode {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-paper-dim);
+  text-decoration: underline;
+  cursor: pointer;
+  align-self: center;
+}
+.auth-toggle-mode:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+
 /* ---------- Preferences dialog ---------- */
 .prefs-dialog {
   border: 1px solid var(--color-hairline);
@@ -629,7 +738,7 @@ select.visit-input option {
   overflow-y: auto;
   background: var(--color-char-2);
   color: var(--color-paper);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
 }
 .prefs-dialog::backdrop {
   background: rgba(28, 21, 18, 0.7);
@@ -739,7 +848,7 @@ select.visit-input option {
   border-radius: 50%;
   transform: translateY(50%);
   box-shadow: 0 0 0 4px rgba(200, 57, 30, 0.25), 0 4px 14px rgba(0, 0, 0, 0.55);
-  animation: pick-pulse 1.8s ease-out infinite;
+  animation: pick-pulse 1.8s ease-out 3;
 }
 
 @keyframes pick-pulse {
@@ -758,7 +867,7 @@ select.visit-input option {
   padding: var(--space-4) var(--space-4) var(--space-3);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-lg);
 }
 .ticket.visible { display: block; }
 
@@ -828,20 +937,22 @@ select.visit-input option {
 }
 
 @media (max-width: 720px) {
+  :root { --top-bar-height: 116px; }
   .side-rail { width: 48px; }
   .side-rail.expanded { width: 200px; }
   .tabs-toggle { margin-left: 4px; }
   .rail-btn { margin: 0 4px; }
+  .top-bar {
+    left: 48px;
+    padding: var(--space-2) var(--space-3);
+  }
+  .top-bar .search-row { flex-basis: 100%; order: 3; }
   .left-column {
     left: calc(48px + var(--space-3));
     right: var(--space-3);
-    top: calc(var(--space-3) + 60px);
+    top: calc(var(--top-bar-height) + var(--space-3));
     width: auto;
-    max-height: calc(100vh - var(--space-3) * 2 - 60px);
-  }
-  .brand-card {
-    top: var(--space-3);
-    right: var(--space-3);
+    max-height: calc(100vh - var(--top-bar-height) - var(--space-3) * 2);
   }
   .how-it-works { display: none; }
   .tab-drawer {
@@ -863,6 +974,13 @@ select.visit-input option {
   gap: var(--space-3);
   background: rgba(28, 21, 18, 0.55);
   backdrop-filter: blur(2px);
+  /* Visual-only: a click landing here (e.g. hitting "Get Recommendation"
+     right after dropping a pin, while this overlay is up for the resulting
+     restaurant search) must not be silently swallowed — let it pass through
+     to whatever's underneath. Actions that truly need to block concurrent
+     clicks (like the recommend fetch itself) already disable their own
+     button directly instead of relying on this overlay. */
+  pointer-events: none;
 }
 .loading-overlay[hidden] { display: none; }
 

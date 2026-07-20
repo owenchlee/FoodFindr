@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" href="/images/favicon.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -29,15 +29,15 @@
     <button type="button" class="tabs-toggle" id="tabs-toggle" title="Menu" aria-label="Expand menu" aria-expanded="false" aria-controls="side-rail">
       <span></span><span></span><span></span>
     </button>
-    <button type="button" class="rail-btn" data-tab="log-review" title="Log a Review" aria-label="Log a Review">
+    <button type="button" class="rail-btn" data-tab="log-review" title="Log a Review" aria-label="Log a Review" aria-expanded="false" aria-controls="tab-drawer">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
       <span class="rail-btn-label">Log a Review</span>
     </button>
-    <button type="button" class="rail-btn" data-tab="past-reviews" title="Past Reviews" aria-label="Past Reviews">
+    <button type="button" class="rail-btn" data-tab="past-reviews" title="Past Reviews" aria-label="Past Reviews" aria-expanded="false" aria-controls="tab-drawer">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9 12 2" /></svg>
       <span class="rail-btn-label">Past Reviews</span>
     </button>
-    <button type="button" class="rail-btn" data-tab="progress" title="Game Progress" aria-label="Game Progress">
+    <button type="button" class="rail-btn" data-tab="progress" title="Game Progress" aria-label="Game Progress" aria-expanded="false" aria-controls="tab-drawer">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="12" /><line x1="12" y1="20" x2="12" y2="6" /><line x1="18" y1="20" x2="18" y2="14" /></svg>
       <span class="rail-btn-label">Game Progress</span>
     </button>
@@ -45,37 +45,42 @@
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
       <span class="rail-btn-label">My Taste Profile</span>
     </button>
-    <button type="button" class="rail-btn" data-tab="faq" title="How It Works / FAQ" aria-label="How It Works / FAQ">
+    <button type="button" class="rail-btn" data-tab="faq" title="How It Works / FAQ" aria-label="How It Works / FAQ" aria-expanded="false" aria-controls="tab-drawer">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.3.9-1.3 1.9" /><line x1="12" y1="17" x2="12" y2="17.1" /></svg>
       <span class="rail-btn-label">FAQ</span>
     </button>
+
+    <div class="rail-account" id="rail-account" hidden>
+      <span class="rail-account-email" id="account-email"></span>
+      <button type="button" class="rail-btn" id="logout-btn" title="Log out" aria-label="Log out">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+        <span class="rail-btn-label">Log Out</span>
+      </button>
+    </div>
   </div>
 
-  <div class="floating-card brand-card">
+  <div class="top-bar" id="top-bar">
     <div class="wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
+    <div class="search-row">
+      <input type="text" id="dish-search" class="visit-input" placeholder="Craving something?" maxlength="60" aria-label="Craving something specific?" />
+      <div class="location-picker">
+        <button type="button" class="filters-toggle" id="pick-location-btn" title="Choose a different search location" aria-label="Choose a different search location" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg>
+        </button>
+        <div class="location-picker-popover" id="location-picker-popover" hidden>
+          <input type="text" id="location-search-input" class="visit-input" placeholder="Search a city or address…" />
+          <p class="location-picker-hint">or click anywhere on the map</p>
+        </div>
+      </div>
+      <button type="button" class="filters-toggle" id="filters-toggle" aria-controls="tab-drawer" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6" /><circle cx="9" cy="6" r="2" /><line x1="4" y1="12" x2="20" y2="12" /><circle cx="15" cy="12" r="2" /><line x1="4" y1="18" x2="20" y2="18" /><circle cx="9" cy="18" r="2" /></svg>
+        Filters
+      </button>
+    </div>
+    <button type="button" class="cta" id="recommend-btn">Get Recommendation</button>
   </div>
 
   <div class="left-column" id="left-column">
-    <div class="floating-card search-card">
-      <div class="search-row">
-        <input type="text" id="dish-search" class="visit-input" placeholder="Craving something?" maxlength="60" aria-label="Craving something specific?" />
-        <div class="location-picker">
-          <button type="button" class="filters-toggle" id="pick-location-btn" title="Choose a different search location" aria-label="Choose a different search location" aria-haspopup="true" aria-expanded="false">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg>
-          </button>
-          <div class="location-picker-popover" id="location-picker-popover" hidden>
-            <input type="text" id="location-search-input" class="visit-input" placeholder="Search a city or address…" />
-            <p class="location-picker-hint">or click anywhere on the map</p>
-          </div>
-        </div>
-        <button type="button" class="filters-toggle" id="filters-toggle" aria-controls="tab-drawer" aria-expanded="false">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6" /><circle cx="9" cy="6" r="2" /><line x1="4" y1="12" x2="20" y2="12" /><circle cx="15" cy="12" r="2" /><line x1="4" y1="18" x2="20" y2="18" /><circle cx="9" cy="18" r="2" /></svg>
-          Filters
-        </button>
-      </div>
-      <button type="button" class="cta" id="recommend-btn">Get Recommendation</button>
-    </div>
-
     <div class="ticket" id="ticket">
       <p class="ticket-eyebrow">Today's Pick</p>
       <h2 class="ticket-name" id="ticket-name"></h2>
@@ -101,6 +106,10 @@
   </p>
 
   <div class="tab-drawer" id="tab-drawer" hidden>
+    <div class="drawer-header">
+      <span class="drawer-title" id="drawer-title"></span>
+      <button type="button" class="drawer-close" id="drawer-close-btn" aria-label="Close panel">×</button>
+    </div>
 
     <div class="tab-drawer-panel" id="tab-panel-filters" hidden>
       <div class="filters-block">
@@ -241,6 +250,18 @@
     </div>
   </div>
 
+</div>
+
+<div class="auth-gate" id="auth-gate" hidden>
+  <form class="auth-card" id="auth-form">
+    <div class="wordmark auth-wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
+    <p class="auth-subtitle">Sign in to get recommendations, log visits, and track your taste profile.</p>
+    <input type="email" id="auth-email" class="visit-input" placeholder="Email" autocomplete="email" required />
+    <input type="password" id="auth-password" class="visit-input" placeholder="Password" autocomplete="current-password" required minlength="8" />
+    <p class="visit-status" id="auth-status" hidden></p>
+    <button type="submit" class="cta" id="auth-submit-btn">Log In</button>
+    <button type="button" class="auth-toggle-mode" id="auth-toggle-mode">Need an account? Sign up</button>
+  </form>
 </div>
 
 <dialog class="prefs-dialog" id="prefs-dialog">
