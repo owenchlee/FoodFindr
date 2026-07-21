@@ -963,6 +963,11 @@ select.visit-input option {
   .top-bar .wordmark { display: none; }
 
   .top-bar .search-row {
+    /* Reset the desktop rule's `flex: 1 1 320px` — in that horizontal row
+       320px is a sane width basis, but .top-bar is column-direction here,
+       so the same shorthand would set a 320px *height* basis instead and
+       balloon this into a giant blob rather than a slim pill. */
+    flex: 0 0 auto;
     background: var(--color-char-2);
     border: 1px solid var(--color-hairline);
     border-radius: 999px;
