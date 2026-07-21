@@ -37,9 +37,9 @@
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9 12 2" /></svg>
       <span class="rail-btn-label">Past Reviews</span>
     </button>
-    <button type="button" class="rail-btn" data-tab="progress" title="Game Progress" aria-label="Game Progress" aria-expanded="false" aria-controls="tab-drawer">
+    <button type="button" class="rail-btn" data-tab="progress" title="Your Progress" aria-label="Your Progress" aria-expanded="false" aria-controls="tab-drawer">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="12" /><line x1="12" y1="20" x2="12" y2="6" /><line x1="18" y1="20" x2="18" y2="14" /></svg>
-      <span class="rail-btn-label">Game Progress</span>
+      <span class="rail-btn-label">Your Progress</span>
     </button>
     <button type="button" class="rail-btn" id="edit-preferences-btn" title="My Taste Profile" aria-label="My Taste Profile">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
@@ -215,6 +215,33 @@
         <p class="progress-count" id="progress-count"></p>
       </div>
       <p class="progress-empty" id="progress-empty">Search a few spots first — your progress will show up here once we know your city.</p>
+
+      <div class="streak-block" id="streak-block" hidden>
+        <span class="filter-label">Visit Streak</span>
+        <div class="streak-stats">
+          <div class="streak-stat">
+            <span class="streak-stat-value" id="streak-current-value">0</span>
+            <span class="streak-stat-label">day streak</span>
+          </div>
+          <div class="streak-stat">
+            <span class="streak-stat-value" id="streak-longest-value">0</span>
+            <span class="streak-stat-label">longest ever</span>
+          </div>
+        </div>
+        <p class="streak-hint" id="streak-hint"></p>
+      </div>
+      <p class="streak-empty" id="streak-empty">Log a visit to start your streak.</p>
+
+      <div class="badges-block" id="badges-block">
+        <span class="filter-label">Badges</span>
+        <div class="badge-grid" id="badge-grid"></div>
+      </div>
+
+      <div class="leaderboard-block" id="leaderboard-block">
+        <span class="filter-label">Leaderboard</span>
+        <ul class="leaderboard-list" id="leaderboard-list"></ul>
+        <p class="leaderboard-empty" id="leaderboard-empty" hidden>Not enough visits logged yet to rank anyone.</p>
+      </div>
     </div>
 
     <div class="tab-drawer-panel" id="tab-panel-faq" hidden>
@@ -253,6 +280,16 @@
         <div class="faq-item">
           <p class="faq-question">What does the progress bar count?</p>
           <p class="faq-answer">Restaurants FoodFindr has shown you in your city so far — not every restaurant that exists. It grows as you search rather than starting from a true city-wide total.</p>
+        </div>
+
+        <div class="faq-item">
+          <p class="faq-question">What counts toward my streak?</p>
+          <p class="faq-answer">Any day you log at least one visit, based on UTC calendar days — logging twice in one day only counts once.</p>
+        </div>
+
+        <div class="faq-item">
+          <p class="faq-question">How is the leaderboard ranked?</p>
+          <p class="faq-answer">By total visits logged, all-time. Streaks are shown alongside but don't affect rank — a missed day shouldn't tank your spot.</p>
         </div>
       </div>
     </div>

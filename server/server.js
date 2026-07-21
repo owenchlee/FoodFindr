@@ -7,7 +7,8 @@ const { cityCenter } = require('./mockRestaurants.json');
 const {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
-  recordDiscovered, getProgress
+  recordDiscovered, getProgress,
+  getStreaks, getBadges, getLeaderboardStats
 } = require('./db');
 const {
   SESSION_COOKIE_NAME,
@@ -647,6 +648,52 @@ app.get('/api/flavors', requireAuth, (req, res) => {
   } catch (err) {
     console.error('Failed to load top flavors:', err);
     res.status(500).json({ error: 'Could not load top flavors right now.', topFlavors: [] });
+  }
+});
+
+app.get('/api/streaks', requireAuth, (req, res) => {
+  try {
+    res.json(getStreaks(req.user.id));
+  } catch (err) {
+    console.error('Failed to load streaks:', err);
+    res.status(500).json({ error: 'Could not load your streak right now.', currentStreak: 0, longestStreak: 0, lastVisitDate: null });
+  }
+});
+
+app.get('/api/badges', requireAuth, (req, res) => {
+  try {
+    res.json({ badges: getBadges(req.user.id) });
+  } catch (err) {
+    console.error('Failed to load badges:', err);
+    res.status(500).json({ error: 'Could not load badges right now.', badges: [] });
+  }
+});
+
+// No display_name field exists — friends in this small, known group don't
+// need identity obscured, so this derives a readable name from the email
+// local-part instead of adding a profile field nobody would maintain.
+function deriveDisplayName(email) {
+  const localPart = email.split('@')[0];
+  const words = localPart.split(/[._+-]+/).filter(Boolean);
+  if (words.length === 0) return email;
+  return words.map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
+app.get('/api/leaderboard', requireAuth, (req, res) => {
+  try {
+    const stats = getLeaderboardStats();
+    const leaderboard = stats.map((row, i) => ({
+      rank: i + 1,
+      displayName: deriveDisplayName(row.email),
+      visitCount: row.visitCount,
+      currentStreak: row.currentStreak,
+      longestStreak: row.longestStreak,
+      isYou: row.userId === req.user.id
+    }));
+    res.json({ leaderboard });
+  } catch (err) {
+    console.error('Failed to load leaderboard:', err);
+    res.status(500).json({ error: 'Could not load the leaderboard right now.', leaderboard: [] });
   }
 });
 

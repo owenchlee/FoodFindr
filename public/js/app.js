@@ -199,6 +199,9 @@ function startAppData() {
   if (!isGuest) {
     loadRecentVisits();
     loadPreferences();
+    loadStreaks();
+    loadBadges();
+    loadLeaderboard();
   }
 }
 
@@ -238,6 +241,9 @@ function onAuthenticated(user) {
   if (wasGuest && appStarted) {
     loadRecentVisits();
     loadPreferences();
+    loadStreaks();
+    loadBadges();
+    loadLeaderboard();
   }
 }
 
@@ -309,7 +315,7 @@ const DRAWER_TAB_LABELS = {
   filters: 'Filters',
   'log-review': 'Log a Review',
   'past-reviews': 'Past Reviews',
-  progress: 'Game Progress',
+  progress: 'Your Progress',
   faq: 'How It Works & FAQ'
 };
 
@@ -419,6 +425,108 @@ async function loadProgress() {
     `${data.visited} of ${data.discovered} restaurants you've searched up so far — not the whole city`;
   block.hidden = false;
   empty.hidden = true;
+}
+
+async function loadStreaks() {
+  const block = document.getElementById('streak-block');
+  const empty = document.getElementById('streak-empty');
+
+  const response = await fetch('/api/streaks');
+  if (!response.ok) {
+    block.hidden = true;
+    empty.hidden = false;
+    return;
+  }
+  const data = await response.json();
+
+  if (!data.lastVisitDate) {
+    block.hidden = true;
+    empty.hidden = false;
+    return;
+  }
+
+  document.getElementById('streak-current-value').textContent = data.currentStreak;
+  document.getElementById('streak-longest-value').textContent = data.longestStreak;
+  document.getElementById('streak-hint').textContent = data.currentStreak > 0
+    ? 'Log a visit tomorrow to keep it going.'
+    : 'Your streak reset — log a visit today to start a new one.';
+  block.hidden = false;
+  empty.hidden = true;
+}
+
+function badgeElement(badge) {
+  const div = document.createElement('div');
+  div.className = badge.earned ? 'badge-card badge-card--earned' : 'badge-card';
+
+  const name = document.createElement('span');
+  name.className = 'badge-name';
+  name.textContent = badge.name;
+  div.appendChild(name);
+
+  const description = document.createElement('span');
+  description.className = 'badge-description';
+  description.textContent = badge.description;
+  div.appendChild(description);
+
+  if (badge.progress && !badge.earned) {
+    const progress = document.createElement('span');
+    progress.className = 'badge-progress';
+    progress.textContent = `${badge.progress.current}/${badge.progress.target}`;
+    div.appendChild(progress);
+  }
+
+  return div;
+}
+
+async function loadBadges() {
+  const grid = document.getElementById('badge-grid');
+  const response = await fetch('/api/badges');
+  if (!response.ok) return;
+  const data = await response.json();
+
+  grid.replaceChildren();
+  (data.badges || []).forEach(badge => grid.appendChild(badgeElement(badge)));
+}
+
+function leaderboardRowElement(row) {
+  const li = document.createElement('li');
+  li.className = row.isYou ? 'leaderboard-row leaderboard-row--you' : 'leaderboard-row';
+
+  const rank = document.createElement('span');
+  rank.className = 'leaderboard-rank';
+  rank.textContent = `#${row.rank}`;
+  li.appendChild(rank);
+
+  const name = document.createElement('span');
+  name.className = 'leaderboard-name';
+  name.textContent = row.isYou ? `${row.displayName} (you)` : row.displayName;
+  li.appendChild(name);
+
+  const count = document.createElement('span');
+  count.className = 'leaderboard-count';
+  count.textContent = `${row.visitCount} visit${row.visitCount === 1 ? '' : 's'}`;
+  li.appendChild(count);
+
+  const streak = document.createElement('span');
+  streak.className = 'leaderboard-streak';
+  streak.textContent = row.currentStreak > 0 ? `🔥 ${row.currentStreak}` : '';
+  li.appendChild(streak);
+
+  return li;
+}
+
+async function loadLeaderboard() {
+  const list = document.getElementById('leaderboard-list');
+  const empty = document.getElementById('leaderboard-empty');
+
+  const response = await fetch('/api/leaderboard');
+  if (!response.ok) return;
+  const data = await response.json();
+  const leaderboard = data.leaderboard || [];
+
+  list.replaceChildren();
+  leaderboard.forEach(row => list.appendChild(leaderboardRowElement(row)));
+  empty.hidden = leaderboard.some(row => row.visitCount > 0);
 }
 
 function requestUserLocation() {
@@ -790,6 +898,9 @@ async function submitVisit() {
   status.className = 'visit-status visit-status--ok';
   status.hidden = false;
   loadProgress();
+  loadStreaks();
+  loadBadges();
+  loadLeaderboard();
 }
 
 async function loadPreferences() {
