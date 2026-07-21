@@ -903,6 +903,66 @@ select.visit-input option {
   font-size: 0.9rem;
 }
 
+.no-location-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  width: min(360px, calc(100vw - var(--space-5) * 2));
+  text-align: center;
+  background: var(--color-char-2);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5) var(--space-4);
+}
+.no-location-state[hidden] { display: none; }
+.no-location-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.no-location-hint {
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--color-paper-dim);
+  margin: 0 0 var(--space-4);
+}
+.no-location-state .cta { margin: 0; }
+
+/* Google's InfoWindow chrome (background, padding, tail, close button) ships
+   as inline-styled white-theme markup — these overrides are the standard way
+   to re-skin it, since the content div alone can't override the wrapper. */
+.gm-style .gm-style-iw-c {
+  padding: 0;
+  background: var(--color-char-2);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.gm-style .gm-style-iw-d { overflow: hidden !important; padding: 0; }
+.gm-style .gm-style-iw-t::after,
+.gm-style .gm-style-iw-tc::after { background: var(--color-char-2); }
+.gm-style button.gm-ui-hover-effect { filter: invert(1); opacity: 0.8; }
+
+.map-info-window {
+  padding: var(--space-3) var(--space-4);
+  min-width: 140px;
+}
+.map-info-name {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-paper);
+}
+.map-info-meta {
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  color: var(--color-turmeric);
+  margin-top: 2px;
+}
+
 .marker {
   width: 14px;
   height: 14px;

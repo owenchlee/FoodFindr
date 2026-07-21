@@ -102,7 +102,6 @@ themselves instead of crashing.
 - `public/js/map.js` — Google Maps JavaScript API wrapper: dark theme via a cloud-configured Map ID, custom HTML markers via `AdvancedMarkerElement` (with hover tooltips), auto pan/zoom + a pulse animation on the recommended pick, and a pin-drop mode for manually choosing a search location.
 - `public/js/app.js` — filter/state handling, the loading overlay, the side rail + sliding drawer panel logic, the location picker (address search + map pin-drop), the preferences dialog, visit logging, and the exploration progress bar, all wired to the routes above.
 - `public/index.html` / `public/css/style.css` — the map is a fixed full-viewport background layer; a persistent side rail and a search/brand bar float on top, and every other panel (filters, reviews, progress, taste profile, FAQ) lives in a single sliding drawer that animates out from behind the rail rather than a permanent sidebar column.
-- `server/mockRestaurants.json` — no longer used for restaurant data; `cityCenter` from this file is kept only as the fallback location when geolocation is denied or unavailable.
 
 ## Deploying (Azure App Service, via GitHub Student Developer Pack)
 

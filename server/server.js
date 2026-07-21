@@ -3,7 +3,6 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const { cityCenter } = require('./mockRestaurants.json');
 const {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
@@ -324,8 +323,11 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', restaurants: [] });
   }
 
-  const lat = parseFloat(req.query.lat) || cityCenter.lat;
-  const lng = parseFloat(req.query.lng) || cityCenter.lng;
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return res.status(400).json({ error: 'A location (lat/lng) is required.', restaurants: [] });
+  }
   const { price, cuisine, maxDistance } = req.query;
   const dish = typeof req.query.dish === 'string' ? req.query.dish.trim().slice(0, 60) : '';
 
@@ -360,7 +362,7 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
       recordDiscovered(req.user.id, results, city);
     }
 
-    res.json({ cityCenter: { lat, lng }, city, restaurants: results });
+    res.json({ searchCenter: { lat, lng }, city, restaurants: results });
   } catch (err) {
     console.error('Places API request failed:', err);
     res.status(502).json({ error: 'Could not reach Google Places right now. Try again in a moment.', restaurants: [] });
