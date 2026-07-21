@@ -48,7 +48,7 @@ themselves instead of crashing.
   the matching panel out from behind the rail and fades out the rest of the
   UI so it reads as one clean panel instead of overlapping clutter. The
   FoodFindr wordmark sits top-right; a compact search bar (craving search +
-  Filters + Get Recommendation) sits top-left.
+  Filters + Surprise Me) sits top-left.
 - **Choose a different search location** — a location-pin control next to
   the search bar lets you either type a city/address (server-side geocoded)
   or drop a pin directly on the map to search somewhere other than where

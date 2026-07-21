@@ -1099,7 +1099,7 @@ select.visit-input option {
   gap: var(--space-3);
   background: rgba(28, 21, 18, 0.55);
   backdrop-filter: blur(2px);
-  /* Visual-only: a click landing here (e.g. hitting "Get Recommendation"
+  /* Visual-only: a click landing here (e.g. hitting "Surprise Me"
      right after dropping a pin, while this overlay is up for the resulting
      restaurant search) must not be silently swallowed — let it pass through
      to whatever's underneath. Actions that truly need to block concurrent
