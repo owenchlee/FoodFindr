@@ -14,7 +14,7 @@ const {
   isValidEmail, isValidPassword,
   signup, login,
   startSession, setSessionCookie, clearSessionCookie, endSession,
-  parseCookies, requireAuth
+  parseCookies, requireAuth, optionalAuth
 } = require('./auth');
 
 const app = express();
@@ -288,7 +288,7 @@ async function geocodeCity(lat, lng) {
 // browser Maps key is deliberately restricted to Maps JavaScript API only
 // (see .env.example) — this reuses the server key, which already has
 // Geocoding API access for the reverse-geocoding done in geocodeCity above.
-app.get('/api/geocode', requireAuth, apiLimiter, async (req, res) => {
+app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.' });
   }
@@ -318,7 +318,7 @@ app.get('/api/geocode', requireAuth, apiLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/restaurants', requireAuth, async (req, res) => {
+app.get('/api/restaurants', optionalAuth, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', restaurants: [] });
   }
@@ -355,7 +355,7 @@ app.get('/api/restaurants', requireAuth, async (req, res) => {
     }
 
     const city = await geocodeCity(lat, lng);
-    if (city && results.length > 0) {
+    if (city && results.length > 0 && req.user) {
       recordDiscovered(req.user.id, results, city);
     }
 
@@ -531,7 +531,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   return toolUse.input;
 }
 
-app.post('/api/recommend', requireAuth, async (req, res) => {
+app.post('/api/recommend', optionalAuth, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY — add it to .env.' });
   }
@@ -571,8 +571,8 @@ app.post('/api/recommend', requireAuth, async (req, res) => {
     const { place_id, dish_suggestion, reason, flavor_tags, shared_items } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
-      preferences: getPreferences(req.user.id),
-      visitHighlights: getVisitHighlights(req.user.id),
+      preferences: req.user ? getPreferences(req.user.id) : null,
+      visitHighlights: req.user ? getVisitHighlights(req.user.id) : [],
       dish: dishCraving
     });
     const pick = pool.find(r => r.id === place_id) || pool[0];
