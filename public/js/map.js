@@ -1,7 +1,7 @@
 let map;
 let markersById = {};
 let pinDropActive = false;
-let dropMarker = null;
+let originMarker = null;
 let infoWindow = null;
 
 function initMap(center, mapId) {
@@ -19,7 +19,7 @@ function initMap(center, mapId) {
     const lat = event.latLng.lat();
     const lng = event.latLng.lng();
     disablePinDrop();
-    setDropMarker(lat, lng);
+    setOriginMarker(lat, lng);
     if (typeof onLocationPicked === 'function') onLocationPicked(lat, lng);
   });
 }
@@ -36,23 +36,27 @@ function disablePinDrop() {
   map.setOptions({ draggableCursor: null });
 }
 
-function setDropMarker(lat, lng) {
+// The one persistent "you are here" marker — set from every path that
+// establishes a real search location: GPS fix, a remembered last location,
+// or a manually searched/dropped one. Always the same blue dot so it reads
+// as one consistent concept regardless of how the location was obtained.
+function setOriginMarker(lat, lng) {
   if (!map) return;
-  if (dropMarker) dropMarker.map = null;
+  if (originMarker) originMarker.map = null;
   const div = document.createElement('div');
-  div.className = 'marker marker--dropped';
-  dropMarker = new google.maps.marker.AdvancedMarkerElement({
+  div.className = 'marker marker--origin';
+  originMarker = new google.maps.marker.AdvancedMarkerElement({
     map,
     position: { lat, lng },
     content: div,
-    title: 'Search location'
+    title: 'Your search location'
   });
 }
 
-function clearDropMarker() {
-  if (dropMarker) {
-    dropMarker.map = null;
-    dropMarker = null;
+function clearOriginMarker() {
+  if (originMarker) {
+    originMarker.map = null;
+    originMarker = null;
   }
 }
 

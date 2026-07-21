@@ -8,6 +8,7 @@
   --color-turmeric: #d9a61a;
   --color-turmeric-dark: #96721a;
   --color-olive: #8a9a52;
+  --color-location-blue: #4285f4;
   --color-ink: #241c18;
 
   --color-hairline: rgba(217, 166, 26, 0.2);
@@ -974,12 +975,17 @@ select.visit-input option {
 }
 .marker--olive { background: var(--color-olive); }
 
-.marker--dropped {
+/* The one persistent marker showing where FoodFindr is actually searching
+   from — real GPS fix, a remembered last location, or a manually chosen
+   one — always this same blue dot, matching the familiar "you are here"
+   convention rather than the app's own warm chili/turmeric/olive palette. */
+.marker--origin {
   width: 20px;
   height: 20px;
-  background: var(--color-olive);
-  border: 2px solid var(--color-paper);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  background: var(--color-location-blue);
+  border: 3px solid var(--color-paper);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(66, 133, 244, 0.25), 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .marker--pick {
