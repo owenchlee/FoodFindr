@@ -1,6 +1,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('fs');
 const path = require('path');
+const { computeStats, evaluateBadges } = require('./badges');
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'foodfindr.db');
 // node:sqlite creates the DB file itself but not its parent directory —
@@ -248,6 +249,82 @@ function recordDiscovered(userId, restaurants, city) {
   }
 }
 
+// Streaks are computed from UTC calendar days (not per-user local time) —
+// a deliberate simplification. Two visits logged the same UTC day only
+// count once, so back-to-back logging in one sitting can't inflate a streak.
+function getStreaks(userId) {
+  const rows = db.prepare('SELECT logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC').all(userId);
+  if (rows.length === 0) {
+    return { currentStreak: 0, longestStreak: 0, lastVisitDate: null };
+  }
+
+  const dayStrings = [];
+  const seenDays = new Set();
+  for (const row of rows) {
+    const day = row.logged_at.slice(0, 10);
+    if (!seenDays.has(day)) {
+      seenDays.add(day);
+      dayStrings.push(day);
+    }
+  }
+
+  const days = dayStrings.map(d => Date.parse(`${d}T00:00:00Z`));
+
+  let longestStreak = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i++) {
+    run = (days[i] - days[i - 1] === 86400000) ? run + 1 : 1;
+    longestStreak = Math.max(longestStreak, run);
+  }
+
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const lastDay = days[days.length - 1];
+  const gapFromToday = (todayUTC - lastDay) / 86400000;
+
+  let currentStreak = 0;
+  if (gapFromToday <= 1) {
+    currentStreak = 1;
+    for (let i = days.length - 1; i > 0; i--) {
+      if (days[i] - days[i - 1] === 86400000) currentStreak++;
+      else break;
+    }
+  }
+
+  return { currentStreak, longestStreak, lastVisitDate: dayStrings[dayStrings.length - 1] };
+}
+
+function getBadges(userId) {
+  const rows = db.prepare(
+    'SELECT rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC'
+  ).all(userId);
+  return evaluateBadges(computeStats(rows, getStreaks(userId)));
+}
+
+// All registered users, even ones with zero visits — for a small friend
+// group, seeing "you're at 0, a friend's at 12" is itself a nudge, and
+// hiding inactive accounts would just look like the leaderboard is broken.
+function getLeaderboardStats() {
+  const users = db.prepare('SELECT id, email FROM users ORDER BY id ASC').all();
+  const visitCountRows = db.prepare(
+    'SELECT user_id, COUNT(*) AS count FROM visits WHERE user_id IS NOT NULL GROUP BY user_id'
+  ).all();
+  const visitCounts = new Map(visitCountRows.map(r => [r.user_id, r.count]));
+
+  return users
+    .map(u => {
+      const streaks = getStreaks(u.id);
+      return {
+        userId: u.id,
+        email: u.email,
+        visitCount: visitCounts.get(u.id) || 0,
+        currentStreak: streaks.currentStreak,
+        longestStreak: streaks.longestStreak
+      };
+    })
+    .sort((a, b) => b.visitCount - a.visitCount || b.longestStreak - a.longestStreak || a.userId - b.userId);
+}
+
 function getProgress(userId, city) {
   const discovered = db.prepare(
     'SELECT COUNT(*) AS count FROM discovered_restaurants WHERE user_id = ? AND city = ?'
@@ -270,5 +347,6 @@ module.exports = {
   createSession, getSessionWithUser, deleteSession, adoptLegacyData,
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
-  recordDiscovered, getProgress
+  recordDiscovered, getProgress,
+  getStreaks, getBadges, getLeaderboardStats
 };
