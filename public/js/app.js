@@ -649,7 +649,7 @@ async function loadRestaurants() {
   } finally {
     restaurantsLoading = false;
     hideLoading();
-    // A "Get Recommendation" click that landed while this search was still in
+    // A "Surprise Me" click that landed while this search was still in
     // flight (e.g. right after dropping a pin) previously got silently
     // swallowed by the loading overlay — this replays it now that fresh
     // restaurant data for the new location is actually in lastFilteredRestaurants.
