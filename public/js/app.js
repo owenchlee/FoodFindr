@@ -51,6 +51,7 @@ function useLastLocationOrShowEmptyState(reason) {
   const last = getLastLocation();
   if (last) {
     userLocation = last;
+    setOriginMarker(last.lat, last.lng);
     recenterMap(last.lat, last.lng);
     showLocationBanner(`${reason} — showing spots near your last searched area.`);
     loadRestaurants();
@@ -64,7 +65,7 @@ function init() {
     document.getElementById('location-banner').hidden = true;
     if (usingCustomLocation) {
       usingCustomLocation = false;
-      clearDropMarker();
+      clearOriginMarker();
       requestUserLocation();
     }
   });
@@ -605,6 +606,7 @@ function requestUserLocation() {
       if (usingCustomLocation) return;
       userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
       saveLastLocation(userLocation.lat, userLocation.lng);
+      setOriginMarker(userLocation.lat, userLocation.lng);
       recenterMap(userLocation.lat, userLocation.lng);
       loadRestaurants();
     },
@@ -650,7 +652,7 @@ async function searchLocation(query, inputEl) {
     }
 
     inputEl.value = '';
-    setDropMarker(data.lat, data.lng);
+    setOriginMarker(data.lat, data.lng);
     recenterMap(data.lat, data.lng);
     onLocationPicked(data.lat, data.lng);
   } catch (err) {
