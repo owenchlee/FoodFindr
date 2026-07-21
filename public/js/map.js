@@ -2,6 +2,7 @@ let map;
 let markersById = {};
 let pinDropActive = false;
 let dropMarker = null;
+let infoWindow = null;
 
 function initMap(center, mapId) {
   map = new google.maps.Map(document.getElementById('map'), {
@@ -72,6 +73,36 @@ function markerContent(restaurant, isPick) {
   return div;
 }
 
+// The native `title` attribute's hover tooltip is browser/OS-rendered, so we
+// can't restyle it — it comes out small and low-contrast, especially on
+// mobile. This builds a fully custom-styled popup instead, shown on click.
+function showRestaurantInfo(restaurant) {
+  if (!infoWindow) infoWindow = new google.maps.InfoWindow({ disableAutoPan: false });
+
+  const div = document.createElement('div');
+  div.className = 'map-info-window';
+
+  const name = document.createElement('div');
+  name.className = 'map-info-name';
+  name.textContent = restaurant.name;
+  div.appendChild(name);
+
+  const metaParts = [];
+  if (restaurant.cuisine) metaParts.push(restaurant.cuisine);
+  if (restaurant.price) metaParts.push('$'.repeat(restaurant.price));
+  if (restaurant.rating) metaParts.push(`★ ${restaurant.rating}`);
+  if (metaParts.length > 0) {
+    const meta = document.createElement('div');
+    meta.className = 'map-info-meta';
+    meta.textContent = metaParts.join(' · ');
+    div.appendChild(meta);
+  }
+
+  infoWindow.setContent(div);
+  infoWindow.setPosition({ lat: restaurant.lat, lng: restaurant.lng });
+  infoWindow.open(map);
+}
+
 function renderMarkers(restaurants) {
   if (!map) return;
 
@@ -85,6 +116,7 @@ function renderMarkers(restaurants) {
       content: markerContent(restaurant, false),
       title: `${restaurant.name} · ${'$'.repeat(restaurant.price)}`
     });
+    marker.addListener('click', () => showRestaurantInfo(restaurant));
     markersById[restaurant.id] = marker;
   });
 }
