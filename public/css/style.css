@@ -937,16 +937,54 @@ select.visit-input option {
 }
 
 @media (max-width: 720px) {
+  /* Floating rounded search pill + a floating CTA pill below it, instead of
+     a solid edge-to-edge bar — closer to how native map apps (Google Maps,
+     etc.) float their search UI over the map on small screens. */
   :root { --top-bar-height: 116px; }
   .side-rail { width: 48px; }
   .side-rail.expanded { width: 200px; }
   .tabs-toggle { margin-left: 4px; }
   .rail-btn { margin: 0 4px; }
+
   .top-bar {
-    left: 48px;
-    padding: var(--space-2) var(--space-3);
+    left: calc(48px + var(--space-2));
+    right: var(--space-2);
+    top: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    min-height: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
   }
-  .top-bar .search-row { flex-basis: 100%; order: 3; }
+  .top-bar .wordmark { display: none; }
+
+  .top-bar .search-row {
+    background: var(--color-char-2);
+    border: 1px solid var(--color-hairline);
+    border-radius: 999px;
+    box-shadow: var(--shadow-md);
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
+  }
+  .top-bar .search-row .visit-input {
+    background: none;
+    border: none;
+    padding: var(--space-2) 0;
+  }
+  .top-bar .location-picker #pick-location-btn,
+  .top-bar #filters-toggle {
+    border-radius: 999px;
+  }
+
+  .top-bar .cta {
+    margin: 0;
+    border-radius: 999px;
+    box-shadow: var(--shadow-md);
+  }
+
   .left-column {
     left: calc(48px + var(--space-3));
     right: var(--space-3);
