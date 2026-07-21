@@ -178,11 +178,10 @@
       <div class="log-visit-block">
         <span class="filter-label">Log a Visit</span>
         <form id="visit-form" class="visit-form">
-          <select id="visit-restaurant" class="visit-input">
-            <option value="">Select a restaurant…</option>
-            <option value="__other__">Other (not listed)</option>
-          </select>
-          <input type="text" id="visit-restaurant-other" class="visit-input" placeholder="Restaurant name" hidden />
+          <div class="restaurant-autocomplete">
+            <input type="text" id="visit-restaurant" class="visit-input" placeholder="Search for a restaurant…" autocomplete="off" />
+            <ul class="restaurant-suggestions" id="restaurant-suggestions" hidden></ul>
+          </div>
           <input type="text" id="visit-dish" class="visit-input" placeholder="What did you order? (optional)" />
           <div class="star-rating" id="visit-rating" data-value="0">
             <button type="button" data-star="1" aria-label="1 star">☆</button>
