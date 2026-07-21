@@ -618,6 +618,40 @@ select.visit-input option {
   background: var(--color-paper);
 }
 
+.restaurant-autocomplete { position: relative; }
+.restaurant-suggestions {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  z-index: 6;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--color-char-2);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.restaurant-suggestions[hidden] { display: none; }
+.restaurant-suggestions li + li { margin-top: 2px; }
+.restaurant-suggestions button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--color-paper);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-2);
+  cursor: pointer;
+}
+.restaurant-suggestions button:hover { background: rgba(242, 234, 225, 0.08); }
+
 .star-rating { display: flex; gap: var(--space-1); }
 .star-rating button {
   background: none;

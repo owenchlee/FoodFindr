@@ -61,7 +61,13 @@ function init() {
   dishInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
+      // blur() synchronously fires 'change' above, which updates
+      // currentFilters.dish and calls loadRestaurants() — by the time blur()
+      // returns, restaurantsLoading is already true, so getRecommendation()
+      // correctly queues itself via the existing pendingRecommendation
+      // mechanism and fires once the new search results are in.
       dishInput.blur();
+      getRecommendation();
     }
   });
 
@@ -112,10 +118,11 @@ function init() {
     submitVisit();
   });
 
-  document.getElementById('visit-restaurant').addEventListener('change', (event) => {
-    const otherInput = document.getElementById('visit-restaurant-other');
-    otherInput.hidden = event.target.value !== '__other__';
-    if (!otherInput.hidden) otherInput.focus();
+  const restaurantInput = document.getElementById('visit-restaurant');
+  restaurantInput.addEventListener('input', (event) => renderRestaurantSuggestions(event.target.value));
+  restaurantInput.addEventListener('focus', (event) => renderRestaurantSuggestions(event.target.value));
+  restaurantInput.addEventListener('blur', () => {
+    document.getElementById('restaurant-suggestions').hidden = true;
   });
 
   document.getElementById('ticket-log-btn').addEventListener('click', () => {
@@ -175,7 +182,10 @@ function init() {
       openDrawer(btn.dataset.tab);
     });
   });
-  document.getElementById('filters-toggle').addEventListener('click', () => openDrawer('filters'));
+  document.getElementById('filters-toggle').addEventListener('click', () => {
+    setRailExpanded(false);
+    openDrawer('filters');
+  });
 }
 
 // Bound immediately (not gated behind maps-loaded/init) since a user can
@@ -382,7 +392,11 @@ function closeDrawer() {
 
 function toggleRailExpanded() {
   const rail = document.getElementById('side-rail');
-  setRailExpanded(!rail.classList.contains('expanded'));
+  const expanding = !rail.classList.contains('expanded');
+  // Expanding the rail to 210px would otherwise overlap an already-open
+  // drawer, which is still positioned assuming the rail's collapsed width.
+  if (expanding) closeDrawer();
+  setRailExpanded(expanding);
 }
 
 function setRailExpanded(expanded) {
@@ -630,7 +644,6 @@ async function loadRestaurants() {
 
     lastFilteredRestaurants = data.restaurants || [];
     renderMarkers(lastFilteredRestaurants);
-    populateVisitRestaurantOptions();
     hideTicket();
     loadProgress();
   } finally {
@@ -647,31 +660,40 @@ async function loadRestaurants() {
   }
 }
 
-function populateVisitRestaurantOptions() {
-  const select = document.getElementById('visit-restaurant');
-  const previousValue = select.value;
-  select.replaceChildren();
+function renderRestaurantSuggestions(query) {
+  const list = document.getElementById('restaurant-suggestions');
+  const trimmed = query.trim().toLowerCase();
 
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = 'Select a restaurant…';
-  select.appendChild(placeholder);
+  if (!trimmed) {
+    list.replaceChildren();
+    list.hidden = true;
+    return;
+  }
 
-  lastFilteredRestaurants.forEach(restaurant => {
-    const option = document.createElement('option');
-    option.value = restaurant.name;
-    option.textContent = restaurant.name;
-    select.appendChild(option);
+  const matches = lastFilteredRestaurants
+    .filter(r => r.name.toLowerCase().includes(trimmed))
+    .slice(0, 6);
+
+  list.replaceChildren();
+  matches.forEach(restaurant => {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = restaurant.name;
+    // mousedown (not click) fires before the input's blur, and
+    // preventDefault() there stops focus from ever leaving the input —
+    // so the list doesn't get hidden by the blur handler before this runs.
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      document.getElementById('visit-restaurant').value = restaurant.name;
+      list.replaceChildren();
+      list.hidden = true;
+    });
+    li.appendChild(button);
+    list.appendChild(li);
   });
 
-  const other = document.createElement('option');
-  other.value = '__other__';
-  other.textContent = 'Other (not listed)';
-  select.appendChild(other);
-
-  if (Array.from(select.options).some(o => o.value === previousValue)) {
-    select.value = previousValue;
-  }
+  list.hidden = matches.length === 0;
 }
 
 async function getRecommendation() {
@@ -827,9 +849,7 @@ function renderVisitList() {
 
 function resetVisitForm() {
   document.getElementById('visit-restaurant').value = '';
-  const otherInput = document.getElementById('visit-restaurant-other');
-  otherInput.value = '';
-  otherInput.hidden = true;
+  document.getElementById('restaurant-suggestions').hidden = true;
   document.getElementById('visit-dish').value = '';
   const container = document.getElementById('visit-rating');
   container.dataset.value = 0;
@@ -841,28 +861,15 @@ function resetVisitForm() {
 
 function prefillVisitForm(data) {
   if (!data) return;
-  const select = document.getElementById('visit-restaurant');
-  const otherInput = document.getElementById('visit-restaurant-other');
-  const isListed = Array.from(select.options).some(o => o.value === data.restaurant.name);
-
-  if (isListed) {
-    select.value = data.restaurant.name;
-    otherInput.hidden = true;
-  } else {
-    select.value = '__other__';
-    otherInput.hidden = false;
-    otherInput.value = data.restaurant.name;
-  }
-
+  const input = document.getElementById('visit-restaurant');
+  input.value = data.restaurant.name;
   document.getElementById('visit-dish').value = data.dish.name;
-  select.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function submitVisit() {
   const status = document.getElementById('visit-status');
-  const select = document.getElementById('visit-restaurant');
-  const otherInput = document.getElementById('visit-restaurant-other');
-  const restaurantName = (select.value === '__other__' ? otherInput.value : select.value).trim();
+  const restaurantName = document.getElementById('visit-restaurant').value.trim();
   const dish = document.getElementById('visit-dish').value.trim();
   const rating = Number(document.getElementById('visit-rating').dataset.value);
 
