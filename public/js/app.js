@@ -11,6 +11,7 @@ let appStarted = false;
 let restaurantsLoading = false;
 let pendingRecommendation = false;
 let authMode = 'login';
+let isGuest = false;
 
 function init() {
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
@@ -118,11 +119,19 @@ function init() {
   });
 
   document.getElementById('ticket-log-btn').addEventListener('click', () => {
+    if (isGuest) {
+      showAuthGate();
+      return;
+    }
     openDrawer('log-review');
     prefillVisitForm(lastRecommendation);
   });
 
   document.getElementById('edit-preferences-btn').addEventListener('click', () => {
+    if (isGuest) {
+      showAuthGate();
+      return;
+    }
     setRailExpanded(false);
     closeDrawer();
     openPreferencesDialog();
@@ -156,6 +165,12 @@ function init() {
   document.getElementById('tabs-toggle').addEventListener('click', toggleRailExpanded);
   document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
+      // FAQ needs no account; the other tabs (log-review, past-reviews,
+      // progress) are all account-only, so bounce a guest to sign up instead.
+      if (isGuest && GUEST_LOCKED_TABS.has(btn.dataset.tab)) {
+        showAuthGate();
+        return;
+      }
       setRailExpanded(false);
       openDrawer(btn.dataset.tab);
     });
@@ -173,16 +188,22 @@ function bindAuthEvents() {
     event.preventDefault();
     submitAuthForm();
   });
+  document.getElementById('continue-as-guest-btn').addEventListener('click', continueAsGuest);
+  document.getElementById('rail-guest-signup-btn').addEventListener('click', showAuthGate);
 }
 
 function startAppData() {
   requestUserLocation();
-  loadRecentVisits();
-  loadPreferences();
+  // Visits/preferences are account-only routes — a guest hitting them would
+  // just get a 401, so skip loading them entirely rather than let that fail.
+  if (!isGuest) {
+    loadRecentVisits();
+    loadPreferences();
+  }
 }
 
 function tryStartApp() {
-  if (currentUser && mapsReady && !appStarted) {
+  if ((currentUser || isGuest) && mapsReady && !appStarted) {
     appStarted = true;
     startAppData();
   }
@@ -204,14 +225,32 @@ async function checkAuth() {
 
 function onAuthenticated(user) {
   currentUser = user;
+  // A guest who signs up mid-session already has appStarted set, so
+  // tryStartApp() below is a no-op for them — load their account data here
+  // instead of relying on startAppData(), which only runs once per session.
+  const wasGuest = isGuest;
+  isGuest = false;
   document.getElementById('auth-gate').hidden = true;
+  document.getElementById('rail-account-guest').hidden = true;
   document.getElementById('rail-account').hidden = false;
   document.getElementById('account-email').textContent = user.email;
   tryStartApp();
+  if (wasGuest && appStarted) {
+    loadRecentVisits();
+    loadPreferences();
+  }
 }
 
 function showAuthGate() {
   document.getElementById('auth-gate').hidden = false;
+}
+
+function continueAsGuest() {
+  isGuest = true;
+  document.getElementById('auth-gate').hidden = true;
+  document.getElementById('rail-account').hidden = true;
+  document.getElementById('rail-account-guest').hidden = false;
+  tryStartApp();
 }
 
 function toggleAuthMode() {
@@ -262,6 +301,8 @@ async function logout() {
     location.reload();
   }
 }
+
+const GUEST_LOCKED_TABS = new Set(['log-review', 'past-reviews', 'progress']);
 
 const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'faq'];
 const DRAWER_TAB_LABELS = {

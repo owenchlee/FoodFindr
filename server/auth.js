@@ -153,10 +153,25 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// For routes guests can use too (browsing/recommendations): attaches
+// req.user when a valid session exists, but never blocks the request —
+// route handlers check `req.user` themselves to personalize or skip that.
+function optionalAuth(req, res, next) {
+  const token = req.cookies && req.cookies[SESSION_COOKIE_NAME];
+  const session = token ? getSessionWithUser(token) : null;
+
+  if (session && new Date(session.expires_at).getTime() >= Date.now()) {
+    req.user = { id: session.user_id, email: session.email };
+    req.sessionToken = token;
+  }
+
+  next();
+}
+
 module.exports = {
   SESSION_COOKIE_NAME,
   isValidEmail, isValidPassword,
   signup, login,
   startSession, setSessionCookie, clearSessionCookie, endSession,
-  parseCookies, requireAuth
+  parseCookies, requireAuth, optionalAuth
 };

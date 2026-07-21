@@ -57,6 +57,14 @@
         <span class="rail-btn-label">Log Out</span>
       </button>
     </div>
+
+    <div class="rail-account" id="rail-account-guest" hidden>
+      <span class="rail-account-email" id="rail-account-guest-label">Browsing as guest</span>
+      <button type="button" class="rail-btn" id="rail-guest-signup-btn" title="Sign Up" aria-label="Sign Up">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+        <span class="rail-btn-label">Sign Up</span>
+      </button>
+    </div>
   </div>
 
   <div class="top-bar" id="top-bar">
@@ -261,6 +269,7 @@
     <p class="visit-status" id="auth-status" hidden></p>
     <button type="submit" class="cta" id="auth-submit-btn">Log In</button>
     <button type="button" class="auth-toggle-mode" id="auth-toggle-mode">Need an account? Sign up</button>
+    <button type="button" class="auth-toggle-mode" id="continue-as-guest-btn">Continue as Guest</button>
   </form>
 </div>
 
