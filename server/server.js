@@ -471,14 +471,30 @@ function personalizationInstruction(preferences, visitHighlights) {
   return parts.length > 0 ? ' ' + parts.join(' ') : '';
 }
 
-function dishCravingInstruction(dish) {
+function dishCravingInstruction(dish, dietaryRestrictions) {
   if (!dish) return '';
+  const restrictionClause = dietaryRestrictions && dietaryRestrictions.length > 0
+    ? ` Their dietary restrictions are: ${dietaryRestrictions.join(', ')}. Those restrictions apply to this craving ` +
+      `too. Only suggest "${dish}" if a review explicitly names a specific item compatible with those restrictions ` +
+      `(e.g. a review that actually says "vegan," "vegetarian," "plant-based," or names a specific meat-free/dairy-free ` +
+      `item). Do not infer or assume a compliant version exists just because a restaurant seems flexible, ` +
+      `accommodating, or diverse; guessing at a dish that isn't explicitly in the reviews is inventing a dish, which ` +
+      `is never allowed, restrictions or not. Check every candidate for this kind of explicit evidence, not just the ` +
+      `highest-rated one. Your reason must always end by stating plainly whether review evidence confirms this ` +
+      `dish fits their dietary restrictions, or whether that could not be confirmed either way; never leave this ` +
+      `unaddressed. If NONE of the candidates' reviews explicitly describe a compliant "${dish}", treat that ` +
+      `exactly like "${dish}" not being available nearby: pick the best-reviewed candidate on its own merits, ` +
+      `suggest a dish its reviews actually back up, and say plainly in your reason that none of the nearby options ` +
+      `had review evidence of a "${dish}" that fit their dietary restrictions. Never put a diet label like "vegan" ` +
+      `or "vegetarian" in the dish name itself unless a review for that exact restaurant used that word; the name ` +
+      `is what someone reading quickly will trust most, so it can't claim something the reason then hedges on.`
+    : '';
   return ` The user is specifically craving "${dish}" today. Only pick a restaurant whose reviews actually support ` +
     `serving something like that, and suggest that as the dish. If NONE of the candidates' reviews support "${dish}" ` +
     `at all, do not pick one and pretend it's a fallback for it. Instead pick the best-reviewed candidate on its own ` +
     `merits, suggest a dish its reviews actually back up, and say plainly in your reason that you couldn't find ` +
     `"${dish}" nearby so you're suggesting this instead. Never describe an unrelated dish as similar to or a ` +
-    `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.`;
+    `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.${restrictionClause}`;
 }
 
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, preferences, visitHighlights, dish }) {
@@ -491,61 +507,110 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationInstruction(preferences, visitHighlights)}` +
-    `${dishCravingInstruction(dish)}\n\n` +
+    `${dishCravingInstruction(dish, preferences && preferences.dietaryRestrictions)}\n\n` +
     JSON.stringify(candidates, null, 2);
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      tools: [{
-        name: 'recommend_restaurant',
-        description: 'Return the single best restaurant recommendation with a specific dish suggestion.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            place_id: { type: 'string', description: 'The place_id of the chosen restaurant, copied exactly from one of the candidates.' },
-            dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order. For a sharing group, a short one-line summary of the whole shared order (e.g. "Dumplings, mapo tofu, and scallion pancakes to share").' },
-            reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' },
-            flavor_tags: {
-              type: 'array',
-              description: 'Exactly 3 flavor descriptors for the suggested dish, from the fixed list.',
-              items: { type: 'string', enum: FLAVOR_TAGS },
-              minItems: 3,
-              maxItems: 3
+  async function callClaude() {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        tools: [{
+          name: 'recommend_restaurant',
+          description: 'Return the single best restaurant recommendation with a specific dish suggestion.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              place_id: { type: 'string', description: 'The place_id of the chosen restaurant, copied exactly from one of the candidates.' },
+              dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order. For a sharing group, a short one-line summary of the whole shared order (e.g. "Dumplings, mapo tofu, and scallion pancakes to share").' },
+              reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' },
+              flavor_tags: {
+                type: 'array',
+                description: 'Exactly 3 flavor descriptors for the suggested dish, from the fixed list.',
+                items: { type: 'string', enum: FLAVOR_TAGS },
+                minItems: 3,
+                maxItems: 3
+              },
+              shared_items: {
+                type: 'array',
+                description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices: real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely; do not include an empty array.',
+                items: { type: 'string', description: 'The name of a dish or menu item to share.' }
+              }
             },
-            shared_items: {
-              type: 'array',
-              description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices: real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely; do not include an empty array.',
-              items: { type: 'string', description: 'The name of a dish or menu item to share.' }
-            }
-          },
-          required: ['place_id', 'dish_suggestion', 'reason', 'flavor_tags']
-        }
-      }],
-      tool_choice: { type: 'tool', name: 'recommend_restaurant' },
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
+            required: ['place_id', 'dish_suggestion', 'reason', 'flavor_tags']
+          }
+        }],
+        tool_choice: { type: 'tool', name: 'recommend_restaurant' },
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (data.error) {
-    throw new Error(`Anthropic API error: ${data.error.type}: ${data.error.message}`);
+    if (data.error) {
+      throw new Error(`Anthropic API error: ${data.error.type}: ${data.error.message}`);
+    }
+
+    const toolUse = data.content && data.content.find(block => block.type === 'tool_use');
+    if (!toolUse) {
+      throw new Error('Claude did not return a structured recommendation.');
+    }
+
+    return toolUse.input;
   }
 
-  const toolUse = data.content && data.content.find(block => block.type === 'tool_use');
-  if (!toolUse) {
-    throw new Error('Claude did not return a structured recommendation.');
+  // Structured tool-use output occasionally malforms on a long `reason` string
+  // (formatting artifacts like `</reason>` or `<parameter...>` leaking into the
+  // text instead of staying in the proper fields), and separately, the reason
+  // sometimes just skips disclosing dietary-fit even though it's required.
+  // One retry clears either case up almost always; isValidRecommendation
+  // catches it rather than letting broken or silently-noncompliant output
+  // reach the client.
+  const dietaryRestrictions = preferences && preferences.dietaryRestrictions;
+  let result = await callClaude();
+  if (!isValidRecommendation(result, candidates, dietaryRestrictions)) {
+    result = await callClaude();
+    if (!isValidRecommendation(result, candidates, dietaryRestrictions)) {
+      throw new Error('Claude returned a malformed recommendation twice in a row.');
+    }
   }
+  return result;
+}
 
-  return toolUse.input;
+function isValidRecommendation(input, candidates, dietaryRestrictions) {
+  if (!input || typeof input !== 'object') return false;
+  if (typeof input.place_id !== 'string' || !candidates.some(c => c.place_id === input.place_id)) return false;
+  if (typeof input.dish_suggestion !== 'string' || !input.dish_suggestion.trim()) return false;
+  if (typeof input.reason !== 'string' || !input.reason.trim() || /<\/?\w+[^>]*>/.test(input.reason)) return false;
+  if (!Array.isArray(input.flavor_tags) || input.flavor_tags.length !== 3) return false;
+  if (!input.flavor_tags.every(tag => FLAVOR_TAGS.includes(tag))) return false;
+  if (dietaryRestrictions && dietaryRestrictions.length > 0) {
+    const mentionsCompliance = /vegan|vegetarian|dietary|restriction|plant-based|compliant|confirm/i.test(input.reason)
+      || dietaryRestrictions.some(r => input.reason.toLowerCase().includes(r.toLowerCase()));
+    if (!mentionsCompliance) return false;
+
+    // The dish name itself must not assert a diet label ("Vegan tacos") unless a
+    // review for that exact restaurant actually used that word. Otherwise the name
+    // alone (more prominent in the UI than the full reason) can mislead someone
+    // skimming past a hedge buried in the reason text.
+    const dietLabels = ['vegan', 'vegetarian', 'plant-based', 'plant based', 'dairy-free', 'dairy free'];
+    const dishText = [input.dish_suggestion, ...(Array.isArray(input.shared_items) ? input.shared_items : [])]
+      .join(' ').toLowerCase();
+    const namedLabels = dietLabels.filter(label => dishText.includes(label));
+    if (namedLabels.length > 0) {
+      const chosen = candidates.find(c => c.place_id === input.place_id);
+      const reviewText = (chosen && Array.isArray(chosen.reviews) ? chosen.reviews.join(' ') : '').toLowerCase();
+      const groundedInReviews = namedLabels.some(label => reviewText.includes(label));
+      if (!groundedInReviews) return false;
+    }
+  }
+  return true;
 }
 
 app.post('/api/recommend', optionalAuth, async (req, res) => {
