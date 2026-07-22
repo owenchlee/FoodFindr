@@ -140,14 +140,13 @@ Render or Fly) — just point `DB_PATH` at a subfolder under `/home`.
    working).
 7. In Google Cloud Console, add the `azurewebsites.net` URL to the Maps
    browser key's allowed HTTP referrers (it's referrer-restricted).
-8. Only once that's all verified working: hand over a custom domain — if
-   it's the free Namecheap `.me` domain from the Student Pack, or one you
-   already own, either way I'll need (a) the domain name and (b) for you to
-   add the DNS records Azure's **Custom domains** blade gives you at your
-   registrar (a `TXT` record for verification, then a `CNAME` for `www`
-   or an `A` record at the apex). Azure then issues a free managed
-   certificate automatically once DNS resolves. I never need registrar
-   credentials, just the record values to hand back to you.
+8. Only once that's all verified working: attach a custom domain — either
+   the free Namecheap `.me` domain from the Student Pack, or one you
+   already own. Add the DNS records Azure's **Custom domains** blade
+   provides at your registrar (a `TXT` record for verification, then a
+   `CNAME` for `www` or an `A` record at the apex). Azure then issues a
+   free managed certificate automatically once DNS resolves — no
+   registrar credentials ever need to leave your own hands.
 
 The app is live at [foodfindr.tech](https://foodfindr.tech), on the Basic
 (B1) plan with a free Azure-managed certificate. Helmet's
