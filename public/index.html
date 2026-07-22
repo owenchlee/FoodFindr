@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FoodFindr — Find your next meal</title>
-<meta name="description" content="FoodFindr picks one restaurant and one specific dish near you, tailored to your budget, cravings, group, and taste — then tracks how much of your city you've explored." />
+<title>FoodFindr: Find your next meal</title>
+<meta name="description" content="FoodFindr picks one restaurant and one specific dish near you, tailored to your budget, cravings, group, and taste. It also tracks how much of your city you've explored." />
 <meta name="theme-color" content="#1c1512" />
 
 <meta property="og:type" content="website" />
-<meta property="og:title" content="FoodFindr — Find your next meal" />
+<meta property="og:title" content="FoodFindr: Find your next meal" />
 <meta property="og:description" content="One restaurant, one dish, picked for your budget, cravings, and taste." />
 <meta property="og:image" content="/images/logo.png" />
 
@@ -223,7 +223,7 @@
         </div>
         <p class="progress-count" id="progress-count"></p>
       </div>
-      <p class="progress-empty" id="progress-empty">Search a few spots first — your progress will show up here once we know your city.</p>
+      <p class="progress-empty" id="progress-empty">Search a few spots first: your progress will show up here once we know your city.</p>
 
       <div class="streak-block" id="streak-block" hidden>
         <span class="filter-label">Visit Streak</span>
@@ -273,32 +273,32 @@
 
         <div class="faq-item">
           <p class="faq-question">Is the price filter exact?</p>
-          <p class="faq-answer">It's a ceiling based on Google's 0–4 price tier, not an exact per-item price — the $/$$/$$$ ranges shown are approximate, per-person guides, not guarantees.</p>
+          <p class="faq-answer">It's a ceiling based on Google's 0-4 price tier, not an exact per-item price. The $/$$/$$$ ranges shown are approximate, per-person guides, not guarantees.</p>
         </div>
 
         <div class="faq-item">
           <p class="faq-question">Does "Sharing" show real prices?</p>
-          <p class="faq-answer">No. Google doesn't provide real menu prices, so we only calculate a total budget for the group to guide how many items make sense — we never invent or display a per-item dollar figure.</p>
+          <p class="faq-answer">No. Google doesn't provide real menu prices, so we only calculate a total budget for the group to guide how many items make sense. We never invent or display a per-item dollar figure.</p>
         </div>
 
         <div class="faq-item">
           <p class="faq-question">How accurate are dietary restriction matches?</p>
-          <p class="faq-answer">Best-effort only, based on whatever reviews happen to mention — there's no real ingredient or allergen data, so always double-check with the restaurant directly.</p>
+          <p class="faq-answer">Best-effort only, based on whatever reviews happen to mention: there's no real ingredient or allergen data, so always double-check with the restaurant directly.</p>
         </div>
 
         <div class="faq-item">
           <p class="faq-question">What does the progress bar count?</p>
-          <p class="faq-answer">Restaurants FoodFindr has shown you in your city so far — not every restaurant that exists. It grows as you search rather than starting from a true city-wide total.</p>
+          <p class="faq-answer">Restaurants FoodFindr has shown you in your city so far, not every restaurant that exists. It grows as you search rather than starting from a true city-wide total.</p>
         </div>
 
         <div class="faq-item">
           <p class="faq-question">What counts toward my streak?</p>
-          <p class="faq-answer">Any day you log at least one visit, based on UTC calendar days — logging twice in one day only counts once.</p>
+          <p class="faq-answer">Any day you log at least one visit, based on UTC calendar days. Logging twice in one day only counts once.</p>
         </div>
 
         <div class="faq-item">
           <p class="faq-question">How is the leaderboard ranked?</p>
-          <p class="faq-answer">By total visits logged, all-time. Streaks are shown alongside but don't affect rank — a missed day shouldn't tank your spot.</p>
+          <p class="faq-answer">By total visits logged, all-time. Streaks are shown alongside but don't affect rank, so a missed day shouldn't tank your spot.</p>
         </div>
       </div>
     </div>
@@ -341,7 +341,7 @@
         <button type="button" class="chip" data-restriction="Kosher">Kosher</button>
         <button type="button" class="chip" data-restriction="Shellfish-Free">Shellfish-Free</button>
       </div>
-      <p class="prefs-disclaimer">Google doesn't give us menu/ingredient data, so we can only try to avoid conflicts based on what reviews happen to mention — not a guarantee. Always double check with the restaurant.</p>
+      <p class="prefs-disclaimer">Google doesn't give us menu/ingredient data, so we can only try to avoid conflicts based on what reviews happen to mention. Not a guarantee. Always double check with the restaurant.</p>
     </div>
 
     <div class="filter-group">
@@ -399,7 +399,7 @@
   script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsBrowserKey)}&libraries=marker&v=weekly&callback=onGoogleMapsReady`;
   script.onerror = () => {
     document.getElementById('map').innerHTML =
-      '<div class="map-placeholder">Couldn\'t load Google Maps — check your API key and internet connection.</div>';
+      '<div class="map-placeholder">Couldn\'t load Google Maps. Check your API key and internet connection.</div>';
     window.dispatchEvent(new Event('maps-loaded'));
   };
   document.head.appendChild(script);

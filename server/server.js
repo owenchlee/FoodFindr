@@ -29,11 +29,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Fixed vocabulary (not free-form) so tags can actually be aggregated into
-// "top flavors" later — free text from Claude would fragment across
+// "top flavors" later. Free text from Claude would fragment across
 // synonyms like "tangy" vs "zesty" vs "sour".
 const FLAVOR_TAGS = ['Spicy', 'Tangy', 'Sweet', 'Savory', 'Umami', 'Sour', 'Smoky', 'Creamy', 'Fresh', 'Rich', 'Herby', 'Crispy'];
 
-// Per-person dollar ceilings for each price tier — must match the UI hint text in
+// Per-person dollar ceilings for each price tier. Must match the UI hint text in
 // index.html: "$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)".
 const PRICE_TIER_MAX_USD = { 1: 15, 2: 30, 3: 60 };
 
@@ -42,8 +42,8 @@ function totalGroupBudget(groupSize, targetPrice) {
   return groupSize * perPerson;
 }
 
-// Host-based allowlist (Google's documented alternative to nonce-based CSP) —
-// nonces would need per-request HTML templating, which this static-file app
+// Host-based allowlist (Google's documented alternative to nonce-based CSP).
+// Nonces would need per-request HTML templating, which this static-file app
 // doesn't do. 'unsafe-inline'/'unsafe-eval'/blob: on script-src and the inline
 // <style> injection allowance are required by the Maps JS API itself.
 app.use(helmet({
@@ -75,7 +75,7 @@ const apiLimiter = rateLimit({
 app.use('/api/restaurants', apiLimiter);
 app.use('/api/recommend', apiLimiter);
 
-// Login/signup get their own stricter limiter — separate from the billed-API
+// Login/signup get their own stricter limiter, separate from the billed-API
 // limiter above, since brute-forcing credentials isn't a cost concern, it's
 // an account-security one.
 const authLimiter = rateLimit({
@@ -166,7 +166,7 @@ function distanceInMiles(lat1, lng1, lat2, lng2) {
 const GENERIC_PLACE_TYPES = new Set(['restaurant', 'food', 'point_of_interest', 'establishment']);
 
 // Venues (hotels, gyms, spas) that carry a "restaurant" type just because they
-// have in-house dining, not because they are one — filter these out.
+// have in-house dining, not because they are one. Filter these out.
 const NON_RESTAURANT_TYPES = new Set(['lodging', 'gym', 'spa', 'night_club', 'casino']);
 
 function titleCase(str) {
@@ -191,7 +191,7 @@ function delay(ms) {
 }
 
 // Google returns at most 20 results per call; a `next_page_token` unlocks up
-// to 2 more pages (60 total, Google's hard cap — there's no way to get
+// to 2 more pages (60 total, Google's hard cap; there's no way to get
 // "every" restaurant in a city from this API). Each extra page is a
 // separate billed Places Search request, so this roughly triples search
 // cost versus a single page.
@@ -200,7 +200,7 @@ const MAX_PLACES_PAGES = 3;
 async function fetchPlacesPage(endpoint, params, pageToken) {
   const url = new URL(endpoint);
   if (pageToken) {
-    // Per Google's docs, a pagetoken request only needs the token + key —
+    // Per Google's docs, a pagetoken request only needs the token + key;
     // other search params are ignored anyway when it's present.
     url.searchParams.set('pagetoken', pageToken);
   } else {
@@ -232,7 +232,7 @@ async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish) {
     let data = await fetchPlacesPage(endpoint, params, pageToken);
 
     if (data.status === 'INVALID_REQUEST' && pageToken) {
-      // A fresh next_page_token isn't active immediately on Google's side — retry once after a beat.
+      // A fresh next_page_token isn't active immediately on Google's side. Retry once after a beat.
       await delay(1500);
       data = await fetchPlacesPage(endpoint, params, pageToken);
     }
@@ -240,7 +240,7 @@ async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish) {
     if (data.status === 'ZERO_RESULTS') break;
     if (data.status !== 'OK') {
       if (page === 0) {
-        throw new Error(`Places API error: ${data.status}${data.error_message ? ' — ' + data.error_message : ''}`);
+        throw new Error(`Places API error: ${data.status}${data.error_message ? ': ' + data.error_message : ''}`);
       }
       break; // keep whatever earlier pages already returned instead of discarding it
     }
@@ -300,11 +300,11 @@ async function geocodeCity(lat, lng) {
 // Forward geocoding (address text -> lat/lng) for the "search a location"
 // picker. Client-side google.maps.Geocoder can't be used here since the
 // browser Maps key is deliberately restricted to Maps JavaScript API only
-// (see .env.example) — this reuses the server key, which already has
+// (see .env.example). This reuses the server key, which already has
 // Geocoding API access for the reverse-geocoding done in geocodeCity above.
 app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
-    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.' });
+    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY. Add it to .env.' });
   }
 
   const address = typeof req.query.address === 'string' ? req.query.address.trim().slice(0, 200) : '';
@@ -334,7 +334,7 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
 
 app.get('/api/restaurants', optionalAuth, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
-    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', restaurants: [] });
+    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY. Add it to .env.', restaurants: [] });
   }
 
   const lat = parseFloat(req.query.lat);
@@ -385,7 +385,7 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
 
 app.get('/api/progress', requireAuth, async (req, res) => {
   if (!PLACES_SERVER_KEY) {
-    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY — add it to .env.', city: null });
+    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY. Add it to .env.', city: null });
   }
 
   const lat = parseFloat(req.query.lat);
@@ -426,21 +426,21 @@ async function fetchPlaceReviews(placeId) {
 
 function groupInstruction(groupSize, sharing, targetPrice) {
   if (groupSize <= 1) {
-    return 'This is for one person — suggest a single dish for them to order.';
+    return 'This is for one person. Suggest a single dish for them to order.';
   }
   if (sharing) {
     const totalBudget = totalGroupBudget(groupSize, targetPrice);
     const perPerson = PRICE_TIER_MAX_USD[targetPrice] || PRICE_TIER_MAX_USD[2];
     return `This is for a group of ${groupSize} people who want to share dishes family-style, with a total budget ` +
-      `for the table of roughly $${totalBudget} (about $${perPerson} per person) — use that budget to judge how many ` +
+      `for the table of roughly $${totalBudget} (about $${perPerson} per person). Use that budget to judge how many ` +
       `items is reasonable, but do NOT invent or state prices, since real menu prices aren't available to you. ` +
-      `Suggest 3-5 specific shareable item names in the shared_items field — a mix of appetizers and mains to split — ` +
+      `Suggest 3-5 specific shareable item names in the shared_items field, a mix of appetizers and mains to split, ` +
       `and set dish_suggestion to a short one-line summary of the whole shared order. Every item must be grounded in ` +
-      `dishes the reviews actually mention — if the reviews only support one or two specific dishes, suggest fewer ` +
+      `dishes the reviews actually mention. If the reviews only support one or two specific dishes, suggest fewer ` +
       `items (or fill out the order with something generic like "a couple of their most popular appetizers") rather ` +
       `than inventing dishes.`;
   }
-  return `This is for a group of ${groupSize} people who each want their own main — suggest one dish that ` +
+  return `This is for a group of ${groupSize} people who each want their own main. Suggest one dish that ` +
     `works well as an individual order at this budget, since everyone will be ordering their own.`;
 }
 
@@ -454,7 +454,7 @@ function personalizationInstruction(preferences, visitHighlights) {
     if (preferences.dietaryRestrictions.length > 0) {
       parts.push(
         `They have these dietary restrictions: ${preferences.dietaryRestrictions.join(', ')}. ` +
-        `Avoid suggesting a dish that clearly conflicts with these based on what the reviews say — ` +
+        `Avoid suggesting a dish that clearly conflicts with these based on what the reviews say, ` +
         `but menu/ingredient data isn't available, so this is best-effort, not a guarantee.`
       );
     }
@@ -475,18 +475,18 @@ function dishCravingInstruction(dish) {
   if (!dish) return '';
   return ` The user is specifically craving "${dish}" today. Only pick a restaurant whose reviews actually support ` +
     `serving something like that, and suggest that as the dish. If NONE of the candidates' reviews support "${dish}" ` +
-    `at all, do not pick one and pretend it's a fallback for it — instead pick the best-reviewed candidate on its own ` +
+    `at all, do not pick one and pretend it's a fallback for it. Instead pick the best-reviewed candidate on its own ` +
     `merits, suggest a dish its reviews actually back up, and say plainly in your reason that you couldn't find ` +
     `"${dish}" nearby so you're suggesting this instead. Never describe an unrelated dish as similar to or a ` +
-    `substitute for "${dish}" — that's more misleading than just admitting the craving wasn't found.`;
+    `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.`;
 }
 
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, preferences, visitHighlights, dish }) {
   const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
-    `actually mentioned in the reviews provided — don't invent a dish that isn't referenced. ` +
+    `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
-    `Only populate the shared_items field if the instructions below say this is a sharing group — otherwise omit it entirely. ` +
+    `Only populate the shared_items field if the instructions below say this is a sharing group, otherwise omit it entirely. ` +
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
     `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
@@ -522,7 +522,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
             },
             shared_items: {
               type: 'array',
-              description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices — real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely — do not include an empty array.',
+              description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices: real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely; do not include an empty array.',
               items: { type: 'string', description: 'The name of a dish or menu item to share.' }
             }
           },
@@ -537,7 +537,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   const data = await response.json();
 
   if (data.error) {
-    throw new Error(`Anthropic API error: ${data.error.type} — ${data.error.message}`);
+    throw new Error(`Anthropic API error: ${data.error.type}: ${data.error.message}`);
   }
 
   const toolUse = data.content && data.content.find(block => block.type === 'tool_use');
@@ -550,7 +550,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
 
 app.post('/api/recommend', optionalAuth, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY — add it to .env.' });
+    return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY. Add it to .env.' });
   }
 
   const { restaurants: candidates, price, groupSize, sharing, dish } = req.body;
@@ -567,7 +567,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
   const budgetPool = inBudget.length > 0 ? inBudget : candidates;
   // When there's a specific-dish craving, `candidates` already arrives ranked
-  // by Google's Text Search relevance to that dish — re-sorting by star
+  // by Google's Text Search relevance to that dish, and re-sorting by star
   // rating here would throw that relevance away and let an unrelated but
   // highly-rated restaurant crowd out actually-relevant ones. Only re-rank
   // by rating for the generic (no-craving) case.
@@ -595,7 +595,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
     // Only surface shared items in sharing mode, and drop any malformed entries
-    // Claude might return (missing/empty name). No prices — real menu prices
+    // Claude might return (missing/empty name). No prices: real menu prices
     // aren't available, so we never show an invented dollar figure per item.
     const sharedItems = (isSharing && Array.isArray(shared_items))
       ? shared_items.filter(item => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
@@ -685,7 +685,7 @@ app.get('/api/badges', requireAuth, (req, res) => {
   }
 });
 
-// No display_name field exists — friends in this small, known group don't
+// No display_name field exists. Friends in this small, known group don't
 // need identity obscured, so this derives a readable name from the email
 // local-part instead of adding a profile field nobody would maintain.
 function deriveDisplayName(email) {

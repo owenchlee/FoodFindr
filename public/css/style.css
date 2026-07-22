@@ -960,7 +960,7 @@ select.visit-input option {
 .no-location-state .cta { margin: 0; }
 
 /* Google's InfoWindow chrome (background, padding, tail, close button) ships
-   as inline-styled white-theme markup — these overrides are the standard way
+   as inline-styled white-theme markup. These overrides are the standard way
    to re-skin it, since the content div alone can't override the wrapper. */
 .gm-style .gm-style-iw-c {
   padding: 0;
@@ -1002,8 +1002,8 @@ select.visit-input option {
 .marker--olive { background: var(--color-olive); }
 
 /* The one persistent marker showing where FoodFindr is actually searching
-   from — real GPS fix, a remembered last location, or a manually chosen
-   one — always this same blue dot, matching the familiar "you are here"
+   from: a real GPS fix, a remembered last location, or a manually chosen
+   one. Always this same blue dot, matching the familiar "you are here"
    convention rather than the app's own warm chili/turmeric/olive palette. */
 .marker--origin {
   width: 20px;
@@ -1112,7 +1112,7 @@ select.visit-input option {
 
 @media (max-width: 720px) {
   /* Floating rounded search pill + a floating CTA pill below it, instead of
-     a solid edge-to-edge bar — closer to how native map apps (Google Maps,
+     a solid edge-to-edge bar. Closer to how native map apps (Google Maps,
      etc.) float their search UI over the map on small screens. */
   :root { --top-bar-height: 116px; }
   .side-rail { width: 48px; }
@@ -1137,7 +1137,7 @@ select.visit-input option {
   .top-bar .wordmark { display: none; }
 
   .top-bar .search-row {
-    /* Reset the desktop rule's `flex: 1 1 320px` — in that horizontal row
+    /* Reset the desktop rule's `flex: 1 1 320px`. In that horizontal row
        320px is a sane width basis, but .top-bar is column-direction here,
        so the same shorthand would set a 320px *height* basis instead and
        balloon this into a giant blob rather than a slim pill. */
@@ -1193,7 +1193,7 @@ select.visit-input option {
   backdrop-filter: blur(2px);
   /* Visual-only: a click landing here (e.g. hitting "Surprise Me"
      right after dropping a pin, while this overlay is up for the resulting
-     restaurant search) must not be silently swallowed — let it pass through
+     restaurant search) must not be silently swallowed. Let it pass through
      to whatever's underneath. Actions that truly need to block concurrent
      clicks (like the recommend fetch itself) already disable their own
      button directly instead of relying on this overlay. */

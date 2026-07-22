@@ -4,8 +4,8 @@ const path = require('path');
 const { computeStats, evaluateBadges } = require('./badges');
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'foodfindr.db');
-// node:sqlite creates the DB file itself but not its parent directory —
-// matters on hosts like Azure App Service where DB_PATH points at a
+// node:sqlite creates the DB file itself but not its parent directory.
+// This matters on hosts like Azure App Service where DB_PATH points at a
 // subfolder (e.g. /home/data/foodfindr.db) that won't exist on first run.
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new DatabaseSync(dbPath);
@@ -43,14 +43,14 @@ if (!visitColumns.some(col => col.name === 'flavor_tags')) {
   db.exec('ALTER TABLE visits ADD COLUMN flavor_tags TEXT');
 }
 // Nullable: pre-account rows land here with no owner until the first signup
-// claims them (see adoptLegacyData) — every new insert always sets it.
+// claims them (see adoptLegacyData). Every new insert always sets it.
 if (!visitColumns.some(col => col.name === 'user_id')) {
   db.exec('ALTER TABLE visits ADD COLUMN user_id INTEGER REFERENCES users(id)');
 }
 
 // `preferences` used to be a single global row enforced by CHECK (id = 1).
 // That shape can't become multi-user in place (SQLite can't drop a CHECK or
-// re-key a table with ALTER TABLE) — detect the old shape once, preserve it
+// re-key a table with ALTER TABLE). Detect the old shape once, preserve it
 // under a `_legacy` name for adoptLegacyData to claim, then (re)create the
 // real per-user table.
 const prefsColumns = db.prepare('PRAGMA table_info(preferences)').all();
@@ -128,7 +128,7 @@ function deleteSession(token) {
 }
 
 // The account that adopts pre-existing (unowned) data must be the very first
-// one ever created — call this right after inserting that first user.
+// one ever created. Call this right after inserting that first user.
 function adoptLegacyData(userId) {
   db.prepare('UPDATE visits SET user_id = ? WHERE user_id IS NULL').run(userId);
 
@@ -249,7 +249,7 @@ function recordDiscovered(userId, restaurants, city) {
   }
 }
 
-// Streaks are computed from UTC calendar days (not per-user local time) —
+// Streaks are computed from UTC calendar days (not per-user local time),
 // a deliberate simplification. Two visits logged the same UTC day only
 // count once, so back-to-back logging in one sitting can't inflate a streak.
 function getStreaks(userId) {
@@ -301,7 +301,7 @@ function getBadges(userId) {
   return evaluateBadges(computeStats(rows, getStreaks(userId)));
 }
 
-// All registered users, even ones with zero visits — for a small friend
+// All registered users, even ones with zero visits. For a small friend
 // group, seeing "you're at 0, a friend's at 12" is itself a nudge, and
 // hiding inactive accounts would just look like the leaderboard is broken.
 function getLeaderboardStats() {
