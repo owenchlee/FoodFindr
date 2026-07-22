@@ -8,7 +8,7 @@ const SESSION_COOKIE_NAME = 'ff_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, fixed from login (no sliding refresh)
 
 // N=2^14 keeps scrypt's memory use (128*N*r bytes = 16MB) comfortably under
-// Node's default scrypt maxmem (32MB) — no need to pass a maxmem override.
+// Node's default scrypt maxmem (32MB), so no need to pass a maxmem override.
 const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -119,7 +119,7 @@ function endSession(token) {
 }
 
 // Express can set cookies (res.cookie) without any extra package, but reading
-// incoming ones normally needs `cookie-parser` — this is that in ~10 lines,
+// incoming ones normally needs `cookie-parser`. This is that in ~10 lines,
 // to keep the zero-new-dependency approach used for sessions/hashing.
 function parseCookies(req, res, next) {
   req.cookies = {};
@@ -154,7 +154,7 @@ function requireAuth(req, res, next) {
 }
 
 // For routes guests can use too (browsing/recommendations): attaches
-// req.user when a valid session exists, but never blocks the request —
+// req.user when a valid session exists, but never blocks the request.
 // route handlers check `req.user` themselves to personalize or skip that.
 function optionalAuth(req, res, next) {
   const token = req.cookies && req.cookies[SESSION_COOKIE_NAME];

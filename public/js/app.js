@@ -19,7 +19,7 @@ function saveLastLocation(lat, lng) {
   try {
     localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify({ lat, lng }));
   } catch {
-    // Storage can fail (private browsing, quota) — losing this is harmless.
+    // Storage can fail (private browsing, quota); losing this is harmless.
   }
 }
 
@@ -43,7 +43,7 @@ function hideNoLocationState() {
   document.getElementById('no-location-state').hidden = true;
 }
 
-// Never invents a location to search near — falls back to the last real
+// Never invents a location to search near. Falls back to the last real
 // location we have (from a previous real fix or a manual search/pin-drop),
 // and only if there's truly never been one, shows an honest empty state
 // instead of silently loading restaurants near some arbitrary place.
@@ -53,7 +53,7 @@ function useLastLocationOrShowEmptyState(reason) {
     userLocation = last;
     setOriginMarker(last.lat, last.lng);
     recenterMap(last.lat, last.lng);
-    showLocationBanner(`${reason} — showing spots near your last searched area.`);
+    showLocationBanner(`${reason}, showing spots near your last searched area.`);
     loadRestaurants();
   } else {
     showNoLocationState();
@@ -121,7 +121,7 @@ function init() {
     if (event.key === 'Enter') {
       event.preventDefault();
       // blur() synchronously fires 'change' above, which updates
-      // currentFilters.dish and calls loadRestaurants() — by the time blur()
+      // currentFilters.dish and calls loadRestaurants(). By the time blur()
       // returns, restaurantsLoading is already true, so getRecommendation()
       // correctly queues itself via the existing pendingRecommendation
       // mechanism and fires once the new search results are in.
@@ -249,7 +249,7 @@ function init() {
 
 // Bound immediately (not gated behind maps-loaded/init) since a user can
 // already be authenticated, or interacting with the login form, well before
-// the Maps script — which can take a couple seconds — finishes loading.
+// the Maps script (which can take a couple seconds) finishes loading.
 function bindAuthEvents() {
   document.getElementById('logout-btn').addEventListener('click', logout);
   document.getElementById('auth-toggle-mode').addEventListener('click', toggleAuthMode);
@@ -263,7 +263,7 @@ function bindAuthEvents() {
 
 function startAppData() {
   requestUserLocation();
-  // Visits/preferences are account-only routes — a guest hitting them would
+  // Visits/preferences are account-only routes, and a guest hitting them would
   // just get a 401, so skip loading them entirely rather than let that fail.
   if (!isGuest) {
     loadRecentVisits();
@@ -298,7 +298,7 @@ async function checkAuth() {
 function onAuthenticated(user) {
   currentUser = user;
   // A guest who signs up mid-session already has appStarted set, so
-  // tryStartApp() below is a no-op for them — load their account data here
+  // tryStartApp() below is a no-op for them, so load their account data here
   // instead of relying on startAppData(), which only runs once per session.
   const wasGuest = isGuest;
   isGuest = false;
@@ -495,7 +495,7 @@ async function loadProgress() {
   document.getElementById('progress-city').textContent = `in ${data.city}`;
   document.getElementById('progress-bar-fill').style.width = `${percent}%`;
   document.getElementById('progress-count').textContent =
-    `${data.visited} of ${data.discovered} restaurants you've searched up so far — not the whole city`;
+    `${data.visited} of ${data.discovered} restaurants you've searched up so far, not the whole city`;
   block.hidden = false;
   empty.hidden = true;
 }
@@ -522,7 +522,7 @@ async function loadStreaks() {
   document.getElementById('streak-longest-value').textContent = data.longestStreak;
   document.getElementById('streak-hint').textContent = data.currentStreak > 0
     ? 'Log a visit tomorrow to keep it going.'
-    : 'Your streak reset — log a visit today to start a new one.';
+    : 'Your streak reset. Log a visit today to start a new one.';
   block.hidden = false;
   empty.hidden = true;
 }
@@ -611,7 +611,7 @@ function requestUserLocation() {
   navigator.geolocation.getCurrentPosition(
     (position) => {
       // A custom pin may have been dropped while this request was still
-      // pending (geolocation can take a few seconds to resolve) — don't let
+      // pending (geolocation can take a few seconds to resolve), so don't let
       // a stale result silently override the user's explicit choice.
       if (usingCustomLocation) return;
       userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
@@ -657,7 +657,7 @@ async function searchLocation(query, inputEl) {
     const data = await response.json();
 
     if (!response.ok) {
-      showLocationBanner(data.error || `Couldn't find "${query}" — try a different search.`);
+      showLocationBanner(data.error || `Couldn't find "${query}". Try a different search.`);
       return;
     }
 
@@ -677,7 +677,7 @@ function onLocationPicked(lat, lng) {
   usingCustomLocation = true;
   saveLastLocation(lat, lng);
   closeLocationPicker();
-  showLocationBanner('Searching near your dropped pin — dismiss to switch back to your current location.');
+  showLocationBanner('Searching near your dropped pin. Dismiss to switch back to your current location.');
   loadRestaurants();
 }
 
@@ -715,7 +715,7 @@ async function loadRestaurants() {
     hideLoading();
     // A "Surprise Me" click that landed while this search was still in
     // flight (e.g. right after dropping a pin) previously got silently
-    // swallowed by the loading overlay — this replays it now that fresh
+    // swallowed by the loading overlay. This replays it now that fresh
     // restaurant data for the new location is actually in lastFilteredRestaurants.
     if (pendingRecommendation) {
       pendingRecommendation = false;
@@ -745,7 +745,7 @@ function renderRestaurantSuggestions(query) {
     button.type = 'button';
     button.textContent = restaurant.name;
     // mousedown (not click) fires before the input's blur, and
-    // preventDefault() there stops focus from ever leaving the input —
+    // preventDefault() there stops focus from ever leaving the input,
     // so the list doesn't get hidden by the blur handler before this runs.
     button.addEventListener('mousedown', (event) => {
       event.preventDefault();

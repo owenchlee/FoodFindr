@@ -36,7 +36,7 @@ function disablePinDrop() {
   map.setOptions({ draggableCursor: null });
 }
 
-// The one persistent "you are here" marker — set from every path that
+// The one persistent "you are here" marker, set from every path that
 // establishes a real search location: GPS fix, a remembered last location,
 // or a manually searched/dropped one. Always the same blue dot so it reads
 // as one consistent concept regardless of how the location was obtained.
@@ -78,7 +78,7 @@ function markerContent(restaurant, isPick) {
 }
 
 // The native `title` attribute's hover tooltip is browser/OS-rendered, so we
-// can't restyle it — it comes out small and low-contrast, especially on
+// can't restyle it, and it comes out small and low-contrast, especially on
 // mobile. This builds a fully custom-styled popup instead, shown on click.
 function showRestaurantInfo(restaurant) {
   if (!infoWindow) infoWindow = new google.maps.InfoWindow({ disableAutoPan: false });
