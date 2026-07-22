@@ -42,10 +42,24 @@ function totalGroupBudget(groupSize, targetPrice) {
   return groupSize * perPerson;
 }
 
-// CSP is left off for now — the app loads Google Maps/Places/Fonts scripts
-// from several external hosts, and a wrong CSP fails silently in the
-// browser. Revisit once the production domain is final.
-app.use(helmet({ contentSecurityPolicy: false }));
+// Host-based allowlist (Google's documented alternative to nonce-based CSP) —
+// nonces would need per-request HTML templating, which this static-file app
+// doesn't do. 'unsafe-inline'/'unsafe-eval'/blob: on script-src and the inline
+// <style> injection allowance are required by the Maps JS API itself.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://*.googleapis.com', 'https://*.gstatic.com', 'blob:'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.ggpht.com', 'https://*.googleusercontent.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      connectSrc: ["'self'", 'https://*.googleapis.com', 'https://*.gstatic.com'],
+      workerSrc: ["'self'", 'blob:'],
+      frameSrc: ['https://*.google.com'],
+    },
+  },
+}));
 app.use(express.json());
 app.use(parseCookies);
 app.use(express.static(path.join(__dirname, '..', 'public')));
