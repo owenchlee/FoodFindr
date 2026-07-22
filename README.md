@@ -1,11 +1,53 @@
 # FoodFindr
 
-A map-based restaurant finder that recommends one specific spot + dish for
+A map-based restaurant finder that recommends one specific spot and dish for
 your budget, cuisine, group, and taste. It also tracks where you've actually
 eaten and how much of your city you've explored. Multi-user with email/password
 accounts, SQLite for persistence.
 
 **Try it live at [foodfindr.tech](https://foodfindr.tech)**: sign up or continue as a guest, no setup required.
+
+## How to use it
+
+1. **Sign in, or continue as guest.** Guests can search and get recommendations
+   right away; signing up unlocks saved preferences, visit logging, and
+   progress tracking.
+2. **Set your location.** FoodFindr uses your real location by default. Use
+   the pin icon next to the search bar to type a city/address instead, or
+   drop a pin anywhere on the map.
+3. **Search or filter.** Type a craving (e.g. "ramen," "pad thai") and press
+   Enter, or open Filters for a price ceiling, cuisine, distance, group size,
+   and separate-mains vs. sharing.
+4. **Get one specific pick.** Hit Surprise Me (or just press Enter after
+   typing a craving) and Claude reads real reviews for the top candidates,
+   then recommends one restaurant and one specific dish, grounded in what
+   the reviews actually say (it never invents a dish).
+5. **Log your visits.** After eating, log the restaurant, dish, and a 1-5
+   star rating from the Log a Review panel. Ratings build your flavor
+   profile and count toward exploration progress.
+6. **Track your progress.** The Your Progress panel shows how many
+   discovered restaurants you've visited in your current city, your visit
+   streak, earned achievement badges, and where you rank on the friends
+   leaderboard.
+7. **Save your taste profile.** From the side rail, set favorite cuisines,
+   dietary restrictions, and spice/price tolerance so every recommendation
+   is personalized, separate from the per-search filters.
+
+## Good to know
+
+- Google Places doesn't expose menu/dish data, so dish suggestions come from Claude reading real review text: there's no guarantee a review mentions something specific, in which case Claude suggests something generic instead of inventing a dish. The same honesty rule applies to the "craving something specific" search: if no review mentions a specific dish, Claude says so instead of making it up. A restaurant can still show up in search results even without menu evidence, since Google's own search relevance (not verified menu content) decides what appears.
+- Places doesn't have a clean "cuisine" field either; the cuisine and specific-dish filters are both used as a search-query hint (Text Search) rather than an exact match.
+- Price filtering uses Google's 0-4 price scale as a ceiling (e.g. "$$" means "$2 or below"), not an exact match, since Google's scale doesn't line up one-to-one with a 3-tier $/$$/$$$ UI. The filters panel shows an approximate per-person price range next to each tier as a rough guide. The same per-person figures are used to compute a sharing group's total budget, which is real math but still an estimate, not a verified bill.
+- Dietary restrictions are a best-effort instruction to Claude based on review text, not a hard filter: Places has no ingredient/allergen data.
+- The exploration progress bar's denominator is **restaurants FoodFindr has shown you**, not every restaurant in the city: Google Places returns at most 20 results per search call (no pagination), so it grows as you search rather than starting at a true city-wide total. The UI is worded to reflect this rather than implying completeness.
+
+## Built with
+
+Node.js + Express on the backend, vanilla JS/HTML/CSS on the frontend (no
+framework, no build step), SQLite via Node's built-in `node:sqlite` (zero
+extra dependencies), the Google Maps JavaScript API, Google Places and
+Geocoding APIs, and Anthropic's Claude for the recommendation itself.
+Deployed on Azure App Service with GitHub Actions.
 
 ## Run it locally
 
@@ -38,59 +80,6 @@ tokens looked up in the database, not signed or encrypted cookies.
 Without these, the app still runs: the map shows a placeholder message and
 restaurant/recommendation/progress requests return friendly errors or hide
 themselves instead of crashing.
-
-## Features
-
-- **Accounts**: email/password sign-up and login (session cookie backed by
-  a `sessions` table in SQLite, password hashing via Node's built-in
-  `node:crypto` scrypt, so neither needs an extra dependency). Every visit,
-  taste-profile, and exploration-progress row is scoped to the signed-in
-  user. The app is unusable until you're signed in: a centered login/signup
-  card blocks the rest of the UI until then.
-- **Full-screen map + a persistent side rail**: the map fills the entire
-  window, Google Maps-style. A slim, always-visible dark rail sits at the
-  left edge with icon shortcuts to every panel (Log a Review, Past Reviews,
-  Game Progress, My Taste Profile, FAQ); tapping the hamburger at its top
-  expands the rail in place to show text labels. Clicking any icon slides
-  the matching panel out from behind the rail and fades out the rest of the
-  UI so it reads as one clean panel instead of overlapping clutter. The
-  FoodFindr wordmark sits top-right; a compact search bar (craving search +
-  Filters + Surprise Me) sits top-left.
-- **Choose a different search location**: a location-pin control next to
-  the search bar lets you either type a city/address (server-side geocoded)
-  or drop a pin directly on the map to search somewhere other than where
-  you actually are, with a one-click way back to your real location.
-- **Filters**: price ceiling, a free-text "craving something specific?"
-  search (e.g. "ramen," "pad thai") for when you want an exact dish instead
-  of a broad cuisine, a cuisine dropdown, distance, group size, and
-  separate-mains vs. sharing. All of this is tucked behind the Filters
-  button instead of taking up permanent screen space.
-- **AI recommendation**: Claude reads each candidate's real reviews and
-  picks one restaurant + a specific dish to order, honestly limited to what
-  reviews actually mention (never invents a dish). Adjusts its suggestion
-  for group size/sharing, and for a specific craving if you typed one, while
-  staying honest if no review backs it up. For a sharing group, Claude
-  suggests several specific items sized to the group's computed total
-  budget. It never invents per-item prices, since Places doesn't expose
-  menu pricing. A full-screen loading animation (the dog mascot waddling
-  across the screen) shows while Claude or a Places search is working.
-- **Personalization ("My Taste Profile")**: a dialog (skippable, reopenable
-  anytime from the side rail) captures favorite cuisines, dietary
-  restrictions, spice tolerance, and price tolerance. It's a saved profile
-  that quietly informs every recommendation, separate from the per-search
-  filters.
-- **Log a Review / Past Reviews / Game Progress / FAQ panels**: each its
-  own icon on the side rail. Log a Review holds the visit-logging form;
-  Past Reviews lists your recent-visits history; Game Progress shows the
-  exploration bar; FAQ has the "how it works" steps plus honest disclaimers
-  about what the app can and can't actually verify. Only one panel shows at
-  a time, sliding out over the map instead of taking up permanent space.
-- **Visit logging**: log a restaurant, dish, and 1-5 star rating from a
-  dropdown of restaurants currently on screen (or "Other" for anywhere
-  else), stored in SQLite.
-- **Exploration progress**: shows how many restaurants you've visited out
-  of how many FoodFindr has surfaced to you in your current city (resolved
-  via reverse geocoding).
 
 ## How it works
 
@@ -161,11 +150,3 @@ The app is live at [foodfindr.tech](https://foodfindr.tech), on the Basic
 `contentSecurityPolicy` is enabled with a host-based allowlist scoped to
 Google's Maps/Fonts domains (see `server/server.js`), and the Maps browser
 key's referrer allowlist includes the custom domain.
-
-## Notes on real data
-
-- Google Places doesn't expose menu/dish data, so dish suggestions come from Claude reading real review text: there's no guarantee a review mentions something specific, in which case Claude suggests something generic instead of inventing a dish. The same honesty rule applies to the "craving something specific" search: if no review mentions a specific dish, Claude says so instead of making it up. A restaurant can still show up in search results even without menu evidence, since Google's own search relevance (not verified menu content) decides what appears.
-- Places doesn't have a clean "cuisine" field either; the cuisine and specific-dish filters are both used as a search-query hint (Text Search) rather than an exact match.
-- Price filtering uses Google's 0-4 price scale as a ceiling (e.g. "$$" means "$2 or below"), not an exact match, since Google's scale doesn't line up one-to-one with a 3-tier $/$$/$$$ UI. The filters panel shows an approximate per-person price range next to each tier as a rough guide. The same per-person figures are used to compute a sharing group's total budget, which is real math but still an estimate, not a verified bill.
-- Dietary restrictions are a best-effort instruction to Claude based on review text, not a hard filter: Places has no ingredient/allergen data.
-- The exploration progress bar's denominator is **restaurants FoodFindr has shown you**, not every restaurant in the city: Google Places returns at most 20 results per search call (no pagination), so it grows as you search rather than starting at a true city-wide total. The UI is worded to reflect this rather than implying completeness.
