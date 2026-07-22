@@ -149,6 +149,32 @@ body {
   flex: 1;
   min-width: 0;
 }
+.search-row .dish-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+#dish-search { width: 100%; padding-right: 28px; }
+.dish-clear-btn {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-paper-dim);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.dish-clear-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
+.dish-clear-btn[hidden] { display: none; }
 .filters-toggle {
   flex-shrink: 0;
   font-family: var(--font-body);

@@ -75,7 +75,12 @@
   <div class="top-bar" id="top-bar">
     <div class="wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
     <div class="search-row">
-      <input type="text" id="dish-search" class="visit-input" placeholder="Craving something?" maxlength="60" aria-label="Craving something specific?" />
+      <div class="dish-search-wrap">
+        <input type="text" id="dish-search" class="visit-input" placeholder="Craving something?" maxlength="60" aria-label="Craving something specific?" />
+        <button type="button" class="dish-clear-btn" id="dish-clear-btn" aria-label="Clear search" hidden>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
       <div class="location-picker">
         <button type="button" class="filters-toggle" id="pick-location-btn" title="Choose a different search location" aria-label="Choose a different search location" aria-haspopup="true" aria-expanded="false">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg>

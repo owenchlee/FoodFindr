@@ -103,9 +103,19 @@ function init() {
   });
 
   const dishInput = document.getElementById('dish-search');
+  const dishClearBtn = document.getElementById('dish-clear-btn');
+  const updateDishClearBtn = () => { dishClearBtn.hidden = !dishInput.value; };
   dishInput.addEventListener('change', (event) => {
     currentFilters.dish = event.target.value.trim();
     loadRestaurants();
+  });
+  dishInput.addEventListener('input', updateDishClearBtn);
+  dishClearBtn.addEventListener('click', () => {
+    dishInput.value = '';
+    currentFilters.dish = '';
+    updateDishClearBtn();
+    loadRestaurants();
+    dishInput.focus();
   });
   dishInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
