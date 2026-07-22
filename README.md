@@ -149,12 +149,11 @@ Render or Fly) — just point `DB_PATH` at a subfolder under `/home`.
    certificate automatically once DNS resolves. I never need registrar
    credentials, just the record values to hand back to you.
 
-Two things worth re-checking once a real domain is live: Helmet's
-`contentSecurityPolicy` is currently disabled in `server/server.js` (a
-comment there says to revisit this once the production domain is final —
-loading Maps/Fonts scripts from a real CSP needs to be tested against the
-live domain), and the Maps browser key's referrer allowlist should be
-updated to the custom domain.
+The app is live at [foodfindr.tech](https://foodfindr.tech), on the Basic
+(B1) plan with a free Azure-managed certificate. Helmet's
+`contentSecurityPolicy` is enabled with a host-based allowlist scoped to
+Google's Maps/Fonts domains (see `server/server.js`), and the Maps browser
+key's referrer allowlist includes the custom domain.
 
 ## Notes on real data
 
