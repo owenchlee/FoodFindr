@@ -664,7 +664,7 @@ async function searchLocation(query, inputEl) {
     inputEl.value = '';
     setOriginMarker(data.lat, data.lng);
     recenterMap(data.lat, data.lng);
-    onLocationPicked(data.lat, data.lng);
+    onLocationPicked(data.lat, data.lng, 'search');
   } catch (err) {
     showLocationBanner("Couldn't reach the server. Check your connection and try again.");
   } finally {
@@ -672,12 +672,15 @@ async function searchLocation(query, inputEl) {
   }
 }
 
-function onLocationPicked(lat, lng) {
+function onLocationPicked(lat, lng, source) {
   userLocation = { lat, lng };
   usingCustomLocation = true;
   saveLastLocation(lat, lng);
   closeLocationPicker();
-  showLocationBanner('Searching near your dropped pin. Dismiss to switch back to your current location.');
+  const message = source === 'search'
+    ? 'Searching near your chosen location. Dismiss to switch back to your current location.'
+    : 'Searching near your dropped pin. Dismiss to switch back to your current location.';
+  showLocationBanner(message);
   loadRestaurants();
 }
 

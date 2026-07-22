@@ -453,9 +453,15 @@ function personalizationInstruction(preferences, visitHighlights) {
     }
     if (preferences.dietaryRestrictions.length > 0) {
       parts.push(
-        `They have these dietary restrictions: ${preferences.dietaryRestrictions.join(', ')}. ` +
-        `Avoid suggesting a dish that clearly conflicts with these based on what the reviews say, ` +
-        `but menu/ingredient data isn't available, so this is best-effort, not a guarantee.`
+        `They have these dietary restrictions: ${preferences.dietaryRestrictions.join(', ')}. Only suggest a ` +
+        `dish as compliant if a review explicitly supports each restriction specifically, not a related one: ` +
+        `"vegetarian" in a review does NOT confirm "vegan" (vegan is stricter, no dairy/eggs/honey either), ` +
+        `though "vegan" does satisfy a vegetarian restriction. Don't infer compliance just because a place seems ` +
+        `flexible or diverse. If no candidate's reviews support a compliant dish, don't name any specific dish, ` +
+        `compliant or not, especially not one the reviews describe with obviously conflicting ingredients (e.g. ` +
+        `meat or seafood for a vegan restriction); use a generic placeholder like "their most popular item" for ` +
+        `dish_suggestion instead, and say plainly in your reason why no specific dish could be confirmed, rather ` +
+        `than guessing, since menu/ingredient data isn't available and inventing one is never allowed.`
       );
     }
     parts.push(`Their spice tolerance is: ${preferences.spiceTolerance}.`);
@@ -474,19 +480,24 @@ function personalizationInstruction(preferences, visitHighlights) {
 function dishCravingInstruction(dish, dietaryRestrictions) {
   if (!dish) return '';
   const restrictionClause = dietaryRestrictions && dietaryRestrictions.length > 0
-    ? ` Their dietary restrictions are: ${dietaryRestrictions.join(', ')}. Those restrictions apply to this craving ` +
-      `too. Only suggest "${dish}" if a review explicitly names a specific item compatible with those restrictions ` +
-      `(e.g. a review that actually says "vegan," "vegetarian," "plant-based," or names a specific meat-free/dairy-free ` +
-      `item). Do not infer or assume a compliant version exists just because a restaurant seems flexible, ` +
-      `accommodating, or diverse; guessing at a dish that isn't explicitly in the reviews is inventing a dish, which ` +
-      `is never allowed, restrictions or not. Check every candidate for this kind of explicit evidence, not just the ` +
-      `highest-rated one. Your reason must always end by stating plainly whether review evidence confirms this ` +
-      `dish fits their dietary restrictions, or whether that could not be confirmed either way; never leave this ` +
-      `unaddressed. If NONE of the candidates' reviews explicitly describe a compliant "${dish}", treat that ` +
-      `exactly like "${dish}" not being available nearby: pick the best-reviewed candidate on its own merits, ` +
-      `suggest a dish its reviews actually back up, and say plainly in your reason that none of the nearby options ` +
-      `had review evidence of a "${dish}" that fit their dietary restrictions. Never put a diet label like "vegan" ` +
-      `or "vegetarian" in the dish name itself unless a review for that exact restaurant used that word; the name ` +
+    ? ` Their dietary restrictions are: ${dietaryRestrictions.join(', ')}. Those restrictions apply to this ` +
+      `craving too. Only suggest "${dish}" if a review explicitly supports each stated restriction specifically, ` +
+      `not just a related one: a review calling something "vegetarian" does NOT confirm it's "vegan" (vegan is ` +
+      `stricter, no dairy/eggs/honey either), though a review calling something "vegan" does satisfy a ` +
+      `"vegetarian" restriction. Match the specific word (or a named meat-free/dairy-free/etc. item) to the ` +
+      `specific restriction rather than treating any diet-adjacent word as good enough. Do not infer or assume a ` +
+      `compliant version exists just because a restaurant seems flexible, accommodating, or diverse; guessing at ` +
+      `a dish that isn't explicitly in the reviews is inventing a dish, which is never allowed, restrictions or ` +
+      `not. Check every candidate for this kind of explicit evidence, not just the highest-rated one. Your reason ` +
+      `must always end by stating plainly whether review evidence confirms this dish fits their dietary ` +
+      `restrictions, or whether that could not be confirmed either way; never leave this unaddressed. If NONE of ` +
+      `the candidates' reviews explicitly describe a compliant "${dish}", treat that exactly like "${dish}" not ` +
+      `being available nearby: pick the best-reviewed candidate on its own merits, but don't name a specific dish ` +
+      `that the reviews describe with obviously conflicting ingredients for their restrictions (e.g. meat or ` +
+      `seafood for a vegan restriction); use a generic placeholder like "their most popular item" for ` +
+      `dish_suggestion instead, and say plainly in your reason that none of the nearby options had review ` +
+      `evidence of a "${dish}" that fit their dietary restrictions. Never put a diet label like "vegan" or ` +
+      `"vegetarian" in the dish name itself unless a review for that exact restaurant used that word; the name ` +
       `is what someone reading quickly will trust most, so it can't claim something the reason then hedges on.`
     : '';
   return ` The user is specifically craving "${dish}" today. Only pick a restaurant whose reviews actually support ` +
@@ -503,6 +514,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
     `Only populate the shared_items field if the instructions below say this is a sharing group, otherwise omit it entirely. ` +
+    `In your reason, never use em dashes (—) or en dashes (–); use a period or comma instead. ` +
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
     `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
@@ -609,6 +621,18 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
       const groundedInReviews = namedLabels.some(label => reviewText.includes(label));
       if (!groundedInReviews) return false;
     }
+
+    // Naming a dish with an obvious meat/seafood ingredient for a vegan or
+    // vegetarian restriction is unsafe even with a hedge in the reason text,
+    // since the dish name is what someone skimming will actually trust.
+    const needsMeatCheck = dietaryRestrictions.some(r => /vegan|vegetarian/i.test(r));
+    if (needsMeatCheck) {
+      const meatWords = ['chicken', 'beef', 'pork', 'bacon', 'ham', 'turkey', 'lamb', 'steak',
+        'sausage', 'meat', 'fish', 'shrimp', 'prawn', 'calamari', 'squid', 'crab', 'lobster',
+        'salmon', 'tuna', 'duck', 'veal', 'goat', 'mutton'];
+      const foundMeatWord = meatWords.some(word => new RegExp(`\\b${word}\\b`, 'i').test(dishText));
+      if (foundMeatWord) return false;
+    }
   }
   return true;
 }
@@ -666,10 +690,14 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
       ? shared_items.filter(item => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
       : [];
 
+    // The prompt tells Claude to avoid em/en dashes, but that's not guaranteed;
+    // strip any that slip through rather than showing them in user-facing text.
+    const stripDashes = (str) => typeof str === 'string' ? str.replace(/[—–]/g, ', ').replace(/,\s*,/g, ',') : str;
+
     res.json({
       restaurant: pick,
-      dish: { name: dish_suggestion, flavorTags: flavor_tags, sharedItems },
-      reason
+      dish: { name: stripDashes(dish_suggestion), flavorTags: flavor_tags, sharedItems: sharedItems.map(stripDashes) },
+      reason: stripDashes(reason)
     });
   } catch (err) {
     console.error('Recommendation failed:', err);
