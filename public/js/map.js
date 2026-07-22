@@ -20,7 +20,7 @@ function initMap(center, mapId) {
     const lng = event.latLng.lng();
     disablePinDrop();
     setOriginMarker(lat, lng);
-    if (typeof onLocationPicked === 'function') onLocationPicked(lat, lng);
+    if (typeof onLocationPicked === 'function') onLocationPicked(lat, lng, 'pin');
   });
 }
 
