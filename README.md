@@ -5,7 +5,12 @@ your budget, cuisine, group, and taste — then tracks where you've actually
 eaten and how much of your city you've explored. Multi-user with email/password
 accounts, SQLite for persistence.
 
-## Run it
+**Live at [foodfindr.tech](https://foodfindr.tech)** — sign up or continue as a guest to try it directly, no setup required.
+
+## Run it locally
+
+The steps below are for running or modifying the code yourself (they're not
+needed just to use the live site above).
 
 ```bash
 npm install
