@@ -4,6 +4,7 @@ FoodFindr is a restaurant-recommendation web app that picks one restaurant and o
 specific dish based on your budget, cuisine, group size, and location, then has
 Claude read real Google reviews to justify the pick instead of guessing at a menu.
 It also tracks where you've actually eaten and gamifies exploring your city.
+Solo project, built in about two weeks.
 
 **Try it live at [foodfindr.tech](https://foodfindr.tech)**: sign up or continue as a guest, no setup required.
 
@@ -22,6 +23,8 @@ It also tracks where you've actually eaten and gamifies exploring your city.
 - Exploration progress, visit streaks, achievement badges, and a friends leaderboard
 - Guest mode: search and get a recommendation with no account
 
+Full route list and file-by-file breakdown: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## How to use it
 
 1. Sign in, or continue as guest.
@@ -39,9 +42,6 @@ It also tracks where you've actually eaten and gamifies exploring your city.
   since it doesn't map one-to-one onto a 3-tier UI.
 - Dietary restrictions are a best-effort instruction to Claude, not a hard
   filter, since Places has no ingredient/allergen data.
-
-Full breakdown of these tradeoffs, plus the backend/frontend file structure and
-route list, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Challenges
 
