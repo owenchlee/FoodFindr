@@ -100,6 +100,11 @@ body {
   transition: width 240ms ease;
 }
 .side-rail.expanded {
+  /* .top-bar shares this same z-index (9) and comes later in the DOM, so
+     without this the expanded rail's button labels render underneath the
+     top bar's search pill wherever the two overlap, instead of the
+     slide-out menu correctly overlaying it while open. */
+  z-index: 11;
   width: 210px;
   box-shadow: var(--shadow-lg);
 }
@@ -1114,11 +1119,21 @@ select.visit-input option {
   /* Floating rounded search pill + a floating CTA pill below it, instead of
      a solid edge-to-edge bar. Closer to how native map apps (Google Maps,
      etc.) float their search UI over the map on small screens. */
-  :root { --top-bar-height: 116px; }
+  :root { --top-bar-height: 108px; }
   .side-rail { width: 48px; }
-  .side-rail.expanded { width: 200px; }
-  .tabs-toggle { margin-left: 4px; }
-  .rail-btn { margin: 0 4px; }
+  .side-rail.expanded { width: 190px; }
+  .tabs-toggle {
+    width: 34px;
+    height: 32px;
+    margin-left: 4px;
+  }
+  .rail-btn {
+    height: 36px;
+    margin: 0 4px;
+    font-size: 0.78rem;
+  }
+  .rail-btn svg, .tabs-toggle svg { width: 16px; height: 16px; }
+  .tabs-toggle span { width: 16px; }
 
   .top-bar {
     left: calc(48px + var(--space-2));
@@ -1142,24 +1157,35 @@ select.visit-input option {
        so the same shorthand would set a 320px *height* basis instead and
        balloon this into a giant blob rather than a slim pill. */
     flex: 0 0 auto;
+    gap: var(--space-1);
     background: var(--color-char-2);
     border: 1px solid var(--color-hairline);
     border-radius: 999px;
     box-shadow: var(--shadow-md);
-    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
   }
   .top-bar .search-row .visit-input {
     background: none;
     border: none;
     padding: var(--space-2) 0;
+    font-size: 0.85rem;
   }
   .top-bar .location-picker #pick-location-btn,
   .top-bar #filters-toggle {
     border-radius: 999px;
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.72rem;
+  }
+  .top-bar #filters-toggle svg,
+  .top-bar .location-picker svg {
+    width: 14px;
+    height: 14px;
   }
 
   .top-bar .cta {
     margin: 0;
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.85rem;
     border-radius: 999px;
     box-shadow: var(--shadow-md);
   }
