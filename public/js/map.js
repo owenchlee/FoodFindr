@@ -4,10 +4,15 @@ let pinDropActive = false;
 let originMarker = null;
 let infoWindow = null;
 
+// Matches the default search radius (3 mi) closely enough that a fresh
+// search's results land within the viewport without the user having to
+// manually zoom out.
+const DEFAULT_ZOOM = 14;
+
 function initMap(center, mapId) {
   map = new google.maps.Map(document.getElementById('map'), {
     center,
-    zoom: 14,
+    zoom: DEFAULT_ZOOM,
     mapId: mapId || undefined,
     colorScheme: google.maps.ColorScheme.DARK,
     mapTypeControl: false,
@@ -61,8 +66,16 @@ function clearOriginMarker() {
 }
 
 
+// Called whenever a new search location is established (GPS fix, geocoded
+// search, or falling back to the last remembered location). Always resets
+// zoom back to DEFAULT_ZOOM, since a previous recommendation pick
+// (centerOnPick, below) may have left the map zoomed in tight on a single
+// restaurant; without this, switching locations afterward would silently
+// keep that tight zoom and hide most of the new search's results offscreen.
 function recenterMap(lat, lng) {
-  if (map) map.setCenter({ lat, lng });
+  if (!map) return;
+  map.setCenter({ lat, lng });
+  map.setZoom(DEFAULT_ZOOM);
 }
 
 function centerOnPick(lat, lng) {
