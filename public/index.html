@@ -46,6 +46,10 @@
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="12" /><line x1="12" y1="20" x2="12" y2="6" /><line x1="18" y1="20" x2="18" y2="14" /></svg>
       <span class="rail-btn-label">Your Progress</span>
     </button>
+    <button type="button" class="rail-btn" data-tab="group" title="Friend Group" aria-label="Friend Group" aria-expanded="false" aria-controls="tab-drawer">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M2.5 20c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" /><path d="M14.5 14.5c2.4.3 4 2.3 4 5.5" /></svg>
+      <span class="rail-btn-label">Group</span>
+    </button>
     <button type="button" class="rail-btn" id="edit-preferences-btn" title="My Taste Profile" aria-label="My Taste Profile">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
       <span class="rail-btn-label">My Taste Profile</span>
@@ -121,6 +125,11 @@
   <p class="floating-card location-banner" id="location-banner" hidden>
     <span id="location-banner-text"></span>
     <button type="button" id="location-banner-dismiss" aria-label="Dismiss">×</button>
+  </p>
+
+  <p class="floating-card active-group-banner" id="active-group-banner" hidden>
+    <span id="active-group-banner-text"></span>
+    <button type="button" id="active-group-banner-dismiss" aria-label="Stop searching as this group">×</button>
   </p>
 
   <div class="tab-drawer" id="tab-drawer" hidden>
@@ -251,6 +260,36 @@
         <ul class="leaderboard-list" id="leaderboard-list"></ul>
         <p class="leaderboard-empty" id="leaderboard-empty" hidden>Not enough visits logged yet to rank anyone.</p>
       </div>
+    </div>
+
+    <div class="tab-drawer-panel" id="tab-panel-group" hidden>
+      <div class="group-block">
+        <span class="filter-label">Search With a Group</span>
+        <p class="group-hint">
+          Combine everyone's taste profile and dietary restrictions into one search,
+          so the pick actually works for the whole table.
+        </p>
+        <ul class="group-list" id="group-list"></ul>
+        <p class="group-empty" id="group-empty">You're not in a group yet. Create one or join with a code below.</p>
+      </div>
+
+      <div class="group-form-block">
+        <span class="filter-label">Create a Group</span>
+        <form id="create-group-form" class="group-form">
+          <input type="text" id="create-group-name" class="visit-input" placeholder="Group name (e.g. Roommates)" maxlength="40" />
+          <button type="submit" class="cta cta--secondary">Create</button>
+        </form>
+      </div>
+
+      <div class="group-form-block">
+        <span class="filter-label">Join a Group</span>
+        <form id="join-group-form" class="group-form">
+          <input type="text" id="join-group-code" class="visit-input" placeholder="Enter a group code" maxlength="6" />
+          <button type="submit" class="cta cta--secondary">Join</button>
+        </form>
+      </div>
+
+      <p class="visit-status" id="group-status" hidden></p>
     </div>
 
     <div class="tab-drawer-panel" id="tab-panel-faq" hidden>

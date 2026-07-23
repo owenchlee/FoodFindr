@@ -7,7 +7,9 @@ const {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
-  getStreaks, getBadges, getLeaderboardStats
+  getStreaks, getBadges, getLeaderboardStats,
+  createGroup, joinGroupByCode, listUserGroups, isGroupMember,
+  getGroupMemberIds, getGroupMembers, leaveGroup
 } = require('./db');
 const {
   SESSION_COOKIE_NAME,
@@ -347,16 +349,23 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     return res.status(400).json({ error: 'A location (lat/lng) is required.', restaurants: [] });
   }
-  const { price, cuisine, maxDistance } = req.query;
+  const { price, cuisine, maxDistance, groupId } = req.query;
   const dish = typeof req.query.dish === 'string' ? req.query.dish.trim().slice(0, 60) : '';
 
   const distanceMiles = maxDistance ? Number(maxDistance) : 3;
   const radiusMeters = Math.min(distanceMiles * 1609.34, 50000);
 
-  const preferences = req.user ? getPreferences(req.user.id) : null;
-  const dietaryHint = preferences && preferences.dietaryRestrictions.length > 0
-    ? preferences.dietaryRestrictions.join(' ')
-    : '';
+  // When searching as a group, fold the WHOLE group's dietary restrictions
+  // into the search text (not just the requesting member's own), same as
+  // the solo case, so results are actually relevant before Claude ever sees them.
+  let dietaryRestrictionsForHint = [];
+  if (groupId && req.user && isGroupMember(Number(groupId), req.user.id)) {
+    dietaryRestrictionsForHint = getCombinedGroupData(Number(groupId)).dietaryRestrictions;
+  } else if (req.user) {
+    const preferences = getPreferences(req.user.id);
+    dietaryRestrictionsForHint = preferences ? preferences.dietaryRestrictions : [];
+  }
+  const dietaryHint = dietaryRestrictionsForHint.join(' ');
 
   try {
     const places = await fetchPlaces(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
@@ -487,6 +496,47 @@ function personalizationInstruction(preferences, visitHighlights) {
   return parts.length > 0 ? ' ' + parts.join(' ') : '';
 }
 
+// The group equivalent of personalizationInstruction: instead of one
+// person's preferences, combines every member's into a single instruction.
+// Dietary restrictions are a union that ALL must satisfy (strictest wins,
+// since any member could end up ordering the suggested dish), while
+// cuisines/history are pooled as loose signal rather than a requirement.
+function groupPersonalizationInstruction(members) {
+  const parts = [`This order is for a group of ${members.length} friends searching together, not just one person.`];
+
+  const allCuisines = [...new Set(members.flatMap(m => (m.preferences ? m.preferences.favoriteCuisines : [])))];
+  if (allCuisines.length > 0) {
+    parts.push(
+      `Across the group, these cuisines are favorites for at least one person: ${allCuisines.join(', ')}. Weight ` +
+      `toward these when it doesn't conflict with anyone's dietary restrictions, but this is a preference, not a requirement.`
+    );
+  }
+
+  const allRestrictions = [...new Set(members.flatMap(m => (m.preferences ? m.preferences.dietaryRestrictions : [])))];
+  if (allRestrictions.length > 0) {
+    parts.push(
+      `Combined dietary restrictions across the WHOLE group: ${allRestrictions.join(', ')}. Since any of these ` +
+      `people could end up ordering the suggested dish, it must be compliant with EVERY restriction listed, not ` +
+      `just some of them. Only suggest a dish as compliant if a review explicitly supports each restriction ` +
+      `specifically, not a related one: "vegetarian" in a review does NOT confirm "vegan" (vegan is stricter, no ` +
+      `dairy/eggs/honey either), though "vegan" does satisfy a vegetarian restriction. If no candidate's reviews ` +
+      `support a dish compliant with ALL of these restrictions at once, don't name any specific dish, compliant or ` +
+      `not, especially not one the reviews describe with obviously conflicting ingredients (e.g. meat or seafood ` +
+      `when anyone in the group is vegan); use a generic placeholder like "their most popular item" for ` +
+      `dish_suggestion instead, and say plainly in your reason why no specific dish could be confirmed for the whole group.`
+    );
+  }
+
+  const historyLines = members
+    .flatMap(m => (m.visitHighlights || []).map(v => `${v.restaurant_name} (rated ${v.rating}/5${v.dish ? `, ordered: ${v.dish}` : ''})`))
+    .slice(0, 12);
+  if (historyLines.length > 0) {
+    parts.push(`Recent dining history across the group: ${historyLines.join('; ')}. Use this to gauge what the group tends to like.`);
+  }
+
+  return ' ' + parts.join(' ');
+}
+
 function dishCravingInstruction(dish, dietaryRestrictions) {
   if (!dish) return '';
   const restrictionClause = dietaryRestrictions && dietaryRestrictions.length > 0
@@ -518,7 +568,7 @@ function dishCravingInstruction(dish, dietaryRestrictions) {
     `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.${restrictionClause}`;
 }
 
-async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, preferences, visitHighlights, dish }) {
+async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }) {
   const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
@@ -528,8 +578,8 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
     `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
-    `${personalizationInstruction(preferences, visitHighlights)}` +
-    `${dishCravingInstruction(dish, preferences && preferences.dietaryRestrictions)}\n\n` +
+    `${personalizationText || ''}` +
+    `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
     JSON.stringify(candidates, null, 2);
 
   async function callClaude() {
@@ -594,7 +644,6 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   // One retry clears either case up almost always; isValidRecommendation
   // catches it rather than letting broken or silently-noncompliant output
   // reach the client.
-  const dietaryRestrictions = preferences && preferences.dietaryRestrictions;
   let result = await callClaude();
   if (!isValidRecommendation(result, candidates, dietaryRestrictions)) {
     result = await callClaude();
@@ -667,30 +716,65 @@ function pickRandomTopPool(restaurants, poolSize) {
   return topN.slice(0, poolSize);
 }
 
+// Combines every group member's saved preferences and recent visit
+// highlights into one dataset, used for both search-query enrichment
+// (see /api/restaurants) and the recommendation prompt, so a group search
+// is genuinely informed by everyone's data rather than just whoever
+// clicked the button.
+function getCombinedGroupData(groupId) {
+  const members = getGroupMemberIds(groupId).map(id => ({
+    preferences: getPreferences(id),
+    visitHighlights: getVisitHighlights(id, 3)
+  }));
+  const dietaryRestrictions = [...new Set(members.flatMap(m => (m.preferences ? m.preferences.dietaryRestrictions : [])))];
+  return { members, dietaryRestrictions };
+}
+
 app.post('/api/recommend', optionalAuth, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY. Add it to .env.' });
   }
 
-  const { restaurants: candidates, price, groupSize, sharing, dish } = req.body;
+  const { restaurants: candidates, price, groupSize, sharing, dish, groupId } = req.body;
 
   if (!candidates || candidates.length === 0) {
     return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters.' });
   }
 
-  const clampedGroupSize = Math.min(8, Math.max(1, Number.isInteger(groupSize) ? groupSize : 1));
+  let groupData = null;
+  if (groupId) {
+    if (!req.user) return res.status(401).json({ error: 'Sign in to search as a group.' });
+    if (!isGroupMember(Number(groupId), req.user.id)) {
+      return res.status(403).json({ error: "You're not a member of that group." });
+    }
+    groupData = getCombinedGroupData(Number(groupId));
+  }
+
   const isSharing = sharing === true;
   const dishCraving = typeof dish === 'string' ? dish.trim().slice(0, 60) : '';
   const preferences = req.user ? getPreferences(req.user.id) : null;
+
+  // A group's "size" is however many people are actually in it, not
+  // whatever the manual Group Size filter happens to be set to.
+  const clampedGroupSize = groupData
+    ? Math.min(8, Math.max(1, groupData.members.length))
+    : Math.min(8, Math.max(1, Number.isInteger(groupSize) ? groupSize : 1));
+
+  const dietaryRestrictions = groupData ? groupData.dietaryRestrictions : (preferences ? preferences.dietaryRestrictions : []);
+
+  const personalizationText = groupData
+    ? groupPersonalizationInstruction(groupData.members)
+    : personalizationInstruction(preferences, req.user ? getVisitHighlights(req.user.id) : []);
 
   const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
   const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
   const budgetPool = inBudget.length > 0 ? inBudget : candidates;
 
-  // A dietary restriction means only some candidates will have review text
-  // Claude can actually point to as evidence, so give it more real reviews to
-  // search through instead of the usual top 8.
-  const hasDietaryRestriction = Boolean(preferences && preferences.dietaryRestrictions.length > 0);
+  // A dietary restriction (solo, or pooled across a group) means only some
+  // candidates will have review text Claude can actually point to as
+  // evidence, so give it more real reviews to search through instead of the
+  // usual top 8.
+  const hasDietaryRestriction = dietaryRestrictions.length > 0;
   const poolSize = hasDietaryRestriction ? 12 : 8;
 
   // When there's a specific-dish craving, `candidates` already arrives ranked
@@ -715,8 +799,8 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     const { place_id, dish_suggestion, reason, flavor_tags, shared_items } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
-      preferences,
-      visitHighlights: req.user ? getVisitHighlights(req.user.id) : [],
+      personalizationText,
+      dietaryRestrictions,
       dish: dishCraving
     });
     const pick = pool.find(r => r.id === place_id) || pool[0];
@@ -879,6 +963,81 @@ app.post('/api/preferences', requireAuth, (req, res) => {
   } catch (err) {
     console.error('Failed to save preferences:', err);
     res.status(500).json({ error: 'Could not save preferences right now.' });
+  }
+});
+
+app.post('/api/groups', requireAuth, (req, res) => {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim().slice(0, 40) : '';
+  if (!name) {
+    return res.status(400).json({ error: 'A group name is required.' });
+  }
+
+  try {
+    const group = createGroup(req.user.id, name);
+    res.json({ group: { id: group.id, name: group.name, code: group.code, memberCount: 1 } });
+  } catch (err) {
+    console.error('Failed to create group:', err);
+    res.status(500).json({ error: 'Could not create the group right now.' });
+  }
+});
+
+app.post('/api/groups/join', requireAuth, (req, res) => {
+  const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+  if (!code) {
+    return res.status(400).json({ error: 'A group code is required.' });
+  }
+
+  try {
+    const group = joinGroupByCode(req.user.id, code);
+    if (!group) {
+      return res.status(404).json({ error: 'No group found with that code.' });
+    }
+    res.json({ group: { id: group.id, name: group.name, code: group.code } });
+  } catch (err) {
+    console.error('Failed to join group:', err);
+    res.status(500).json({ error: 'Could not join the group right now.' });
+  }
+});
+
+app.get('/api/groups', requireAuth, (req, res) => {
+  try {
+    const groups = listUserGroups(req.user.id).map(g => ({
+      id: g.id, name: g.name, code: g.code, memberCount: g.member_count
+    }));
+    res.json({ groups });
+  } catch (err) {
+    console.error('Failed to load groups:', err);
+    res.status(500).json({ error: 'Could not load your groups right now.', groups: [] });
+  }
+});
+
+app.get('/api/groups/:id/members', requireAuth, (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!isGroupMember(groupId, req.user.id)) {
+    return res.status(403).json({ error: "You're not a member of that group." });
+  }
+
+  try {
+    const members = getGroupMembers(groupId).map(m => ({
+      id: m.id,
+      displayName: deriveDisplayName(m.email),
+      isYou: m.id === req.user.id
+    }));
+    res.json({ members });
+  } catch (err) {
+    console.error('Failed to load group members:', err);
+    res.status(500).json({ error: 'Could not load group members right now.', members: [] });
+  }
+});
+
+app.post('/api/groups/:id/leave', requireAuth, (req, res) => {
+  const groupId = Number(req.params.id);
+  try {
+    leaveGroup(groupId, req.user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to leave group:', err);
+    res.status(500).json({ error: 'Could not leave the group right now.' });
   }
 });
 
