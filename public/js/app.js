@@ -12,8 +12,29 @@ let restaurantsLoading = false;
 let pendingRecommendation = false;
 let authMode = 'login';
 let isGuest = false;
+let groups = [];
+let activeGroupId = null;
 
 const LAST_LOCATION_KEY = 'ff_last_location';
+const ACTIVE_GROUP_KEY = 'ff_active_group_id';
+
+function saveActiveGroupId(groupId) {
+  try {
+    if (groupId) localStorage.setItem(ACTIVE_GROUP_KEY, String(groupId));
+    else localStorage.removeItem(ACTIVE_GROUP_KEY);
+  } catch {
+    // Storage can fail (private browsing, quota); losing this is harmless.
+  }
+}
+
+function getSavedActiveGroupId() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_GROUP_KEY);
+    return raw ? Number(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 function saveLastLocation(lat, lng) {
   try {
@@ -245,6 +266,17 @@ function init() {
     setRailExpanded(false);
     openDrawer('filters');
   });
+
+  document.getElementById('active-group-banner-dismiss').addEventListener('click', () => setActiveGroup(null));
+
+  document.getElementById('create-group-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitCreateGroup();
+  });
+  document.getElementById('join-group-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitJoinGroup();
+  });
 }
 
 // Bound immediately (not gated behind maps-loaded/init) since a user can
@@ -271,6 +303,7 @@ function startAppData() {
     loadStreaks();
     loadBadges();
     loadLeaderboard();
+    loadGroups();
   }
 }
 
@@ -313,6 +346,7 @@ function onAuthenticated(user) {
     loadStreaks();
     loadBadges();
     loadLeaderboard();
+    loadGroups();
   }
 }
 
@@ -377,14 +411,15 @@ async function logout() {
   }
 }
 
-const GUEST_LOCKED_TABS = new Set(['log-review', 'past-reviews', 'progress']);
+const GUEST_LOCKED_TABS = new Set(['log-review', 'past-reviews', 'progress', 'group']);
 
-const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'faq'];
+const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'group', 'faq'];
 const DRAWER_TAB_LABELS = {
   filters: 'Filters',
   'log-review': 'Log a Review',
   'past-reviews': 'Past Reviews',
   progress: 'Your Progress',
+  group: 'Friend Group',
   faq: 'How It Works & FAQ'
 };
 
@@ -424,6 +459,7 @@ function openDrawer(tab) {
 
   document.getElementById('left-column').classList.add('hidden-by-drawer');
   document.getElementById('location-banner').classList.add('hidden-by-drawer');
+  document.getElementById('active-group-banner').classList.add('hidden-by-drawer');
 }
 
 function closeDrawer() {
@@ -438,6 +474,7 @@ function closeDrawer() {
   filtersToggle.setAttribute('aria-expanded', 'false');
   document.getElementById('left-column').classList.remove('hidden-by-drawer');
   document.getElementById('location-banner').classList.remove('hidden-by-drawer');
+  document.getElementById('active-group-banner').classList.remove('hidden-by-drawer');
 
   drawer.addEventListener('transitionend', function onClosed() {
     drawer.removeEventListener('transitionend', onClosed);
@@ -602,6 +639,165 @@ async function loadLeaderboard() {
   empty.hidden = leaderboard.some(row => row.visitCount > 0);
 }
 
+function groupItemElement(group) {
+  const li = document.createElement('li');
+  li.className = group.id === activeGroupId ? 'group-item group-item--active' : 'group-item';
+
+  const top = document.createElement('div');
+  top.className = 'group-item-top';
+  const name = document.createElement('span');
+  name.className = 'group-item-name';
+  name.textContent = group.name;
+  top.appendChild(name);
+  const count = document.createElement('span');
+  count.className = 'group-item-count';
+  count.textContent = `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`;
+  top.appendChild(count);
+  li.appendChild(top);
+
+  const code = document.createElement('span');
+  code.className = 'group-item-code';
+  code.textContent = `Code: ${group.code}`;
+  li.appendChild(code);
+
+  const actions = document.createElement('div');
+  actions.className = 'group-item-actions';
+
+  const searchBtn = document.createElement('button');
+  searchBtn.type = 'button';
+  searchBtn.className = 'group-search-btn';
+  const isActive = group.id === activeGroupId;
+  searchBtn.classList.toggle('active', isActive);
+  searchBtn.textContent = isActive ? 'Searching with this group' : 'Search as this group';
+  searchBtn.addEventListener('click', () => setActiveGroup(isActive ? null : group.id));
+  actions.appendChild(searchBtn);
+
+  const leaveBtn = document.createElement('button');
+  leaveBtn.type = 'button';
+  leaveBtn.textContent = 'Leave';
+  leaveBtn.addEventListener('click', () => leaveGroupClick(group.id));
+  actions.appendChild(leaveBtn);
+
+  li.appendChild(actions);
+  return li;
+}
+
+function renderGroups() {
+  const list = document.getElementById('group-list');
+  const empty = document.getElementById('group-empty');
+  list.replaceChildren();
+  groups.forEach(group => list.appendChild(groupItemElement(group)));
+  empty.hidden = groups.length > 0;
+}
+
+function updateActiveGroupBanner() {
+  const banner = document.getElementById('active-group-banner');
+  const active = groups.find(g => g.id === activeGroupId);
+  if (!active) {
+    banner.hidden = true;
+    return;
+  }
+  const peopleLabel = active.memberCount === 1 ? 'person' : 'people';
+  document.getElementById('active-group-banner-text').textContent =
+    `Searching as a group: ${active.name} (${active.memberCount} ${peopleLabel}). Dismiss to search alone.`;
+  banner.hidden = false;
+}
+
+function setActiveGroup(groupId) {
+  // A group that's since been left/deleted shouldn't silently stay "active".
+  activeGroupId = groupId && groups.some(g => g.id === groupId) ? groupId : null;
+  saveActiveGroupId(activeGroupId);
+  renderGroups();
+  updateActiveGroupBanner();
+  loadRestaurants();
+}
+
+async function loadGroups() {
+  try {
+    const response = await fetch('/api/groups');
+    if (!response.ok) return;
+    const data = await response.json();
+    groups = data.groups || [];
+
+    const saved = getSavedActiveGroupId();
+    activeGroupId = saved && groups.some(g => g.id === saved) ? saved : null;
+
+    renderGroups();
+    updateActiveGroupBanner();
+  } catch (err) {
+    // Group data is a nice-to-have on top of solo search; a failed load here
+    // shouldn't block the rest of the app from working.
+  }
+}
+
+async function submitCreateGroup() {
+  const input = document.getElementById('create-group-name');
+  const status = document.getElementById('group-status');
+  const name = input.value.trim();
+  if (!name) return;
+
+  try {
+    const response = await fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      status.textContent = data.error;
+      status.className = 'visit-status visit-status--error';
+      status.hidden = false;
+      return;
+    }
+    input.value = '';
+    status.hidden = true;
+    await loadGroups();
+  } catch (err) {
+    status.textContent = "Couldn't reach the server. Check your connection and try again.";
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+  }
+}
+
+async function submitJoinGroup() {
+  const input = document.getElementById('join-group-code');
+  const status = document.getElementById('group-status');
+  const code = input.value.trim();
+  if (!code) return;
+
+  try {
+    const response = await fetch('/api/groups/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      status.textContent = data.error;
+      status.className = 'visit-status visit-status--error';
+      status.hidden = false;
+      return;
+    }
+    input.value = '';
+    status.hidden = true;
+    await loadGroups();
+  } catch (err) {
+    status.textContent = "Couldn't reach the server. Check your connection and try again.";
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+  }
+}
+
+async function leaveGroupClick(groupId) {
+  try {
+    await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
+    if (activeGroupId === groupId) setActiveGroup(null);
+    await loadGroups();
+  } catch (err) {
+    // A failed leave just means the group is still in the list; the user can retry.
+  }
+}
+
 function requestUserLocation() {
   if (!navigator.geolocation) {
     useLastLocationOrShowEmptyState("Your browser doesn't support location");
@@ -698,6 +894,7 @@ async function loadRestaurants() {
   if (currentFilters.cuisine) params.set('cuisine', currentFilters.cuisine);
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
   if (currentFilters.dish) params.set('dish', currentFilters.dish);
+  if (activeGroupId) params.set('groupId', activeGroupId);
 
   restaurantsLoading = true;
   showLoading('Scanning nearby spots…');
@@ -789,7 +986,8 @@ async function getRecommendation() {
         price: currentFilters.price,
         groupSize: currentFilters.groupSize,
         sharing: currentFilters.sharing,
-        dish: currentFilters.dish
+        dish: currentFilters.dish,
+        groupId: activeGroupId
       })
     });
 

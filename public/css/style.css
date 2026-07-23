@@ -255,6 +255,42 @@ body {
   outline-offset: 2px;
 }
 
+/* Sits just below .location-banner (same shape/behavior) so the two can
+   coexist without fully overlapping in the rare case both show at once. */
+.active-group-banner {
+  top: calc(var(--top-bar-height) + var(--space-3) + 44px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 2 * var(--space-5)));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--color-olive);
+  background: rgba(138, 154, 82, 0.14);
+  padding: var(--space-2) var(--space-3);
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+.active-group-banner[hidden] { display: none; }
+.active-group-banner.hidden-by-drawer { opacity: 0; pointer-events: none; }
+.active-group-banner button {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}
+.active-group-banner button:focus-visible {
+  outline: 2px solid var(--color-turmeric);
+  outline-offset: 2px;
+}
+
 .filters-block {
   display: flex;
   flex-direction: column;
@@ -630,6 +666,77 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 .leaderboard-streak { font-family: var(--font-data); font-size: 0.74rem; color: var(--color-chili); }
 .leaderboard-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin-top: var(--space-2); }
 .leaderboard-empty[hidden] { display: none; }
+
+.group-block { display: flex; flex-direction: column; gap: var(--space-2); }
+.group-hint { font-size: 0.78rem; line-height: 1.4; color: var(--color-paper-dim); margin: 0; }
+.group-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin: var(--space-2) 0 0; }
+.group-empty[hidden] { display: none; }
+
+.group-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.group-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: rgba(242, 234, 225, 0.05);
+  border: 1px solid rgba(242, 234, 225, 0.1);
+  border-radius: var(--radius-sm);
+}
+.group-item--active { border-color: rgba(138, 154, 82, 0.5); background: rgba(138, 154, 82, 0.1); }
+.group-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.group-item-name {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-item-count { font-family: var(--font-data); font-size: 0.72rem; color: var(--color-paper-dim); flex-shrink: 0; }
+.group-item-code {
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  color: var(--color-turmeric);
+}
+.group-item-actions { display: flex; gap: var(--space-2); }
+.group-item-actions button {
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-2);
+  background: rgba(242, 234, 225, 0.06);
+  color: var(--color-paper-dim);
+  border: 1px solid rgba(242, 234, 225, 0.14);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.group-item-actions button:hover { border-color: rgba(242, 234, 225, 0.35); color: var(--color-paper); }
+.group-item-actions .group-search-btn.active {
+  background: var(--color-olive);
+  color: var(--color-ink);
+  border-color: var(--color-olive);
+}
+
+.group-form-block {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.group-form { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.group-form .visit-input { flex: 1; min-width: 0; }
+.group-form .cta--secondary { flex-shrink: 0; }
 
 .visit-form { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
 

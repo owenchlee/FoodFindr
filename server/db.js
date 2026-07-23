@@ -87,6 +87,25 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS group_members (
+    group_id INTEGER NOT NULL REFERENCES groups(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    joined_at TEXT NOT NULL,
+    PRIMARY KEY (group_id, user_id)
+  )
+`);
+
 function countUsers() {
   return db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
 }
@@ -325,6 +344,82 @@ function getLeaderboardStats() {
     .sort((a, b) => b.visitCount - a.visitCount || b.longestStreak - a.longestStreak || a.userId - b.userId);
 }
 
+// Excludes 0/O/1/I so a code read aloud or handwritten isn't ambiguous.
+const GROUP_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateGroupCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += GROUP_CODE_CHARS[Math.floor(Math.random() * GROUP_CODE_CHARS.length)];
+  }
+  return code;
+}
+
+function createGroup(userId, name) {
+  // A random 6-char code colliding with an existing one is astronomically
+  // unlikely, but retrying costs nothing and beats a confusing 500.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const group = db.prepare(`
+        INSERT INTO groups (name, code, created_by, created_at)
+        VALUES (?, ?, ?, ?)
+        RETURNING *
+      `).get(name, generateGroupCode(), userId, new Date().toISOString());
+      db.prepare('INSERT INTO group_members (group_id, user_id, joined_at) VALUES (?, ?, ?)')
+        .run(group.id, userId, new Date().toISOString());
+      return group;
+    } catch (err) {
+      if (!String(err.message).includes('UNIQUE')) throw err;
+    }
+  }
+  throw new Error('Could not generate a unique group code.');
+}
+
+function joinGroupByCode(userId, code) {
+  const group = db.prepare('SELECT * FROM groups WHERE code = ? COLLATE NOCASE').get(code);
+  if (!group) return null;
+  db.prepare('INSERT OR IGNORE INTO group_members (group_id, user_id, joined_at) VALUES (?, ?, ?)')
+    .run(group.id, userId, new Date().toISOString());
+  return group;
+}
+
+function listUserGroups(userId) {
+  return db.prepare(`
+    SELECT g.id, g.name, g.code,
+      (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) AS member_count
+    FROM groups g
+    JOIN group_members gm ON gm.group_id = g.id
+    WHERE gm.user_id = ?
+    ORDER BY g.created_at DESC
+  `).all(userId);
+}
+
+function isGroupMember(groupId, userId) {
+  return !!db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
+}
+
+function getGroupMemberIds(groupId) {
+  return db.prepare('SELECT user_id FROM group_members WHERE group_id = ?').all(groupId).map(r => r.user_id);
+}
+
+function getGroupMembers(groupId) {
+  return db.prepare(`
+    SELECT u.id, u.email FROM users u
+    JOIN group_members gm ON gm.user_id = u.id
+    WHERE gm.group_id = ?
+  `).all(groupId);
+}
+
+function leaveGroup(groupId, userId) {
+  db.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?').run(groupId, userId);
+  // A group with no members left has a code nobody can meaningfully join
+  // through anymore, so drop it instead of leaving an orphaned row behind.
+  const remaining = db.prepare('SELECT COUNT(*) AS count FROM group_members WHERE group_id = ?').get(groupId).count;
+  if (remaining === 0) {
+    db.prepare('DELETE FROM groups WHERE id = ?').run(groupId);
+  }
+}
+
 function getProgress(userId, city) {
   const discovered = db.prepare(
     'SELECT COUNT(*) AS count FROM discovered_restaurants WHERE user_id = ? AND city = ?'
@@ -348,5 +443,7 @@ module.exports = {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
-  getStreaks, getBadges, getLeaderboardStats
+  getStreaks, getBadges, getLeaderboardStats,
+  createGroup, joinGroupByCode, listUserGroups, isGroupMember,
+  getGroupMemberIds, getGroupMembers, leaveGroup
 };
