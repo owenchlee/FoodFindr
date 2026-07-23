@@ -212,15 +212,20 @@ async function fetchPlacesPage(endpoint, params, pageToken) {
   return response.json();
 }
 
-async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish) {
-  const useTextSearch = Boolean(cuisine || dish);
+async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
+  const useTextSearch = Boolean(cuisine || dish || dietaryHint);
   const endpoint = useTextSearch
     ? 'https://maps.googleapis.com/maps/api/place/textsearch/json'
     : 'https://maps.googleapis.com/maps/api/place/nearbysearch/json';
 
   const params = { location: `${lat},${lng}`, radius: String(Math.round(radiusMeters)) };
   if (useTextSearch) {
-    params.query = [dish, cuisine, 'restaurants'].filter(Boolean).join(' ');
+    // Folding a saved dietary restriction into the search text itself (not
+    // just the later Claude prompt) means Google's own relevance ranking
+    // actually surfaces places associated with that term, instead of always
+    // handing Claude the same generic top candidates and hoping one of
+    // their reviews happens to mention it.
+    params.query = [dish, cuisine, dietaryHint, 'restaurants'].filter(Boolean).join(' ');
   } else {
     params.type = 'restaurant';
   }
@@ -348,8 +353,13 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
   const distanceMiles = maxDistance ? Number(maxDistance) : 3;
   const radiusMeters = Math.min(distanceMiles * 1609.34, 50000);
 
+  const preferences = req.user ? getPreferences(req.user.id) : null;
+  const dietaryHint = preferences && preferences.dietaryRestrictions.length > 0
+    ? preferences.dietaryRestrictions.join(' ')
+    : '';
+
   try {
-    const places = await fetchPlaces(lat, lng, radiusMeters, cuisine, dish);
+    const places = await fetchPlaces(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
 
     let results = places
       .filter(place => place.geometry && place.geometry.location)
@@ -637,6 +647,26 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
   return true;
 }
 
+// "Surprise Me" should actually surprise: asking Claude to pick the single
+// "best" restaurant from the same top-8-by-rating list every time reliably
+// returns the same winner call after call, since nothing about the prompt or
+// candidate set changes between clicks. Sampling randomly from a wider
+// top-rated slice means each click genuinely can land on a different (still
+// good) restaurant, instead of relying on the model to invent variety on its
+// own, which isn't a reliable way to get it.
+function pickRandomTopPool(restaurants, poolSize) {
+  const topN = restaurants
+    .slice()
+    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    .slice(0, Math.max(poolSize * 2, 15));
+
+  for (let i = topN.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [topN[i], topN[j]] = [topN[j], topN[i]];
+  }
+  return topN.slice(0, poolSize);
+}
+
 app.post('/api/recommend', optionalAuth, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY. Add it to .env.' });
@@ -651,18 +681,26 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   const clampedGroupSize = Math.min(8, Math.max(1, Number.isInteger(groupSize) ? groupSize : 1));
   const isSharing = sharing === true;
   const dishCraving = typeof dish === 'string' ? dish.trim().slice(0, 60) : '';
+  const preferences = req.user ? getPreferences(req.user.id) : null;
 
   const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
   const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
   const budgetPool = inBudget.length > 0 ? inBudget : candidates;
+
+  // A dietary restriction means only some candidates will have review text
+  // Claude can actually point to as evidence, so give it more real reviews to
+  // search through instead of the usual top 8.
+  const hasDietaryRestriction = Boolean(preferences && preferences.dietaryRestrictions.length > 0);
+  const poolSize = hasDietaryRestriction ? 12 : 8;
+
   // When there's a specific-dish craving, `candidates` already arrives ranked
   // by Google's Text Search relevance to that dish, and re-sorting by star
   // rating here would throw that relevance away and let an unrelated but
-  // highly-rated restaurant crowd out actually-relevant ones. Only re-rank
-  // by rating for the generic (no-craving) case.
+  // highly-rated restaurant crowd out actually-relevant ones. Only randomize
+  // and re-rank by rating for the generic (no-craving, "Surprise Me") case.
   const pool = dishCraving
-    ? budgetPool.slice(0, 8)
-    : budgetPool.slice().sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8);
+    ? budgetPool.slice(0, poolSize)
+    : pickRandomTopPool(budgetPool, poolSize);
 
   try {
     const withReviews = await Promise.all(pool.map(async r => ({
@@ -677,7 +715,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     const { place_id, dish_suggestion, reason, flavor_tags, shared_items } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
-      preferences: req.user ? getPreferences(req.user.id) : null,
+      preferences,
       visitHighlights: req.user ? getVisitHighlights(req.user.id) : [],
       dish: dishCraving
     });
