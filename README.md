@@ -36,7 +36,7 @@ It also tracks where you've actually eaten and gamifies exploring your city.
   to suggest a dish, and says so plainly instead of inventing one when the
   reviews don't back it up.
 - Price filtering treats Google's 0-4 scale as a ceiling, not an exact match,
-  since it doesn't map one-to-one onto a 3-tier $/$$/$$$ UI.
+  since it doesn't map one-to-one onto a 3-tier UI.
 - Dietary restrictions are a best-effort instruction to Claude, not a hard
   filter, since Places has no ingredient/allergen data.
 
