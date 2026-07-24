@@ -760,6 +760,22 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 }
 .visit-input::placeholder { color: var(--color-paper-dim); }
 .visit-input:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+/* Chrome/Edge force an autofilled input's background to a light blue/yellow
+   that no author background-color can override directly, breaking the dark
+   theme (most visible on the password field: the eye toggle's hover color
+   is tuned for contrast against a dark background, so it nearly vanishes
+   against the light one autofill imposes). The oversized inset box-shadow
+   is the standard workaround: it paints over the forced background. */
+.visit-input:-webkit-autofill,
+.visit-input:-webkit-autofill:hover,
+.visit-input:-webkit-autofill:focus,
+.visit-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--color-paper);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-char-2) inset;
+  box-shadow: 0 0 0 1000px var(--color-char-2) inset;
+  caret-color: var(--color-paper);
+  transition: background-color 9999s ease-in-out 0s;
+}
 select.visit-input { cursor: pointer; }
 select.visit-input option {
   color: var(--color-ink);
