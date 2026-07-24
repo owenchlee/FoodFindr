@@ -56,6 +56,17 @@ Claude APIs.
     ("My Taste Profile").
   - `GET /api/progress`: returns how many discovered restaurants in the current city
     have a matching logged visit, for the signed-in user.
+  - `GET /api/flavors` / `GET /api/streaks` / `GET /api/badges` / `GET /api/leaderboard`:
+    gamification reads derived from the same `visits` table: top logged cuisines,
+    the current/longest daily visit-logging streak, earned achievement badges, and
+    a friends leaderboard.
+  - `POST /api/groups` / `POST /api/groups/join` / `GET /api/groups` /
+    `GET /api/groups/:id/members` / `POST /api/groups/:id/leave`: persistent friend
+    groups, joined by a 6-character code. Passing `groupId` to `/api/restaurants` or
+    `/api/recommend` swaps in the whole group's combined data instead of just the
+    caller's: dietary restrictions union as a hard "must satisfy everyone" filter,
+    while cuisines and visit history pool as a softer signal. Every group route
+    checks membership server-side before returning anything.
 
   Every route above except `/api/auth/*` and `/api/config` requires a valid session
   (`requireAuth` middleware). The frontend gates the whole app behind login for
@@ -67,12 +78,13 @@ Claude APIs.
   a small hand-rolled cookie parser (skips adding `cookie-parser` just to read one
   cookie).
 - `server/db.js`: `node:sqlite` (zero dependencies) with `users`, `sessions`,
-  `visits`, `preferences`, and `discovered_restaurants` (every restaurant ever
-  surfaced by a search, used as the exploration-progress denominator). The latter
-  three are all scoped by `user_id`. Reads `DB_PATH` from the environment (defaults
-  to `server/foodfindr.db`), so a production deploy can point it at a mounted
-  persistent disk. The very first account ever created automatically adopts any
-  pre-existing (pre-accounts) data instead of orphaning it.
+  `visits`, `preferences`, `discovered_restaurants` (every restaurant ever
+  surfaced by a search, used as the exploration-progress denominator), and
+  `groups`/`group_members` (persistent friend groups, joined by a unique code).
+  All but `users`/`sessions`/`groups` are scoped by `user_id`. Reads `DB_PATH` from
+  the environment (defaults to `server/foodfindr.db`), so a production deploy can
+  point it at a mounted persistent disk. The very first account ever created
+  automatically adopts any pre-existing (pre-accounts) data instead of orphaning it.
 
 ## Frontend (`public/`)
 

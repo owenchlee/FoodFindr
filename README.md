@@ -25,6 +25,44 @@ Solo project, built in about two weeks.
 
 Full route list and file-by-file breakdown: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## How it's built
+
+```mermaid
+flowchart LR
+    subgraph Browser["Browser (public/)"]
+        UI["app.js\nUI state, filters, drawer"]
+        Map["map.js\nGoogle Maps JS API"]
+    end
+
+    subgraph Server["Express (server/)"]
+        Auth["auth.js\nscrypt + session cookies"]
+        Routes["server.js\n/api/* routes"]
+        DB[("db.js\nSQLite via node:sqlite")]
+    end
+
+    subgraph External["Third-party APIs"]
+        Places["Google Places /\nGeocoding"]
+        Claude["Anthropic Claude\n(Haiku 4.5)"]
+        GMaps["Google Maps JS API"]
+    end
+
+    UI -- "fetch /api/*" --> Routes
+    Map -- "tiles + markers" --> GMaps
+    Routes --> Auth
+    Routes -- "candidate restaurants,\nreal reviews" --> Places
+    Routes -- "pick one restaurant\n+ one grounded dish" --> Claude
+    Routes -- "users, sessions, visits,\npreferences, groups" --> DB
+```
+
+A search round-trip: pick a location → `GET /api/restaurants` asks Google
+Places for nearby (or text-searched, if a cuisine/dish/dietary hint is set)
+candidates → up to 8 of the highest-rated go to `POST /api/recommend`, which
+pulls each one's real reviews from Places and asks Claude to pick one and
+name a specific dish the reviews actually back up, personalized by saved
+preferences, recent visits, and (if searching as a friend group) everyone's
+combined data. Nothing about the pick is invented: if the reviews don't
+mention a specific dish, Claude says so instead of guessing.
+
 ## How to use it
 
 1. Sign in, or continue as guest.

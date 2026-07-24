@@ -1302,8 +1302,18 @@ select.visit-input option {
     right: var(--space-3);
     top: calc(var(--top-bar-height) + var(--space-3));
     width: auto;
-    max-height: calc(100vh - var(--top-bar-height) - var(--space-3) * 2);
+    /* Capped well under full height so the recommendation card can never
+       cover the whole screen: the map is the actual tool being used here,
+       and a card that fills the viewport hides it entirely. */
+    max-height: min(46vh, calc(100vh - var(--top-bar-height) - var(--space-3) * 2));
   }
+  .ticket {
+    padding: var(--space-3) var(--space-3) var(--space-2);
+  }
+  .ticket-name { font-size: 1.1rem; }
+  .ticket-eyebrow { margin-bottom: var(--space-1); }
+  .ticket-meta { margin-bottom: var(--space-2); }
+  .ticket-reason { font-size: 0.8rem; }
   .how-it-works { display: none; }
   .tab-drawer {
     left: 48px;
