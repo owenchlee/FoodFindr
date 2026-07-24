@@ -291,6 +291,18 @@ function bindAuthEvents() {
   });
   document.getElementById('continue-as-guest-btn').addEventListener('click', continueAsGuest);
   document.getElementById('rail-guest-signup-btn').addEventListener('click', showAuthGate);
+  document.getElementById('auth-password-toggle').addEventListener('click', togglePasswordVisibility);
+}
+
+function togglePasswordVisibility() {
+  const input = document.getElementById('auth-password');
+  const toggleBtn = document.getElementById('auth-password-toggle');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  toggleBtn.querySelector('.eye-icon-show').hidden = !showing;
+  toggleBtn.querySelector('.eye-icon-hide').hidden = showing;
+  toggleBtn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  toggleBtn.setAttribute('aria-pressed', String(!showing));
 }
 
 function startAppData() {
@@ -668,7 +680,8 @@ function groupItemElement(group) {
   searchBtn.className = 'group-search-btn';
   const isActive = group.id === activeGroupId;
   searchBtn.classList.toggle('active', isActive);
-  searchBtn.textContent = isActive ? 'Searching with this group' : 'Search as this group';
+  searchBtn.setAttribute('aria-pressed', String(isActive));
+  searchBtn.textContent = isActive ? '✓ Searching with this group' : 'Search as this group';
   searchBtn.addEventListener('click', () => setActiveGroup(isActive ? null : group.id));
   actions.appendChild(searchBtn);
 

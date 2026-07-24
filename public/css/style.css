@@ -724,6 +724,15 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   background: var(--color-olive);
   color: var(--color-ink);
   border-color: var(--color-olive);
+  /* Freshly rendered as .active every time it's turned on (the button is
+     rebuilt, not just re-styled), so this plays once as immediate
+     confirmation that the click registered, on top of the color change. */
+  animation: group-active-pulse 500ms ease;
+}
+@keyframes group-active-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(138, 154, 82, 0.55); }
+  60% { box-shadow: 0 0 0 7px rgba(138, 154, 82, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(138, 154, 82, 0); }
 }
 
 .group-form-block {
@@ -935,6 +944,29 @@ select.visit-input option {
   text-align: center;
   margin: 0 0 var(--space-2);
 }
+.password-field { position: relative; }
+.password-field .visit-input { width: 100%; padding-right: 40px; }
+.password-toggle-btn {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-paper-dim);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.password-toggle-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
+.password-toggle-btn:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+
 .auth-card .cta { margin: var(--space-1) 0 0; }
 .auth-toggle-mode {
   background: none;
