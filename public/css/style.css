@@ -966,6 +966,12 @@ select.visit-input option {
 }
 .password-toggle-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
 .password-toggle-btn:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+/* Class-based, not the `hidden` attribute: some browsers' SVG UA stylesheet
+   doesn't include a [hidden] { display: none } rule the way the HTML one
+   does, so a hidden SVG can render anyway. This works regardless. */
+.password-toggle-btn .eye-icon-hide { display: none; }
+.password-toggle-btn.showing .eye-icon-show { display: none; }
+.password-toggle-btn.showing .eye-icon-hide { display: block; }
 
 .auth-card .cta { margin: var(--space-1) 0 0; }
 .auth-toggle-mode {
