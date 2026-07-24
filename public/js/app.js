@@ -299,8 +299,7 @@ function togglePasswordVisibility() {
   const toggleBtn = document.getElementById('auth-password-toggle');
   const showing = input.type === 'text';
   input.type = showing ? 'password' : 'text';
-  toggleBtn.querySelector('.eye-icon-show').hidden = !showing;
-  toggleBtn.querySelector('.eye-icon-hide').hidden = showing;
+  toggleBtn.classList.toggle('showing', !showing);
   toggleBtn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
   toggleBtn.setAttribute('aria-pressed', String(!showing));
 }
