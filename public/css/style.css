@@ -1045,7 +1045,11 @@ select.visit-input option {
 .no-location-state {
   position: absolute;
   top: 50%;
-  left: 50%;
+  /* Centered on the visible map area, not the full viewport: .map-wrap
+     spans edge to edge behind the fixed 56px side rail, so a plain 50%
+     left would sit visibly left-of-center in the space actually visible
+     next to the rail. */
+  left: calc(50% + 28px);
   transform: translate(-50%, -50%);
   z-index: 1;
   width: min(360px, calc(100vw - var(--space-5) * 2));
@@ -1296,6 +1300,8 @@ select.visit-input option {
     border-radius: 999px;
     box-shadow: var(--shadow-md);
   }
+
+  .no-location-state { left: calc(50% + 24px); }
 
   .left-column {
     left: calc(48px + var(--space-3));
