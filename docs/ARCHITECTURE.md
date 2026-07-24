@@ -22,8 +22,15 @@ Claude APIs.
   next to each tier as a rough guide. The same per-person figures are used to compute
   a sharing group's total budget, which is real math but still an estimate, not a
   verified bill.
-- Dietary restrictions are a best-effort instruction to Claude based on review text,
-  not a hard filter: Places has no ingredient/allergen data.
+- Dietary restrictions are enforced two ways: an instruction to Claude asking it to
+  only name a dish a review explicitly supports as compliant, plus a hard,
+  code-level backstop (`isValidRecommendation` in `server/server.js`) that regex-checks
+  the dish name against a meat/seafood keyword blocklist whenever the restriction is
+  vegan or vegetarian. A match is rejected and the request retried once rather than
+  reaching the user. The instruction alone wasn't reliable: it turned up real cases
+  of Claude naming a dish it had itself identified as seafood, or accepting a
+  "vegetarian" review as proof of "vegan." Still not a true ingredient filter, since
+  Places has no ingredient/allergen data to check candidates against upfront.
 - The exploration progress bar's denominator is **restaurants FoodFindr has shown
   you**, not every restaurant in the city: Google Places returns at most 20 results
   per search call (no pagination), so it grows as you search rather than starting at

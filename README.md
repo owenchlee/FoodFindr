@@ -78,8 +78,15 @@ mention a specific dish, Claude says so instead of guessing.
   reviews don't back it up.
 - Price filtering treats Google's 0-4 scale as a ceiling, not an exact match,
   since it doesn't map one-to-one onto a 3-tier UI.
-- Dietary restrictions are a best-effort instruction to Claude, not a hard
-  filter, since Places has no ingredient/allergen data.
+- Dietary restrictions start as an instruction to Claude, but that alone
+  wasn't reliable: testing turned up cases where Claude called a dish
+  seafood in its own reasoning and recommended it anyway, or treated a
+  "vegetarian" review as proof something was vegan. A vegan/vegetarian
+  pick now also has to pass a hard, code-level check afterward: the dish
+  name is matched against a meat/seafood keyword blocklist, and anything
+  that hits it is rejected and retried rather than ever reaching the user.
+  It's still not a true ingredient filter, since Places has no
+  ingredient/allergen data to filter on upfront.
 
 ## Challenges
 
