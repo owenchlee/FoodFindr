@@ -75,10 +75,13 @@ Claude APIs.
     while cuisines and visit history pool as a softer signal. Every group route
     checks membership server-side before returning anything.
 
-  Every route above except `/api/auth/*` and `/api/config` requires a valid session
-  (`requireAuth` middleware). The frontend gates the whole app behind login for
-  exactly this reason: unauthenticated access to the billed Google/Anthropic routes
-  is the real risk once this is live on the internet.
+  Every route above except `/api/auth/*`, `/api/config`, `/api/geocode`,
+  `/api/restaurants`, and `/api/recommend` requires a valid session (`requireAuth`
+  middleware). Those last three use `optionalAuth` instead: they attach `req.user`
+  when a session cookie is present but never block the request, which is what lets
+  guest mode search and get a recommendation with no account. Everything that
+  writes or reads personal state (visits, preferences, progress, groups) still
+  requires signing in.
 - `server/auth.js`: password hashing (`node:crypto` scrypt, no extra dependency),
   session tokens (random 32-byte token stored in the `sessions` table, sent as an
   `httpOnly`/`sameSite=lax` cookie, and `secure` too once `NODE_ENV=production`), and
