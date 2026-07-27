@@ -1204,6 +1204,7 @@ select.visit-input option {
 /* ---------- Recommendation ticket ---------- */
 .ticket {
   display: none;
+  position: relative;
   min-height: 0;
   overflow-y: auto;
   background: var(--color-char-2);
@@ -1215,6 +1216,24 @@ select.visit-input option {
 }
 .ticket.visible { display: block; }
 
+.ticket-close-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  background: none;
+  border: none;
+  color: var(--color-paper-dim);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: var(--space-1);
+}
+.ticket-close-btn:hover { color: var(--color-paper); }
+.ticket-close-btn:focus-visible {
+  outline: 2px solid var(--color-turmeric);
+  outline-offset: 2px;
+}
+
 .ticket-eyebrow {
   font-family: var(--font-data);
   font-size: 0.68rem;
@@ -1222,10 +1241,12 @@ select.visit-input option {
   text-transform: uppercase;
   color: var(--color-chili);
   margin: 0 0 var(--space-2);
+  padding-right: var(--space-5);
 }
 .ticket-name {
   font-family: var(--font-display);
   font-size: 1.3rem;
+  padding-right: var(--space-5);
   font-weight: 600;
   margin: 0 0 var(--space-2);
 }
