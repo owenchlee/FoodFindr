@@ -163,6 +163,8 @@ function init() {
 
   document.getElementById('recommend-btn').addEventListener('click', getRecommendation);
 
+  document.getElementById('ticket-close-btn').addEventListener('click', hideTicket);
+
   document.getElementById('group-size-minus').addEventListener('click', () => {
     currentFilters.groupSize = Math.max(1, currentFilters.groupSize - 1);
     document.getElementById('group-size-value').textContent = currentFilters.groupSize;
