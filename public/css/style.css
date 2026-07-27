@@ -1169,8 +1169,6 @@ select.visit-input option {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   transform: translateY(50%);
 }
-.marker--olive { background: var(--color-olive); }
-
 /* The one persistent marker showing where FoodFindr is actually searching
    from: a real GPS fix, a remembered last location, or a manually chosen
    one. Always this same blue dot, matching the familiar "you are here"

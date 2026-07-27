@@ -122,10 +122,6 @@ function getUserByEmail(email) {
   return db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email);
 }
 
-function getUserById(id) {
-  return db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(id);
-}
-
 function createSession({ token, userId, expiresAt }) {
   db.prepare(`
     INSERT INTO sessions (token, user_id, created_at, expires_at)
@@ -438,7 +434,7 @@ function getProgress(userId, city) {
 }
 
 module.exports = {
-  countUsers, insertUser, getUserByEmail, getUserById,
+  countUsers, insertUser, getUserByEmail,
   createSession, getSessionWithUser, deleteSession, adoptLegacyData,
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
