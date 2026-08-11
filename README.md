@@ -1,5 +1,9 @@
 # FoodFindr
 
+<p align="center">
+  <video src="https://github.com/owenchlee/FoodFindr/raw/main/docs/demo.mp4" width="720" controls></video>
+</p>
+
 FoodFindr is a restaurant-recommendation web app that picks one restaurant and one
 specific dish based on your budget, cuisine, group size, and location, then has
 Claude read real Google reviews to justify the pick instead of guessing at a menu.
