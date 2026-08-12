@@ -121,13 +121,20 @@ body {
   gap: var(--space-4);
   pointer-events: none;
   opacity: 1;
-  transition: opacity 200ms ease;
+  transition: opacity 200ms ease, left 240ms ease;
 }
 .left-column > * { pointer-events: auto; }
 .left-column.hidden-by-drawer,
 .location-banner.hidden-by-drawer {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Push the recommendation card (and anything else in .left-column) out from
+   under the expanded side rail instead of letting the rail's higher z-index
+   (11, see .side-rail.expanded above) cover it. */
+.side-rail.expanded ~ .left-column {
+  left: calc(210px + var(--space-4));
 }
 
 .wordmark {
@@ -1385,6 +1392,9 @@ select.visit-input option {
        cover the whole screen: the map is the actual tool being used here,
        and a card that fills the viewport hides it entirely. */
     max-height: min(46vh, calc(100vh - var(--top-bar-height) - var(--space-3) * 2));
+  }
+  .side-rail.expanded ~ .left-column {
+    left: calc(190px + var(--space-3));
   }
   .ticket {
     padding: var(--space-3) var(--space-3) var(--space-2);
