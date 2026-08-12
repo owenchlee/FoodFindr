@@ -1,6 +1,6 @@
 # FoodFindr
 
-https://github.com/user-attachments/assets/7d28225a-7785-45f6-9f11-7c60dd6eeb7f
+https://github.com/user-attachments/assets/e9a0eaef-37e9-430d-8b89-b19152e630d5
 
 FoodFindr is a restaurant-recommendation web app that picks one restaurant and one
 specific dish based on your budget, cuisine, group size, and location, then has
