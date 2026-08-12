@@ -137,6 +137,20 @@ body {
   left: calc(210px + var(--space-4));
 }
 
+/* Same treatment for the filters/log-review drawer (.tab-drawer, z-index 8,
+   360px wide): push the card out from under it instead of relying on
+   hidden-by-drawer's opacity fade, which made it disappear entirely. Only
+   on wide-enough viewports -- on the mobile breakpoint the drawer takes
+   nearly the full width, so there's nowhere to push it and the fade-hide
+   behavior below still applies. */
+@media (min-width: 721px) {
+  .shell:has(#tab-drawer.open) .left-column.hidden-by-drawer {
+    left: calc(56px + 360px + var(--space-4));
+    opacity: 1;
+    pointer-events: none;
+  }
+}
+
 .wordmark {
   display: flex;
   align-items: center;
