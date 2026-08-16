@@ -4,7 +4,8 @@
   "description": "Restaurant recommendation app",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

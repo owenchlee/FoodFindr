@@ -1,0 +1,77 @@
+#!/bin/sh
+#
+# FoodFindr pre-commit hook — blocks API keys and secrets from being committed.
+# This is the local "first layer": it stops a secret before it ever leaves
+# your machine. The gitleaks CI workflow is the second layer on GitHub's side.
+#
+# Auto-installed by `npm install` (see the "prepare" script in package.json).
+# To bypass in a genuine false-positive:  git commit --no-verify
+#
+set -eu
+
+fail=0
+
+note() { printf '%s\n' "$1" >&2; }
+
+# 1) Refuse to commit any real .env file (the .env.example template is allowed).
+env_files=$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '(^|/)\.env($|\.)' \
+  | grep -vE '(^|/)\.env\.example$' || true)
+if [ -n "$env_files" ]; then
+  note "✖ Refusing to commit environment files that may hold secrets:"
+  note "$env_files" | sed 's/^/    /'
+  note ""
+  note "  These belong in .gitignore, not in git. Unstage them:"
+  note "    git restore --staged <file>"
+  fail=1
+fi
+
+# 2) Scan the staged diff for credential patterns.
+added=$(git diff --cached --no-color --diff-filter=ACM -U0 \
+  | grep -E '^\+' | grep -vE '^\+\+\+' || true)
+
+# Known high-confidence secret shapes.
+patterns='
+AIza[0-9A-Za-z_-]{35}|Google API key
+sk-ant-[0-9A-Za-z-]{20,}|Anthropic API key
+sk-[A-Za-z0-9]{40,}|OpenAI-style secret key
+AKIA[0-9A-Z]{16}|AWS access key id
+ghp_[0-9A-Za-z]{36}|GitHub personal access token
+xox[baprs]-[0-9A-Za-z-]{10,}|Slack token
+-----BEGIN [A-Z ]*PRIVATE KEY-----|Private key block
+'
+
+printf '%s\n' "$patterns" | while IFS='|' read -r rx label; do
+  [ -z "$rx" ] && continue
+  if printf '%s\n' "$added" | grep -Eq -e "$rx"; then
+    note "✖ Possible $label detected in staged changes."
+    fail=1
+    printf '1' > "$(git rev-parse --git-dir)/.secretscan_hit"
+  fi
+done
+
+# 3) Generic: a key/secret/token/password variable assigned a long literal.
+if printf '%s\n' "$added" \
+  | grep -Eiq "(api[_-]?key|secret|token|password|passwd|access[_-]?key)[\"' ]*[:=][\"' ]*[A-Za-z0-9/+_-]{20,}"; then
+  # Ignore obvious placeholders (your_key, example, changeme, xxxx, <...>).
+  if printf '%s\n' "$added" \
+    | grep -Ei "(api[_-]?key|secret|token|password|passwd|access[_-]?key)[\"' ]*[:=][\"' ]*[A-Za-z0-9/+_-]{20,}" \
+    | grep -vEiq "your_|example|changeme|placeholder|xxxx|<.*>|process\.env|import\.meta"; then
+    note "✖ A secret-looking value is assigned to a key/token/password variable."
+    fail=1
+  fi
+fi
+
+if [ -f "$(git rev-parse --git-dir)/.secretscan_hit" ]; then
+  rm -f "$(git rev-parse --git-dir)/.secretscan_hit"
+  fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+  note ""
+  note "Commit blocked to protect your API keys."
+  note "If this is a false positive, re-run with:  git commit --no-verify"
+  exit 1
+fi
+
+exit 0
