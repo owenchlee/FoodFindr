@@ -1,5 +1,20 @@
 node_modules/
+
+# Secrets — never commit real keys. Ignore every .env variant but keep the
+# safe placeholder template (.env.example) tracked so setup stays documented.
 .env
+.env.*
+!.env.example
+
+# Other common credential/secret files
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+service-account*.json
+
 server/*.db*
 .claude/
 
