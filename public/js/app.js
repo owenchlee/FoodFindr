@@ -122,6 +122,17 @@ function useLastLocationOrShowEmptyState(reason) {
   }
 }
 
+// Runs immediately at script load (not gated behind init()/Maps readiness),
+// since a real no-network state can happen before, during, or after the
+// rest of the app has started, and the two external APIs this app depends
+// on (Google Places, Claude) both need a network to be reachable at all.
+function updateOfflineBanner() {
+  document.getElementById('offline-banner').hidden = navigator.onLine;
+}
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+updateOfflineBanner();
+
 function init() {
   // launchAutoHide is off (capacitor.config.json) so the native splash stays
   // up through the initial network fetch of this remote-loaded page instead
@@ -640,13 +651,13 @@ async function loadProgress({ force = false } = {}) {
   if (!force && key === lastProgressLocationKey) return;
   lastProgressLocationKey = key;
 
+  const params = new URLSearchParams({ lat: userLocation.lat, lng: userLocation.lng });
+  const block = document.getElementById('progress-block');
+  const empty = document.getElementById('progress-empty');
+
   try {
-    const params = new URLSearchParams({ lat: userLocation.lat, lng: userLocation.lng });
     const response = await fetch(`/api/progress?${params.toString()}`);
     const data = await response.json();
-
-    const block = document.getElementById('progress-block');
-    const empty = document.getElementById('progress-empty');
 
     if (!response.ok || !data.city || data.discovered === 0) {
       block.hidden = true;
@@ -662,8 +673,11 @@ async function loadProgress({ force = false } = {}) {
     block.hidden = false;
     empty.hidden = true;
   } catch (err) {
-    // A network failure here shouldn't surface as an app-breaking error (it
-    // used to be an unhandled promise rejection); the panel just stays as-is.
+    // No network (fetch itself throws rather than resolving) - fall back to
+    // the same empty state as a non-ok response instead of leaving this tab
+    // stuck mid-load with no explanation.
+    block.hidden = true;
+    empty.hidden = false;
   }
 }
 
@@ -671,27 +685,32 @@ async function loadStreaks() {
   const block = document.getElementById('streak-block');
   const empty = document.getElementById('streak-empty');
 
-  const response = await fetch('/api/streaks');
-  if (!response.ok) {
+  try {
+    const response = await fetch('/api/streaks');
+    if (!response.ok) {
+      block.hidden = true;
+      empty.hidden = false;
+      return;
+    }
+    const data = await response.json();
+
+    if (!data.lastVisitDate) {
+      block.hidden = true;
+      empty.hidden = false;
+      return;
+    }
+
+    document.getElementById('streak-current-value').textContent = data.currentStreak;
+    document.getElementById('streak-longest-value').textContent = data.longestStreak;
+    document.getElementById('streak-hint').textContent = data.currentStreak > 0
+      ? 'Log a visit tomorrow to keep it going.'
+      : 'Your streak reset. Log a visit today to start a new one.';
+    block.hidden = false;
+    empty.hidden = true;
+  } catch (err) {
     block.hidden = true;
     empty.hidden = false;
-    return;
   }
-  const data = await response.json();
-
-  if (!data.lastVisitDate) {
-    block.hidden = true;
-    empty.hidden = false;
-    return;
-  }
-
-  document.getElementById('streak-current-value').textContent = data.currentStreak;
-  document.getElementById('streak-longest-value').textContent = data.longestStreak;
-  document.getElementById('streak-hint').textContent = data.currentStreak > 0
-    ? 'Log a visit tomorrow to keep it going.'
-    : 'Your streak reset. Log a visit today to start a new one.';
-  block.hidden = false;
-  empty.hidden = true;
 }
 
 function badgeElement(badge) {
@@ -720,12 +739,16 @@ function badgeElement(badge) {
 
 async function loadBadges() {
   const grid = document.getElementById('badge-grid');
-  const response = await fetch('/api/badges');
-  if (!response.ok) return;
-  const data = await response.json();
+  try {
+    const response = await fetch('/api/badges');
+    if (!response.ok) return;
+    const data = await response.json();
 
-  grid.replaceChildren();
-  (data.badges || []).forEach(badge => grid.appendChild(badgeElement(badge)));
+    grid.replaceChildren();
+    (data.badges || []).forEach(badge => grid.appendChild(badgeElement(badge)));
+  } catch (err) {
+    // Leave whatever badges are already rendered from the last successful load.
+  }
 }
 
 function leaderboardRowElement(row) {
@@ -759,14 +782,18 @@ async function loadLeaderboard() {
   const list = document.getElementById('leaderboard-list');
   const empty = document.getElementById('leaderboard-empty');
 
-  const response = await fetch('/api/leaderboard');
-  if (!response.ok) return;
-  const data = await response.json();
-  const leaderboard = data.leaderboard || [];
+  try {
+    const response = await fetch('/api/leaderboard');
+    if (!response.ok) return;
+    const data = await response.json();
+    const leaderboard = data.leaderboard || [];
 
-  list.replaceChildren();
-  leaderboard.forEach(row => list.appendChild(leaderboardRowElement(row)));
-  empty.hidden = leaderboard.some(row => row.visitCount > 0);
+    list.replaceChildren();
+    leaderboard.forEach(row => list.appendChild(leaderboardRowElement(row)));
+    empty.hidden = leaderboard.some(row => row.visitCount > 0);
+  } catch (err) {
+    // Leave whatever leaderboard is already rendered from the last successful load.
+  }
 }
 
 function groupItemElement(group) {
@@ -1255,10 +1282,14 @@ function hideTicket() {
 }
 
 async function loadRecentVisits() {
-  const response = await fetch('/api/visits');
-  const data = await response.json();
-  recentVisits = data.visits || [];
-  renderVisitList();
+  try {
+    const response = await fetch('/api/visits');
+    const data = await response.json();
+    recentVisits = data.visits || [];
+    renderVisitList();
+  } catch (err) {
+    // Leave whatever visit list is already rendered from the last successful load.
+  }
 }
 
 function visitItemElement(visit) {
@@ -1340,40 +1371,50 @@ async function submitVisit() {
   const matchesRecommendation = lastRecommendation && restaurantName === lastRecommendation.restaurant.name;
   const flavorTags = matchesRecommendation ? lastRecommendation.dish.flavorTags : [];
 
-  const response = await fetch('/api/visits', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ restaurantName, dish, rating, flavorTags })
-  });
+  try {
+    const response = await fetch('/api/visits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantName, dish, rating, flavorTags })
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    status.textContent = data.error;
+    if (!response.ok) {
+      status.textContent = data.error;
+      status.className = 'visit-status visit-status--error';
+      status.hidden = false;
+      return;
+    }
+
+    recentVisits.unshift(data.visit);
+    renderVisitList();
+    resetVisitForm();
+    status.textContent = 'Visit logged!';
+    status.className = 'visit-status visit-status--ok';
+    status.hidden = false;
+    loadProgress({ force: true });
+    loadStreaks();
+    loadBadges();
+    loadLeaderboard();
+  } catch (err) {
+    status.textContent = "Couldn't reach the server. Check your connection and try again.";
     status.className = 'visit-status visit-status--error';
     status.hidden = false;
-    return;
   }
-
-  recentVisits.unshift(data.visit);
-  renderVisitList();
-  resetVisitForm();
-  status.textContent = 'Visit logged!';
-  status.className = 'visit-status visit-status--ok';
-  status.hidden = false;
-  loadProgress({ force: true });
-  loadStreaks();
-  loadBadges();
-  loadLeaderboard();
 }
 
 async function loadPreferences() {
-  const response = await fetch('/api/preferences');
-  const data = await response.json();
-  preferences = data.preferences;
+  try {
+    const response = await fetch('/api/preferences');
+    const data = await response.json();
+    preferences = data.preferences;
 
-  if (!preferences && !localStorage.getItem(`ff_prefs_skipped_${currentUser.id}`)) {
-    openPreferencesDialog();
+    if (!preferences && !localStorage.getItem(`ff_prefs_skipped_${currentUser.id}`)) {
+      openPreferencesDialog();
+    }
+  } catch (err) {
+    // No network - skip the preferences prompt rather than leaving it hanging.
   }
 }
 
@@ -1451,26 +1492,32 @@ async function submitPreferences() {
   const dietaryRestrictions = Array.from(document.querySelectorAll('#prefs-dietary-chips .chip.active'))
     .map(chip => chip.dataset.restriction);
   const spiceTolerance = document.querySelector('#prefs-spice-toggle button.active').dataset.spice;
-
-  const response = await fetch('/api/preferences', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ favoriteCuisines, dietaryRestrictions, spiceTolerance })
-  });
-
-  const data = await response.json();
   const status = document.getElementById('prefs-status');
 
-  if (!response.ok) {
-    status.textContent = data.error;
+  try {
+    const response = await fetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favoriteCuisines, dietaryRestrictions, spiceTolerance })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      status.textContent = data.error;
+      status.className = 'visit-status visit-status--error';
+      status.hidden = false;
+      return;
+    }
+
+    preferences = data.preferences;
+    status.hidden = true;
+    document.getElementById('prefs-dialog').close();
+  } catch (err) {
+    status.textContent = "Couldn't reach the server. Check your connection and try again.";
     status.className = 'visit-status visit-status--error';
     status.hidden = false;
-    return;
   }
-
-  preferences = data.preferences;
-  status.hidden = true;
-  document.getElementById('prefs-dialog').close();
 }
 
 window.addEventListener('maps-loaded', () => {
