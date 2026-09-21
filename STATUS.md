@@ -207,4 +207,39 @@ simulator (not available on this machine).
 
 ---
 
-## Phase 5 — App Icon and Splash Screen: NOT STARTED YET
+## Phase 5 — App Icon and Splash Screen: **COMPLETE (placeholder)**
+
+Generated at the exact sizes Capacitor's iOS project (`cap add ios`) already
+expects — Xcode's modern single-size asset catalog auto-generates every
+other icon size at build time from one 1024x1024 source, so only these
+needed replacing:
+- `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`
+  (1024x1024, no alpha channel — required, Apple rejects icons with
+  transparency)
+- `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732{,-1,-2}.png`
+  (2732x2732 x3, identical — matches Capacitor's default template, which
+  reuses one image across the 1x/2x/3x buckets)
+
+Used the app's **existing** brand mark (`public/images/logo.png`, the chef
+dog mascot already shown on the login screen) centered on the app's actual
+`--color-char` background (`#1c1512`) — no invented branding, no design
+file existed so this reuses what's already there. Generated via an HTML
+canvas (loaded the logo, filled the background, centered the mark, exported
+`toDataURL()`) rendered in a real Chrome tab and written to disk — this
+needed a throwaway local Node server (`.taskdev/save-asset-server.js` +
+`asset-gen-standalone.html`, not committed, already deleted) since the
+main app server's CSP (`connect-src`/`form-action` both effectively
+`'self'`) correctly blocks a page it serves from POSTing data to another
+local port — a good sign the CSP is doing its job, just inconvenient for
+this one-off generation step.
+
+**Flagged as placeholder needing a real design pass**, per the task brief:
+this is a functional, on-brand placeholder (no default Capacitor logo
+shipping to the App Store), not a finished icon/splash design. A human
+designer should still produce a proper App Store icon (Apple has specific
+icon design guidelines beyond "centered logo on a color") and splash
+screen before submission.
+
+---
+
+## Phase 6 — Privacy Manifest Scaffold: NOT STARTED YET
