@@ -302,4 +302,33 @@ task's own instruction — an agent should not finalize this):
 
 ---
 
-## Phase 7 — Privacy Policy Draft: NOT STARTED YET
+## Phase 7 — Privacy Policy Draft: **COMPLETE (draft, needs human/legal review)**
+
+Wrote `docs/PRIVACY_POLICY.md`, based on actually reading `server/server.js`,
+`server/auth.js`, and `server/db.js` — not assumptions. Covers: account
+data (email + scrypt-hashed password, never plaintext), location (sent to
+Google Places/Geocoding, not collected in the background), search/
+preference data (sent to Anthropic's Claude API for recommendations, stored
+for taste-profile matching), visit-logging and group features, and an
+explicit "what we don't collect" section (no analytics/ad SDKs, confirmed
+by grep — none found in `public/`). Named both third parties data is
+actually shared with (Google, Anthropic) with links to their own policies,
+per the task's explicit instruction that this needs to be accurate since
+it's a real compliance disclosure, not a formality.
+
+**Marked DRAFT throughout**, with inline `[DRAFT NOTE: ...]` markers at
+every spot needing a human decision before publishing: effective
+date/contact method/entity name, data retention specifics, children's
+privacy / age rating, and policy-change process.
+
+**Found a real gap while writing this, not just a placeholder note:** the
+app has account creation (email/password signup) but **no account-deletion
+flow anywhere in the codebase** (checked `server/db.js`,
+`server/auth.js` — no delete-user path exists). Apple's App Store Review
+Guideline 5.1.1(v) requires apps that support account creation to also
+offer in-app account deletion. **This is a likely App Store rejection risk,
+not just a privacy-policy wording issue** — flagged here and in the final
+summary below as something to fix (or get an explicit product decision on)
+before submission, separate from the privacy-policy text itself.
+
+---
