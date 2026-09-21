@@ -332,3 +332,109 @@ summary below as something to fix (or get an explicit product decision on)
 before submission, separate from the privacy-policy text itself.
 
 ---
+
+## Final Summary
+
+All 8 phases (0–7) complete. Branch `ios-app-store-prep`, worked in an
+isolated git worktree at `C:\Users\owen\Documents\GitHub\FoodFindr-ios-worktree`
+(see note below on why) — one commit per phase, all pushed to that branch
+only, nothing merged to `main`, nothing built/signed/submitted.
+
+### What's actually done and verified
+- **Security: GO.** Google Places and Anthropic API keys confirmed
+  server-only, never reachable from the client bundle (Phase 0).
+- Capacitor iOS project scaffolded from scratch and syncs clean (Phase 1).
+- Location permission string added, matches actual (when-in-use only) usage
+  (Phase 2).
+- Real iOS UI bugs found and fixed, not just audited: safe-area insets,
+  10 undersized touch targets, text-callout suppression, and a genuine
+  Capacitor `target="_blank"` gotcha on the "View on Google Maps" link
+  (Phase 3).
+- Real network-failure bugs found and fixed: several `fetch()` calls
+  (most importantly the primary restaurant-search flow) had no `catch` at
+  all and would silently break on no network; added a proactive offline
+  banner. Verified in an actual browser, including forcing offline state
+  (Phase 4).
+
+### What's a placeholder (functional, but needs a follow-up pass)
+- **App icon / splash screen** (Phase 5): on-brand (uses the existing chef-
+  dog mascot and app color scheme), correctly sized, no alpha channel — but
+  a placeholder, not a real App Store icon design.
+- **`PrivacyInfo.xcprivacy`** (Phase 6): data-collection section is grounded
+  in the actual code; the required-reason API section was verified against
+  currently-installed plugin source (found nothing) but explicitly still
+  needs Xcode's own Archive privacy report as the authoritative check.
+- **`docs/PRIVACY_POLICY.md`** (Phase 7): grounded in the actual code and
+  actual third parties (Google, Anthropic) — but has explicit `[DRAFT
+  NOTE: ...]` markers everywhere a human/legal decision is still needed
+  (contact info, retention, age rating, etc.), and needs to be hosted at a
+  real URL before App Store Connect submission (it's just a repo file
+  today).
+
+### Nothing was blocked from Phase 0
+No blocking security issue was found, so no phase was skipped.
+
+### An unplanned event during this run (resolved, no data lost)
+Partway through, this session discovered it was sharing its working
+directory with a **second, unrelated Claude Code session** doing overnight
+tests/lint/export-feature work on branch
+`overnight/tests-export-hardening-20260920`. A branch checkout from this
+session briefly caused the other session's own commit to land on
+`ios-app-store-prep` instead of its intended branch. The other session
+caught it immediately and reverted it themselves before this session had to
+act; this session then moved permanently into the isolated worktree above
+so the two stopped sharing HEAD. No commits or work were lost on either
+side. Mentioned here only so it's not mysterious if branch history looks
+unusual — `git log` on `ios-app-store-prep` is otherwise a clean, linear
+set of phase commits.
+
+### Everything still needed before this can actually ship
+
+**Requires the Apple Developer account / App Store Connect:**
+1. Register the app / confirm the bundle ID — this project used
+   `tech.foodfindr.app` as a placeholder (Phase 1); it must match (or be
+   registered as) whatever's set up in App Store Connect.
+2. Fill out the **Privacy Nutrition Label questionnaire** in App Store
+   Connect — this is separate from `PrivacyInfo.xcprivacy` and is where
+   sharing data with Google/Anthropic actually gets disclosed to Apple and
+   shown to users on the App Store listing.
+3. Host `docs/PRIVACY_POLICY.md` (after human/legal review) at a real,
+   public URL — App Store Connect requires a live privacy policy link.
+4. Confirm the intended App Store age rating and reconcile it with the
+   privacy policy's children's-privacy section.
+5. Apple Developer Program enrollment/certificates/provisioning profiles —
+   not touched here at all, out of scope for a non-macOS agent session.
+
+**Requires Xcode (macOS):**
+1. Open the project, run a real build, and resolve any Swift Package
+   Manager dependency issues — never attempted here (Windows, no Xcode).
+2. Run **Product > Archive** and read Xcode's privacy report to confirm
+   `PrivacyInfo.xcprivacy`'s `NSPrivacyAccessedAPITypes` section (currently
+   empty) doesn't need any entries — see Phase 6.
+3. Drag `PrivacyInfo.xcprivacy` into the `App` target's "Copy Bundle
+   Resources" build phase — not done here, see Phase 6 for why (wouldn't
+   hand-edit `project.pbxproj` without a way to validate it).
+4. Visually verify the Phase 3 safe-area and touch-target CSS fixes on a
+   real device/simulator with a notch/Dynamic Island — approximated
+   correctly by reasoning about the CSS, but never actually seen on an iOS
+   screen.
+5. Test actual airplane-mode behavior on a device/simulator (Phase 4 was
+   verified by forcing `navigator.onLine` in desktop Chrome, not on iOS).
+6. Code-sign and submit — explicitly out of scope per the task's own
+   instructions ("do not attempt to build, sign, or submit anything").
+
+**Requires a human product/business decision:**
+1. **The remote-vs-bundled loading decision** (Phase 1) — currently loads
+   `https://foodfindr.tech` live via `server.url`, which is the pragmatic
+   choice given the codebase has no build step, but carries some App Store
+   review risk as a "thin wrapper" app. Revisit if review pushes back.
+2. **No account-deletion flow exists** (found while writing Phase 7) —
+   Apple's guideline 5.1.1(v) requires one for apps with account creation.
+   This needs either a real feature (add a delete-account endpoint + UI) or
+   an explicit decision about how account deletion will be handled, before
+   submission.
+3. Real design pass on the app icon/splash screen (Phase 5).
+4. Legal review and finalization of the privacy policy (Phase 7) and the
+   `PrivacyInfo.xcprivacy` data-collection entries (Phase 6).
+5. Confirm the `GOOGLE_MAPS_BROWSER_KEY` is actually HTTP-referrer-restricted
+   in Google Cloud Console (Phase 0 — can't be verified from the repo).
