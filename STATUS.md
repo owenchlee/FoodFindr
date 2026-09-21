@@ -158,4 +158,53 @@ never navigates away from itself.
 
 ---
 
-## Phase 4 — Offline and Network Failure Audit: NOT STARTED YET
+## Phase 4 — Offline and Network Failure Audit: **COMPLETE**
+
+Audited all ~18 `fetch()` call sites in `public/js/app.js`. Found the app
+already handled most user-initiated actions (login, recommend, geocode,
+groups) reasonably, but several were genuinely uncaught — `fetch()` itself
+*throws* (rather than resolving with a non-ok response) when there's no
+network at all, and these had no `catch`, meaning an unhandled promise
+rejection and a section that just silently never populates:
+
+- **`loadRestaurants` (critical — the primary Google-Places-backed flow)**
+  had a `try/finally` with no `catch`. Fixed: added a catch showing
+  `showLocationBanner("Couldn't reach the server. Check your connection and
+  try again.")`, matching the existing `!response.ok` message pattern in
+  the same function.
+- `loadProgress`, `loadStreaks`, `loadBadges`, `loadLeaderboard`,
+  `loadRecentVisits`, `loadPreferences` (background/tab-content loaders,
+  called fire-and-forget from `startAppData()`) — wrapped each in try/catch
+  falling back to the same empty-state each already shows for a non-ok
+  response, so a real network failure degrades the same way a server error
+  already does instead of throwing.
+- `submitVisit`, `submitPreferences` (user-initiated form submits) —
+  wrapped with a catch that shows the same
+  "Couldn't reach the server..." message in their existing status element,
+  matching the pattern `submitAuthForm`/`getRecommendation` already used.
+
+**Added a global offline indicator**, since the app depends on two external
+APIs and per-call error messages only fire *after* a user tries an action —
+a proactive "you're offline" banner is the clearer signal the task asked
+for:
+- New `#offline-banner` element (`public/index.html`), styled as a
+  dismiss-free top banner (`public/css/style.css`, `.offline-banner`).
+- `public/js/app.js`: listens for `window` `online`/`offline` events (checked
+  immediately at script load too, in case the app opens while already
+  offline) and toggles the banner via `navigator.onLine`.
+- Stacks below `.location-banner`/`.active-group-banner` via a `:has()`-style
+  sibling selector instead of overlapping them, for the rare case more than
+  one banner is visible at once.
+
+**Verified in a real browser** (not just read the code): ran the server
+locally, loaded the app as a guest, confirmed no console errors, and forced
+`navigator.onLine = false` + dispatched an `offline` event via
+`javascript_tool` to confirm the banner actually renders correctly
+(screenshotted). Also spot-checked the collapsed/expanded side rail after
+the Phase 3 touch-target and safe-area CSS changes — no visual regressions.
+**Not verified:** actual airplane-mode behavior on a real iOS device/
+simulator (not available on this machine).
+
+---
+
+## Phase 5 — App Icon and Splash Screen: NOT STARTED YET
