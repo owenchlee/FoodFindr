@@ -242,4 +242,64 @@ screen before submission.
 
 ---
 
-## Phase 6 — Privacy Manifest Scaffold: NOT STARTED YET
+## Phase 6 — Privacy Manifest Scaffold: **COMPLETE (draft, needs human review)**
+
+Created `ios/App/App/PrivacyInfo.xcprivacy` (Apple's required privacy
+manifest format). Full reasoning is inline in the file's own comments;
+summary:
+
+**Plugins in use:** `@capacitor/geolocation@8.2.2`, `@capacitor/browser@8.0.4`
+(plus `@capacitor/core`'s iOS runtime, always present). That's the complete
+list — checked `package.json`.
+
+**Required-Reason API check — actually done, not guessed:** grepped the
+*installed* native Swift source (`node_modules/@capacitor/ios`,
+`@capacitor/geolocation/ios`, `@capacitor/browser/ios`) for the signal APIs
+in each of Apple's required-reason categories (UserDefaults, file-timestamp,
+disk-space, system-boot-time, active-keyboard). **Found none** at the
+currently pinned versions, so `NSPrivacyAccessedAPITypes` is an empty array.
+This is a real finding, not a skipped step — but it's explicitly **not**
+the authoritative check: a human needs to open the project in Xcode and run
+Product > Archive to get Xcode's own privacy report, which sees the full
+compiled dependency tree (CocoaPods/SPM transitive deps) in a way a static
+source grep on Windows can't. If that report flags anything, the file has
+a comment explaining exactly what to add and where to find Apple's reason
+code list.
+
+**Data collection declared** (`NSPrivacyCollectedDataTypes`), based on what
+the code actually does, not assumptions:
+- **Precise Location** — sent to Google Places server-side to find/rank
+  nearby restaurants (`server/server.js`).
+- **Email Address** — used for account signup/login (`server/auth.js`).
+- **Search History** — craving/dish search terms, cuisine/dietary/price/
+  distance filters; sent to the Claude API server-side to generate a
+  recommendation, and stored server-side (SQLite) to build taste-profile
+  data (flavor tags, preferences).
+
+All three marked `NSPrivacyCollectedDataTypeTracking: false` (no cross-app
+ad tracking) and linked to the user (tied to their account).
+`NSPrivacyTracking` (top-level) is `false`, no tracking domains.
+
+**Explicitly flagged as needing human review before shipping** (per the
+task's own instruction — an agent should not finalize this):
+1. The reason-code section above (empty now, verify with Xcode's own report).
+2. **This file is not yet wired into the Xcode target.** Didn't hand-edit
+   `project.pbxproj` to add it to "Copy Bundle Resources" — that file's a
+   fragile, precisely-structured format with no way for me to validate the
+   edit without Xcode itself to open and check it, and a bad edit could
+   break the whole project loading. A human needs to open the project in
+   Xcode, drag `PrivacyInfo.xcprivacy` into the `App` group, and confirm
+   "Copy items if needed" is off / target membership is checked. Takes
+   under a minute in Xcode; not something worth risking blind.
+3. **The separate App Store Connect Privacy Nutrition Label questionnaire**
+   (filled out on the App Store Connect website, not in this file) is where
+   third-party data sharing with Google and Anthropic actually needs to be
+   disclosed to Apple/users in the App Store listing — this `.xcprivacy`
+   file covers API-usage transparency and this app's own data-collection
+   summary, but the human-facing "does this app share data with third
+   parties" nutrition label is a separate manual step in App Store Connect
+   that only a human with account access can complete.
+
+---
+
+## Phase 7 — Privacy Policy Draft: NOT STARTED YET
