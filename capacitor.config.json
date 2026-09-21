@@ -1,0 +1,12 @@
+{
+  "appId": "tech.foodfindr.app",
+  "appName": "FoodFindr",
+  "webDir": "public",
+  "server": {
+    "url": "https://foodfindr.tech",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}
