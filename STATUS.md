@@ -48,21 +48,114 @@ are same-origin today. This has a direct consequence for Phase 1.
 
 ---
 
-## Phase 1 — Capacitor Setup: IN PROGRESS
+## Phase 1 — Capacitor Setup: **COMPLETE**
 
-Decision needed and made (logged here, flag for human review): rather than
+Installed `@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`,
+`@capacitor/geolocation`. Ran `npx cap init` (appId `tech.foodfindr.app`,
+appName `FoodFindr`) and `npx cap add ios`, then `npx cap sync ios` — synced
+clean, no errors. Generated `ios/App/` Xcode project, using Swift Package
+Manager for the one native plugin dependency (no CocoaPods needed for this
+minimal setup).
+
+**Decision made (flag for human review before submission):** rather than
 bundling `public/` into the app and rewriting every relative `/api/...` fetch
-to an absolute URL, point Capacitor at the live deployed site via
-`server.url: 'https://foodfindr.tech'` in `capacitor.config`. This keeps one
-source of truth and requires no frontend code changes to the fetch calls.
+to an absolute URL, `capacitor.config.json` points at the live deployed site
+via `server.url: "https://foodfindr.tech"`. This keeps one source of truth —
+UI/UX fixes made to `public/` in this repo take effect for both the website
+and the iOS app once deployed, with no separate app-only fork of the frontend.
 **Tradeoff to flag for a human:** Apple review sometimes scrutinizes apps that
-are thin wrappers around a remote website with no offline/native value-add —
-worth a deliberate human decision before submission, not just an agent default.
+are thin wrappers around a remote website with no offline/native value-add.
+This app does have native additions (geolocation plugin available, Info.plist
+permission handling, iOS-specific UI fixes below) but is still fundamentally
+loading remote web content — worth a deliberate go/no-go before submission,
+not just an agent default. Alternative if this gets rejected: switch
+`webDir` to serve `public/` bundled locally and rewrite the ~20 relative
+fetch() calls in `public/js/app.js` to an absolute `API_BASE` constant.
 
-Status will be updated below as this phase completes.
+**App ID note:** `tech.foodfindr.app` was chosen to match the deployed domain
+(foodfindr.tech) since no bundle ID was specified. **This must be confirmed
+against whatever bundle ID is registered (or will be registered) in App Store
+Connect before submission** — changing it later requires a new Xcode project
+identity and possibly a new App Store Connect app record.
+
+**Bundle build note:** did not run `pod install`, open Xcode, or attempt any
+build/sign step, per instructions. `npx cap sync ios` (the CLI-level sync
+check) completed without error, which is as far as this can be verified
+without macOS/Xcode.
+
+## Phase 2 — Location Permission: **COMPLETE**
+
+Added `NSLocationWhenInUseUsageDescription` to `ios/App/App/Info.plist`:
+
+> "FoodFindr uses your location to find restaurants and dishes near you and
+> to show distances to your recommendations. Your location is only used
+> while the app is open and is never used to track you in the background."
+
+Matches actual usage: `public/js/app.js` (`requestUserLocation`, ~line 815)
+calls `navigator.geolocation.getCurrentPosition` only, no `watchPosition`,
+no background location. Only the "when in use" permission is requested —
+not `NSLocationAlwaysAndWhenInUseUsageDescription`, since the app never needs
+always-on access.
 
 ---
 
-## Phases 2-7: NOT STARTED YET
+## Phase 3 — iOS UI Audit: **COMPLETE**
 
-(To be filled in as work proceeds.)
+**Safe area insets.** Added `viewport-fit=cover` to the viewport meta tag
+(`public/index.html`), required for `env(safe-area-inset-*)` to resolve to
+non-zero values on notched/Dynamic-Island iPhones. Added safe-area padding to
+every UI element that's pinned to a viewport edge:
+- `.top-bar` (top: 0, right: 0) — top+right insets, both breakpoints
+- `.side-rail` (top: 0, left: 0, full height) — top+bottom insets
+- `.tab-drawer-panel` (reaches viewport bottom) — bottom inset
+Left/right insets on the narrow 48-56px side rail were deliberately **not**
+expanded (would cramp icons in landscape on notched devices) — flagged as a
+follow-up needing an actual device/simulator to verify, since this can't be
+visually tested on Windows without Xcode.
+
+**44x44pt minimum touch targets (Apple HIG).** Found and fixed ~10 controls
+under the 44pt minimum: `.dish-clear-btn` (20x20), `.password-toggle-btn`
+(28x28), `.drawer-close` (28x28), `.ticket-close-btn` (~27x27), `.tabs-toggle`
+(40x36 / 34x32 mobile), `.rail-btn` (40px / 36px height), `.group-size-row
+button` (32x32), `.group-item-actions button` (~21px tall), `.chip` (~21px
+tall), `.price-toggle button` (~33px tall). Fixed via an invisible
+`::before` hit-area expansion (`position: absolute; inset: -Npx`) for the
+small icon buttons — keeps every visual size and layout exactly as designed,
+only enlarges the tappable area — and via `min-height: 44px` for the chip/
+price-toggle pill buttons where growing the actual box is the more natural
+fix. Not verified on a real device/simulator (not available on this machine)
+— worth a quick visual pass once someone has Xcode open.
+
+**Hover-only interactions.** Audited every `:hover` rule in `style.css`
+(~16 total) — all are supplementary visual feedback on already-tap-clickable
+buttons (background/border color change only). Confirmed none is the *only*
+way to reveal or trigger something (no `:hover { display: ... }` / hover-only
+opacity-reveal patterns found). **No changes needed here.**
+
+**Text selection / callout menus.** Added a scoped rule disabling
+`-webkit-touch-callout` and `-webkit-user-select` on interactive chrome
+(`button`, `svg`, `.cta`, `.chip`, `.rail-btn`, `.tabs-toggle`,
+`.filters-toggle`, `.side-rail`, the wordmark, `#map`, badge/leaderboard
+cards, star ratings) — this stops a long-press on a button or icon from
+popping the native iOS text-selection/copy menu. Left untouched: text inputs,
+the ticket reason text, and other genuine reading/copyable content, which
+should stay selectable as normal.
+
+**Browser-only navigation.** Searched for `window.location`, `history.push/
+back`, and anchor-based navigation. Found exactly one: `#ticket-map-link`
+("View on Google Maps →", `target="_blank"`, href set dynamically in
+`app.js` to a `google.com/maps/search` URL). **This needed a real fix, not
+just an audit note:** Capacitor's WKWebView doesn't open `target="_blank"`
+links on its own (a well-known Capacitor gotcha — no browser tab for them to
+go to, so the click would silently do nothing in the native app). Installed
+`@capacitor/browser` and added a native-only click handler in `app.js`
+(`init()`) that intercepts `a[target="_blank"]` clicks and routes them
+through `Browser.open()` when `Capacitor.isNativePlatform()` is true; on the
+plain website (not wrapped) this is a no-op and the link behaves exactly as
+before. No other browser-chrome dependency (no reliance on the browser back
+button, no full-page reloads) found — the app is a single-page shell that
+never navigates away from itself.
+
+---
+
+## Phase 4 — Offline and Network Failure Audit: NOT STARTED YET

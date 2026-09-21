@@ -82,6 +82,21 @@ function useLastLocationOrShowEmptyState(reason) {
 }
 
 function init() {
+  // WKWebView (Capacitor's iOS engine) doesn't open target="_blank" links on
+  // its own - there's no browser tab for them to go to, so they'd otherwise
+  // just silently do nothing (e.g. the "View on Google Maps" ticket link).
+  // Route them through the native Browser plugin instead, only when running
+  // in the wrapped app; on the plain website this is a no-op and normal
+  // target="_blank" behavior is unchanged.
+  if (window.Capacitor?.isNativePlatform?.()) {
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest('a[target="_blank"]');
+      if (!link || !link.href) return;
+      event.preventDefault();
+      window.Capacitor.Plugins.Browser.open({ url: link.href });
+    });
+  }
+
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
     document.getElementById('location-banner').hidden = true;
     if (usingCustomLocation) {

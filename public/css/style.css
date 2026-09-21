@@ -35,6 +35,29 @@
 
 * { box-sizing: border-box; }
 
+/* iOS WebView: a long-press on a button/icon/map normally pops up the
+   native text-selection/callout ("Copy", "Look Up", etc.) menu, which reads
+   as a bug on non-text controls. Scoped to interactive chrome and the map,
+   not to actual text content (inputs, ticket copy, reviews), which should
+   stay selectable/copyable as normal. */
+button,
+svg,
+.cta,
+.chip,
+.rail-btn,
+.tabs-toggle,
+.filters-toggle,
+.side-rail,
+.top-bar .wordmark,
+#map,
+.badge-card,
+.leaderboard-row,
+.star-rating {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -75,7 +98,10 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-4);
+  /* iOS notch/Dynamic Island/status bar: keep controls clear of the top
+     inset, and of the right inset in landscape on notched devices. Falls
+     back to 0 on browsers without env() support, so this is a no-op there. */
+  padding: calc(var(--space-2) + env(safe-area-inset-top)) calc(var(--space-4) + env(safe-area-inset-right)) var(--space-2) var(--space-4);
   background: var(--color-char);
   border-bottom: 1px solid var(--color-hairline);
   box-shadow: var(--shadow-sm);
@@ -96,7 +122,11 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-2);
-  padding-top: var(--space-4);
+  /* Rail spans full viewport height, so it needs its own top/bottom safe-area
+     padding (notch/status bar above, home indicator below) rather than
+     inheriting it from a parent. */
+  padding-top: calc(var(--space-4) + env(safe-area-inset-top));
+  padding-bottom: env(safe-area-inset-bottom);
   transition: width 240ms ease;
 }
 .side-rail.expanded {
@@ -198,6 +228,15 @@ body {
   color: var(--color-paper-dim);
   cursor: pointer;
   transition: background 150ms ease, color 150ms ease;
+}
+/* Invisible hit-area expansion to a 44x44pt minimum tap target (Apple HIG)
+   without changing the button's visible 20x20 glyph size or the surrounding
+   layout - these are absolutely positioned, so the expanded pseudo doesn't
+   push anything else around. */
+.dish-clear-btn::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
 }
 .dish-clear-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
 .dish-clear-btn[hidden] { display: none; }
@@ -331,6 +370,7 @@ body {
 .price-toggle { display: flex; gap: var(--space-2); }
 .price-toggle button {
   flex: 1;
+  min-height: 44px;
   font-family: var(--font-data);
   font-size: 0.85rem;
   padding: var(--space-2) 0;
@@ -385,6 +425,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 
 .group-size-row { display: flex; align-items: center; gap: var(--space-3); }
 .group-size-row button {
+  position: relative;
   width: 32px;
   height: 32px;
   font-family: var(--font-data);
@@ -396,6 +437,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   cursor: pointer;
 }
 .group-size-row button:hover { border-color: rgba(242, 234, 225, 0.35); }
+.group-size-row button::before { content: ''; position: absolute; inset: -6px; }
 .group-size-value {
   font-family: var(--font-data);
   font-size: 0.95rem;
@@ -472,6 +514,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 }
 
 .tabs-toggle {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -488,8 +531,12 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
 }
+/* 44x44pt minimum tap target (Apple HIG) via an invisible hit-area, same
+   technique as .dish-clear-btn::before - keeps the compact rail visuals. */
+.tabs-toggle::before { content: ''; position: absolute; inset: -4px -2px; }
 
 .rail-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -509,6 +556,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   transition: background 150ms ease, color 150ms ease;
 }
 .rail-btn svg { flex-shrink: 0; }
+.rail-btn::before { content: ''; position: absolute; inset: -2px 0; }
 .rail-btn:hover { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
 .rail-btn.active { background: var(--color-turmeric); color: var(--color-ink); }
 .rail-btn:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
@@ -576,6 +624,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   color: var(--color-paper);
 }
 .drawer-close {
+  position: relative;
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -593,8 +642,9 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 }
 .drawer-close:hover { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
 .drawer-close:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+.drawer-close::before { content: ''; position: absolute; inset: -8px; }
 
-.tab-drawer-panel { padding: var(--space-4); }
+.tab-drawer-panel { padding: var(--space-4); padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom)); }
 .tab-drawer-panel[hidden] { display: none; }
 
 .log-visit-block { padding-top: 0; }
@@ -727,8 +777,9 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   letter-spacing: 0.08em;
   color: var(--color-turmeric);
 }
-.group-item-actions { display: flex; gap: var(--space-2); }
+.group-item-actions { display: flex; gap: var(--space-3); }
 .group-item-actions button {
+  position: relative;
   font-family: var(--font-body);
   font-size: 0.76rem;
   font-weight: 600;
@@ -741,6 +792,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 .group-item-actions button:hover { border-color: rgba(242, 234, 225, 0.35); color: var(--color-paper); }
+.group-item-actions button::before { content: ''; position: absolute; inset: -10px -6px; }
 .group-item-actions .group-search-btn.active {
   background: var(--color-olive);
   color: var(--color-ink);
@@ -996,6 +1048,7 @@ select.visit-input option {
   padding: 0;
   border: none;
   border-radius: 50%;
+  /* see .dish-clear-btn::before for why: 44x44pt tap target, unchanged visuals */
   background: none;
   color: var(--color-paper-dim);
   cursor: pointer;
@@ -1003,6 +1056,7 @@ select.visit-input option {
 }
 .password-toggle-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
 .password-toggle-btn:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
+.password-toggle-btn::before { content: ''; position: absolute; inset: -8px; }
 /* Class-based, not the `hidden` attribute: some browsers' SVG UA stylesheet
    doesn't include a [hidden] { display: none } rule the way the HTML one
    does, so a hidden SVG can render anyway. This works regardless. */
@@ -1051,6 +1105,9 @@ select.visit-input option {
 
 .chip-group { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   font-family: var(--font-body);
   font-size: 0.82rem;
   background: rgba(242, 234, 225, 0.06);
@@ -1248,6 +1305,7 @@ select.visit-input option {
   padding: var(--space-1);
 }
 .ticket-close-btn:hover { color: var(--color-paper); }
+.ticket-close-btn::before { content: ''; position: absolute; inset: -8px; }
 .ticket-close-btn:focus-visible {
   outline: 2px solid var(--color-turmeric);
   outline-offset: 2px;
@@ -1332,18 +1390,20 @@ select.visit-input option {
     height: 32px;
     margin-left: 4px;
   }
+  .tabs-toggle::before { inset: -6px -5px; }
   .rail-btn {
     height: 36px;
     margin: 0 4px;
     font-size: 0.78rem;
   }
+  .rail-btn::before { inset: -4px 0; }
   .rail-btn svg, .tabs-toggle svg { width: 16px; height: 16px; }
   .tabs-toggle span { width: 16px; }
 
   .top-bar {
     left: calc(48px + var(--space-2));
-    right: var(--space-2);
-    top: var(--space-2);
+    right: calc(var(--space-2) + env(safe-area-inset-right));
+    top: calc(var(--space-2) + env(safe-area-inset-top));
     display: flex;
     flex-direction: column;
     align-items: stretch;
