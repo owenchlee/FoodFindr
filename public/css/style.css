@@ -287,6 +287,21 @@ body {
   margin: var(--space-2) 0 0;
 }
 
+.offline-banner {
+  top: calc(var(--top-bar-height) + var(--space-3));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 2 * var(--space-5)));
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--color-paper);
+  background: rgba(200, 57, 30, 0.35);
+  border-color: rgba(200, 57, 30, 0.5);
+  padding: var(--space-2) var(--space-3);
+}
+.offline-banner[hidden] { display: none; }
+
 .location-banner {
   top: calc(var(--top-bar-height) + var(--space-3));
   left: 50%;
@@ -305,6 +320,11 @@ body {
   transition: opacity 200ms ease;
 }
 .location-banner[hidden] { display: none; }
+/* Stack below the offline banner instead of overlapping it on the rare
+   occasion both are visible at once, same pattern as .active-group-banner
+   below stacking under .location-banner. */
+#offline-banner:not([hidden]) ~ .location-banner { top: calc(var(--top-bar-height) + var(--space-3) + 44px); }
+#offline-banner:not([hidden]) ~ .active-group-banner { top: calc(var(--top-bar-height) + var(--space-3) + 88px); }
 .location-banner button {
   flex-shrink: 0;
   background: none;
