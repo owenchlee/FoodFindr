@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
 const path = require('path');
 const {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
@@ -62,15 +63,41 @@ app.use(helmet({
     },
   },
 }));
+app.use(compression());
 app.use(express.json());
 app.use(parseCookies);
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// 1h, not a year: there's no bundler/content-hashed filenames here, so a long
+// TTL on app.js would strand users on stale code after a deploy. etag gives
+// cheap 304s in the meantime. index.html stays no-cache so a deploy is picked
+// up immediately instead of waiting out a stale cached shell.
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  maxAge: '1h',
+  etag: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  }
+}));
+
+// Serves the same config the /api/config JSON endpoint does, but as a plain
+// synchronous script so the client doesn't need to await a fetch before it
+// can inject the Maps <script> tag (see the bootstrap in index.html).
+app.get('/js/config.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(`window.__FF_CONFIG = ${JSON.stringify({
+    mapsBrowserKey: process.env.GOOGLE_MAPS_BROWSER_KEY || null,
+    mapId: process.env.GOOGLE_MAPS_MAP_ID || null
+  })};`);
+});
 
 // /api/restaurants and /api/recommend hit billed Google Places/Anthropic
 // calls per request, so an unlimited public endpoint is a cost-abuse risk.
+// 40, not 20: a normal search now issues two requests (phase-1 /api/restaurants
+// plus the phase-2 /api/restaurants/rest poll), so the old per-search budget
+// of 20 would start 429-ing real users after ~10 searches/minute.
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 20,
+  limit: 40,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -192,6 +219,57 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Tier 0 instrumentation: zero-dependency request timing, surfaced both as a
+// `Server-Timing` header (renders natively in Chrome DevTools -> Network ->
+// Timing) and as a `[perf]` console line for server-log grepping. Set
+// PERF_LOG=0 to silence the console line in production if it gets noisy;
+// the header is always sent since it costs nothing to compute.
+const PERF_LOG = process.env.PERF_LOG !== '0';
+function timer() {
+  const t0 = process.hrtime.bigint();
+  let last = t0;
+  const marks = [];
+  return {
+    mark(label) {
+      const now = process.hrtime.bigint();
+      marks.push([label, Number(now - last) / 1e6]);
+      last = now;
+    },
+    total() { return Number(process.hrtime.bigint() - t0) / 1e6; },
+    header() { return marks.map(([l, d]) => `${l};dur=${d.toFixed(0)}`).join(', '); },
+    log(route, extra) {
+      if (!PERF_LOG) return;
+      console.log(`[perf] ${route} total=${this.total().toFixed(0)}ms ` +
+        marks.map(([l, d]) => `${l}=${d.toFixed(0)}ms`).join(' ') +
+        (extra ? ' ' + Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(' ') : ''));
+    }
+  };
+}
+
+// Generic TTL+LRU cache used by the Places result cache (below) and the
+// Place Details/reviews cache (see fetchPlaceReviews). A Map preserves
+// insertion order, so re-inserting on every get()/set() turns that into an
+// LRU eviction order for free, with no extra bookkeeping structure.
+function makeTtlCache({ ttlMs, maxEntries }) {
+  const map = new Map();
+  return {
+    get(key) {
+      const e = map.get(key);
+      if (!e) return null;
+      if (Date.now() > e.expires) { map.delete(key); return null; }
+      map.delete(key); map.set(key, e);
+      return e;
+    },
+    set(key, value) {
+      map.delete(key);
+      map.set(key, { ...value, expires: Date.now() + ttlMs });
+      while (map.size > maxEntries) map.delete(map.keys().next().value);
+    },
+    delete(key) { map.delete(key); },
+    get size() { return map.size; }
+  };
+}
+
 // Google returns at most 20 results per call; a `next_page_token` unlocks up
 // to 2 more pages (60 total, Google's hard cap; there's no way to get
 // "every" restaurant in a city from this API). Each extra page is a
@@ -210,11 +288,13 @@ async function fetchPlacesPage(endpoint, params, pageToken) {
   }
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
-  const response = await fetch(url);
+  // Node's fetch has no default timeout, so a hung socket would otherwise
+  // hold the request open indefinitely.
+  const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
   return response.json();
 }
 
-async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
+function buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
   const useTextSearch = Boolean(cuisine || dish || dietaryHint);
   const endpoint = useTextSearch
     ? 'https://maps.googleapis.com/maps/api/place/textsearch/json'
@@ -231,35 +311,99 @@ async function fetchPlaces(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
   } else {
     params.type = 'restaurant';
   }
+  return { endpoint, params };
+}
 
-  const allResults = [];
-  let pageToken = null;
-
-  for (let page = 0; page < MAX_PLACES_PAGES; page++) {
-    let data = await fetchPlacesPage(endpoint, params, pageToken);
-
-    if (data.status === 'INVALID_REQUEST' && pageToken) {
-      // A fresh next_page_token isn't active immediately on Google's side. Retry once after a beat.
-      await delay(1500);
-      data = await fetchPlacesPage(endpoint, params, pageToken);
-    }
-
-    if (data.status === 'ZERO_RESULTS') break;
-    if (data.status !== 'OK') {
-      if (page === 0) {
-        throw new Error(`Places API error: ${data.status}${data.error_message ? ': ' + data.error_message : ''}`);
-      }
-      break; // keep whatever earlier pages already returned instead of discarding it
-    }
-
-    allResults.push(...(data.results || []));
-
-    if (!data.next_page_token) break;
-    pageToken = data.next_page_token;
-    await delay(2000); // Google requires a short delay before a page token becomes valid
+// Phase 1: fetch just the first page (20 results, already relevance/prominence
+// -ranked by Google) and return immediately. This is the request handler's
+// only awaited Places call - the 2000ms-per-page delays that used to make
+// every search take 4.5+ extra seconds live entirely in continuePlacesFetch
+// below, which runs in the background after the response has already gone out.
+async function fetchPlacesFirstPage(endpoint, params) {
+  let data = await fetchPlacesPage(endpoint, params, null);
+  if (data.status === 'ZERO_RESULTS') return { results: [], nextPageToken: null };
+  if (data.status !== 'OK') {
+    throw new Error(`Places API error: ${data.status}${data.error_message ? ': ' + data.error_message : ''}`);
   }
+  return { results: data.results || [], nextPageToken: data.next_page_token || null };
+}
 
-  return allResults;
+// Phase 2: pages 2-3, run in the background (NOT awaited by the request
+// handler). Google requires next_page_token to "warm up" for ~2s before it's
+// valid, which is the one delay in this whole path that can't be optimized
+// away - so instead of making the user wait on it, we let it run after the
+// response for page 1 has already been sent.
+async function continuePlacesFetch(entry, endpoint, params, firstPageToken) {
+  const allResults = entry.places.slice();
+  let pageToken = firstPageToken;
+  try {
+    for (let page = 1; page < MAX_PLACES_PAGES && pageToken; page++) {
+      await delay(2000); // Google requires a short delay before a page token becomes valid
+      let data = await fetchPlacesPage(endpoint, params, pageToken);
+
+      if (data.status === 'INVALID_REQUEST') {
+        // A fresh next_page_token isn't active immediately on Google's side. Retry once after a beat.
+        await delay(1500);
+        data = await fetchPlacesPage(endpoint, params, pageToken);
+      }
+
+      if (data.status === 'ZERO_RESULTS') break;
+      if (data.status !== 'OK') break; // keep whatever earlier pages already returned
+
+      allResults.push(...(data.results || []));
+      entry.pagesFetched++;
+      pageToken = data.next_page_token || null;
+    }
+  } catch (err) {
+    console.error('Background Places pagination failed:', err);
+    // fall through and resolve with whatever pages did complete
+  }
+  entry.places = allResults;
+  entry.complete = true;
+  entry.resolveDone(allResults);
+}
+
+// Places search-result cache, keyed tightly enough (~110m/500m buckets) that
+// distance math computed against the caller's actual lat/lng stays accurate,
+// but loosely enough that near-repeat searches (re-panning slightly, toggling
+// a filter back) hit it. Caches the RAW Google `places` array, never the
+// post-filter output, so shapeAndFilter (below) can be re-run per request
+// without the cache bucketing leaking into displayed distances.
+const placesCache = makeTtlCache({ ttlMs: 10 * 60 * 1000, maxEntries: 200 });
+
+// Deliberately excludes `price` (filtered client-side now, see shapeAndFilter)
+// and `groupId` (only affects the derived dietaryHint, already captured below).
+function placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
+  return [
+    lat.toFixed(3), lng.toFixed(3),
+    Math.round(radiusMeters / 500) * 500,
+    (cuisine || '').toLowerCase(),
+    dish.toLowerCase(),
+    dietaryHint.toLowerCase()
+  ].join('|');
+}
+
+// Shared post-filter pipeline for both phase 1 and phase 2/cached responses,
+// so the two can't drift and produce inconsistent markers. Price is
+// deliberately NOT filtered here - it's never sent to Google either, and is
+// applied entirely client-side (see applyLocalFilters in app.js) since it
+// needs zero network round trips.
+function shapeAndFilter(places, lat, lng, cuisine, maxDistance) {
+  let results = places
+    .filter(place => place.geometry && place.geometry.location)
+    .filter(place => !(place.types || []).some(t => NON_RESTAURANT_TYPES.has(t)))
+    .filter(place => !place.business_status || place.business_status === 'OPERATIONAL')
+    .map(place => {
+      const restaurant = placeToRestaurant(place, cuisine);
+      return {
+        ...restaurant,
+        distance: Math.round(distanceInMiles(lat, lng, restaurant.lat, restaurant.lng) * 10) / 10
+      };
+    });
+  if (maxDistance) {
+    results = results.filter(r => r.distance <= Number(maxDistance));
+  }
+  return results;
 }
 
 // Caches lat/lng (rounded to ~1.1km) -> city name so repeated searches in the
@@ -281,7 +425,7 @@ async function geocodeCity(lat, lng) {
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
     const data = await response.json();
 
     if (data.status !== 'OK') {
@@ -324,7 +468,7 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
     const data = await response.json();
 
     if (data.status !== 'OK' || !data.results[0]) {
@@ -339,19 +483,18 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
   }
 });
 
-app.get('/api/restaurants', optionalAuth, async (req, res) => {
-  if (!PLACES_SERVER_KEY) {
-    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY. Add it to .env.', restaurants: [] });
-  }
+// Bounds how many background phase-2 Places pagination jobs can run at once,
+// so a burst of first-time searches can't spawn unbounded 2000ms-delay loops.
+const MAX_CONCURRENT_BACKGROUND_FILLS = 8;
+let activeBackgroundFills = 0;
 
+// Shared by both /api/restaurants and /api/restaurants/rest so the two routes
+// can't compute the search's identity (and therefore cache key) differently.
+function resolveSearchParams(req) {
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    return res.status(400).json({ error: 'A location (lat/lng) is required.', restaurants: [] });
-  }
-  const { price, cuisine, maxDistance, groupId } = req.query;
+  const { cuisine, maxDistance, groupId } = req.query;
   const dish = typeof req.query.dish === 'string' ? req.query.dish.trim().slice(0, 60) : '';
-
   const distanceMiles = maxDistance ? Number(maxDistance) : 3;
   const radiusMeters = Math.min(distanceMiles * 1609.34, 50000);
 
@@ -367,38 +510,123 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
   }
   const dietaryHint = dietaryRestrictionsForHint.join(' ');
 
+  return { lat, lng, cuisine, maxDistance, dish, radiusMeters, dietaryHint };
+}
+
+// recordDiscovered is a ~60-row batched write (see db.js); deferring it with
+// setImmediate keeps it off the response path entirely so a search's perceived
+// latency never includes disk I/O, at the cost of a write error becoming
+// invisible to the client (hence the explicit log here).
+function recordDiscoveredAsync(userId, results, city) {
+  if (!(city && results.length > 0 && userId)) return;
+  setImmediate(() => {
+    try { recordDiscovered(userId, results, city); }
+    catch (err) { console.error('recordDiscovered failed:', err); }
+  });
+}
+
+app.get('/api/restaurants', optionalAuth, async (req, res) => {
+  if (!PLACES_SERVER_KEY) {
+    return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY. Add it to .env.', restaurants: [] });
+  }
+
+  const { lat, lng, cuisine, maxDistance, dish, radiusMeters, dietaryHint } = resolveSearchParams(req);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return res.status(400).json({ error: 'A location (lat/lng) is required.', restaurants: [] });
+  }
+
+  const t = timer();
+  const key = placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
+
   try {
-    const places = await fetchPlaces(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
+    let entry = placesCache.get(key);
+    const cacheState = entry ? (entry.complete ? 'hit' : 'partial') : 'miss';
 
-    let results = places
-      .filter(place => place.geometry && place.geometry.location)
-      .filter(place => !(place.types || []).some(t => NON_RESTAURANT_TYPES.has(t)))
-      .filter(place => !place.business_status || place.business_status === 'OPERATIONAL')
-      .map(place => {
-        const restaurant = placeToRestaurant(place, cuisine);
-        return {
-          ...restaurant,
-          distance: Math.round(distanceInMiles(lat, lng, restaurant.lat, restaurant.lng) * 10) / 10
-        };
-      });
+    if (entry) {
+      if (entry.inflight) await entry.inflight; // coalesce concurrent identical first-page requests
+    } else {
+      const { endpoint, params } = buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
+      const inflight = fetchPlacesFirstPage(endpoint, params);
+      entry = { places: [], complete: false, inflight, donePromise: null, resolveDone: null, pagesFetched: 0 };
+      entry.donePromise = new Promise(resolve => { entry.resolveDone = resolve; });
+      placesCache.set(key, entry);
+      // .set() stores a shallow copy (see makeTtlCache), so re-read the actual
+      // stored reference before mutating it below.
+      entry = placesCache.get(key);
 
-    if (price) {
-      const targetPrice = Number(price);
-      results = results.filter(r => r.price == null || r.price <= targetPrice);
+      const { results: firstPageResults, nextPageToken } = await entry.inflight;
+      entry.places = firstPageResults;
+      entry.inflight = null;
+      entry.pagesFetched = 1;
+
+      if (nextPageToken && activeBackgroundFills < MAX_CONCURRENT_BACKGROUND_FILLS) {
+        activeBackgroundFills++;
+        const { endpoint: bgEndpoint, params: bgParams } = buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
+        continuePlacesFetch(entry, bgEndpoint, bgParams, nextPageToken)
+          .finally(() => { activeBackgroundFills--; });
+      } else {
+        entry.complete = true;
+        entry.resolveDone(entry.places);
+      }
     }
-    if (maxDistance) {
-      results = results.filter(r => r.distance <= Number(maxDistance));
-    }
+    t.mark('places');
 
+    const results = shapeAndFilter(entry.places, lat, lng, cuisine, maxDistance);
     const city = await geocodeCity(lat, lng);
-    if (city && results.length > 0 && req.user) {
-      recordDiscovered(req.user.id, results, city);
-    }
+    t.mark('geocode');
 
-    res.json({ searchCenter: { lat, lng }, city, restaurants: results });
+    recordDiscoveredAsync(req.user && req.user.id, results, city);
+    t.mark('discovered');
+
+    res.setHeader('Server-Timing', t.header());
+    t.log('restaurants', { cache: cacheState, pages: entry.pagesFetched, n: results.length, phase: 1 });
+    res.json({
+      searchCenter: { lat, lng }, city, restaurants: results,
+      searchId: encodeURIComponent(key), complete: entry.complete
+    });
   } catch (err) {
     console.error('Places API request failed:', err);
     res.status(502).json({ error: 'Could not reach Google Places right now. Try again in a moment.', restaurants: [] });
+  }
+});
+
+// Phase 2: resolved once background pagination (kicked off by /api/restaurants
+// above) finishes, or after an 8s bound, whichever comes first. Not rate-shared
+// with the phase-1 route's Places-API cost since it never issues a NEW Google
+// call itself - it just waits on (or reads the finished result of) one that's
+// already running.
+app.get('/api/restaurants/rest', optionalAuth, async (req, res) => {
+  const { lat, lng, cuisine, maxDistance } = resolveSearchParams(req);
+  const searchId = typeof req.query.searchId === 'string' ? req.query.searchId : '';
+  if (Number.isNaN(lat) || Number.isNaN(lng) || !searchId) {
+    return res.status(400).json({ error: 'lat, lng, and searchId are required.', restaurants: [] });
+  }
+
+  const key = decodeURIComponent(searchId);
+  const entry = placesCache.get(key);
+  if (!entry) {
+    // Server restarted or this entry aged out of the cache; the client keeps
+    // its phase-1 results rather than treating this as an error.
+    return res.status(410).json({ restaurants: [], complete: true });
+  }
+
+  const t = timer();
+  try {
+    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(entry.places), 8000));
+    const places = entry.complete ? entry.places : await Promise.race([entry.donePromise, timeoutPromise]);
+    t.mark('places');
+
+    const results = shapeAndFilter(places, lat, lng, cuisine, maxDistance);
+    const city = await geocodeCity(lat, lng);
+    t.mark('geocode');
+    recordDiscoveredAsync(req.user && req.user.id, results, city);
+
+    res.setHeader('Server-Timing', t.header());
+    t.log('restaurants-rest', { cache: entry.complete ? 'hit' : 'partial', pages: entry.pagesFetched, n: results.length });
+    res.json({ restaurants: results, complete: true });
+  } catch (err) {
+    console.error('Background Places fetch failed:', err);
+    res.status(502).json({ error: 'Could not finish loading more results.', restaurants: [] });
   }
 });
 
@@ -426,21 +654,40 @@ app.get('/api/progress', requireAuth, async (req, res) => {
   }
 });
 
+// place_id is stable, globally unique, and carries no user data, so this is
+// keyed and shared across all users. 24h TTL: Google returns at most 5
+// reviews per place and they turn over on the scale of weeks, so a day of
+// staleness is invisible to a "pick me a dish" prompt - and it's also a
+// direct billing win, since Place Details is billed per call and a Surprise
+// Me click fans out to 8-12 of them with otherwise zero reuse between clicks.
+const reviewsCache = makeTtlCache({ ttlMs: 24 * 60 * 60 * 1000, maxEntries: 3000 });
+
 async function fetchPlaceReviews(placeId) {
+  const cached = reviewsCache.get(placeId);
+  if (cached) return cached.reviews;
+
   const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
   url.searchParams.set('place_id', placeId);
   url.searchParams.set('fields', 'reviews');
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
-  const response = await fetch(url);
-  const data = await response.json();
+  let reviews = [];
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    const data = await response.json();
 
-  if (data.status !== 'OK') {
-    console.error('Place Details error:', data.status, data.error_message || '');
-    return [];
+    if (data.status !== 'OK') {
+      console.error('Place Details error:', data.status, data.error_message || '');
+    } else {
+      reviews = (data.result.reviews || []).map(r => r.text).filter(Boolean);
+    }
+  } catch (err) {
+    console.error('Place Details request failed:', err);
   }
 
-  return (data.result.reviews || []).map(r => r.text).filter(Boolean);
+  // Cache the [] outcome too, or a dud place gets re-fetched on every click.
+  reviewsCache.set(placeId, { reviews });
+  return reviews;
 }
 
 function groupInstruction(groupSize, sharing, targetPrice) {
@@ -568,7 +815,53 @@ function dishCravingInstruction(dish, dietaryRestrictions) {
     `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.${restrictionClause}`;
 }
 
-async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }) {
+// The unsuffixed ID is the documented current one; the old date-suffixed
+// string (claude-haiku-4-5-20251001) still works but pins to a snapshot.
+const CLAUDE_HAIKU_MODEL = 'claude-haiku-4-5';
+
+function recommendationToolDef(requireDietaryNote) {
+  const required = ['place_id', 'dish_suggestion', 'reason', 'flavor_tags'];
+  if (requireDietaryNote) required.push('dietary_note');
+
+  return {
+    name: 'recommend_restaurant',
+    description: 'Return the single best restaurant recommendation with a specific dish suggestion.',
+    // strict mode constrains decoding so the output is guaranteed schema-valid,
+    // which directly targets the most common malformation (formatting artifacts
+    // like `</reason>` leaking into a field instead of staying properly closed).
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        place_id: { type: 'string', description: 'The place_id of the chosen restaurant, copied exactly from one of the candidates.' },
+        dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order. For a sharing group, a short one-line summary of the whole shared order (e.g. "Dumplings, mapo tofu, and scallion pancakes to share").' },
+        reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' },
+        flavor_tags: {
+          type: 'array',
+          // strict:true rejects minItems/maxItems values other than 0 or 1
+          // (Anthropic API constraint on strict array schemas), so the exact
+          // count of 3 is enforced only by isValidRecommendation below rather
+          // than the schema itself.
+          description: 'An array of EXACTLY 3 flavor descriptors for the suggested dish, from the fixed list. Not 2, not 4 - exactly 3.',
+          items: { type: 'string', enum: FLAVOR_TAGS }
+        },
+        shared_items: {
+          type: 'array',
+          description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices: real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely; do not include an empty array.',
+          items: { type: 'string', description: 'The name of a dish or menu item to share.' }
+        },
+        dietary_note: {
+          type: 'string',
+          description: 'Required whenever the user/group has a dietary restriction: state plainly whether review evidence confirms the suggested dish fits it, or that this could not be confirmed. Omit entirely when there is no dietary restriction to address.'
+        }
+      },
+      required,
+      additionalProperties: false
+    }
+  };
+}
+
+async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters) {
   const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
@@ -582,7 +875,11 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
     JSON.stringify(candidates, null, 2);
 
-  async function callClaude() {
+  const requireDietaryNote = Boolean(dietaryRestrictions && dietaryRestrictions.length > 0);
+  const tool = recommendationToolDef(requireDietaryNote);
+
+  async function callClaude(extraMessages) {
+    if (perfCounters) perfCounters.claudeCalls++;
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -590,36 +887,13 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json'
       },
+      signal: AbortSignal.timeout(20000),
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: CLAUDE_HAIKU_MODEL,
         max_tokens: 1024,
-        tools: [{
-          name: 'recommend_restaurant',
-          description: 'Return the single best restaurant recommendation with a specific dish suggestion.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              place_id: { type: 'string', description: 'The place_id of the chosen restaurant, copied exactly from one of the candidates.' },
-              dish_suggestion: { type: 'string', description: 'A specific dish or menu item to order. For a sharing group, a short one-line summary of the whole shared order (e.g. "Dumplings, mapo tofu, and scallion pancakes to share").' },
-              reason: { type: 'string', description: 'A friendly 1-2 sentence explanation referencing something concrete from the reviews.' },
-              flavor_tags: {
-                type: 'array',
-                description: 'Exactly 3 flavor descriptors for the suggested dish, from the fixed list.',
-                items: { type: 'string', enum: FLAVOR_TAGS },
-                minItems: 3,
-                maxItems: 3
-              },
-              shared_items: {
-                type: 'array',
-                description: 'ONLY for a sharing group (the prompt will say so explicitly): 3-5 specific item names for the table to share. No prices: real menu prices aren\'t available, so never estimate or invent one. For a single diner or a group ordering individual mains, omit this field entirely; do not include an empty array.',
-                items: { type: 'string', description: 'The name of a dish or menu item to share.' }
-              }
-            },
-            required: ['place_id', 'dish_suggestion', 'reason', 'flavor_tags']
-          }
-        }],
+        tools: [tool],
         tool_choice: { type: 'tool', name: 'recommend_restaurant' },
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content: prompt }, ...(extraMessages || [])]
       })
     });
 
@@ -634,37 +908,54 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
       throw new Error('Claude did not return a structured recommendation.');
     }
 
-    return toolUse.input;
+    return { input: toolUse.input, toolUseId: toolUse.id };
   }
 
-  // Structured tool-use output occasionally malforms on a long `reason` string
-  // (formatting artifacts like `</reason>` or `<parameter...>` leaking into the
-  // text instead of staying in the proper fields), and separately, the reason
-  // sometimes just skips disclosing dietary-fit even though it's required.
-  // One retry clears either case up almost always; isValidRecommendation
-  // catches it rather than letting broken or silently-noncompliant output
-  // reach the client.
-  let result = await callClaude();
-  if (!isValidRecommendation(result, candidates, dietaryRestrictions)) {
-    result = await callClaude();
-    if (!isValidRecommendation(result, candidates, dietaryRestrictions)) {
-      throw new Error('Claude returned a malformed recommendation twice in a row.');
+  // strict:true plus the required dietary_note field should make malformed or
+  // silently-noncompliant output rare; isValidRecommendation still catches it
+  // rather than letting broken output reach the client. On a failure, the
+  // retry is a short repair call (previous tool_use + what failed) instead of
+  // blindly resending the whole candidate JSON, since it's both cheaper and
+  // more likely to succeed than repeating the identical prompt verbatim.
+  let { input: result, toolUseId } = await callClaude();
+  let failureReason = isValidRecommendation(result, candidates, dietaryRestrictions, true);
+  if (failureReason) {
+    const repair = await callClaude([
+      { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'recommend_restaurant', input: result }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: `That response was invalid: ${failureReason}. Please try again.` }] }
+    ]);
+    result = repair.input;
+    failureReason = isValidRecommendation(result, candidates, dietaryRestrictions, true);
+    if (failureReason) {
+      throw new Error(`Claude returned a malformed recommendation twice in a row: ${failureReason}`);
     }
   }
   return result;
 }
 
+// Returns null when valid, or a short human-readable reason string when not -
+// the reason doubles as the corrective text sent back to Claude on retry (see
+// askClaudeForRecommendation), so keep each one specific enough to act on.
 function isValidRecommendation(input, candidates, dietaryRestrictions) {
-  if (!input || typeof input !== 'object') return false;
-  if (typeof input.place_id !== 'string' || !candidates.some(c => c.place_id === input.place_id)) return false;
-  if (typeof input.dish_suggestion !== 'string' || !input.dish_suggestion.trim()) return false;
-  if (typeof input.reason !== 'string' || !input.reason.trim() || /<\/?\w+[^>]*>/.test(input.reason)) return false;
-  if (!Array.isArray(input.flavor_tags) || input.flavor_tags.length !== 3) return false;
-  if (!input.flavor_tags.every(tag => FLAVOR_TAGS.includes(tag))) return false;
+  if (!input || typeof input !== 'object') return 'the response was not a valid object';
+  if (typeof input.place_id !== 'string' || !candidates.some(c => c.place_id === input.place_id)) {
+    return 'place_id must exactly match one of the candidates provided';
+  }
+  if (typeof input.dish_suggestion !== 'string' || !input.dish_suggestion.trim()) {
+    return 'dish_suggestion was missing or empty';
+  }
+  if (typeof input.reason !== 'string' || !input.reason.trim() || /<\/?\w+[^>]*>/.test(input.reason)) {
+    return 'reason was missing, empty, or contained stray markup like </reason> or <parameter>';
+  }
+  if (!Array.isArray(input.flavor_tags) || input.flavor_tags.length !== 3 || !input.flavor_tags.every(tag => FLAVOR_TAGS.includes(tag))) {
+    return `flavor_tags must be exactly 3 values from: ${FLAVOR_TAGS.join(', ')}`;
+  }
   if (dietaryRestrictions && dietaryRestrictions.length > 0) {
-    const mentionsCompliance = /vegan|vegetarian|dietary|restriction|plant-based|compliant|confirm/i.test(input.reason)
-      || dietaryRestrictions.some(r => input.reason.toLowerCase().includes(r.toLowerCase()));
-    if (!mentionsCompliance) return false;
+    // A required field under strict:true can't be silently omitted the way a
+    // regex-sniffed sentence in `reason` could - this replaces that check.
+    if (typeof input.dietary_note !== 'string' || !input.dietary_note.trim()) {
+      return 'dietary_note is required here and must state whether the dish is confirmed compliant with the stated dietary restriction(s), or that it could not be confirmed';
+    }
 
     // The dish name itself must not assert a diet label ("Vegan tacos") unless a
     // review for that exact restaurant actually used that word. Otherwise the name
@@ -678,7 +969,9 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
       const chosen = candidates.find(c => c.place_id === input.place_id);
       const reviewText = (chosen && Array.isArray(chosen.reviews) ? chosen.reviews.join(' ') : '').toLowerCase();
       const groundedInReviews = namedLabels.some(label => reviewText.includes(label));
-      if (!groundedInReviews) return false;
+      if (!groundedInReviews) {
+        return `the dish name claims "${namedLabels[0]}" but no review for this restaurant used that word; only claim a diet label in the dish name if a review for it actually says so`;
+      }
     }
 
     // Naming a dish with an obvious meat/seafood ingredient for a vegan or
@@ -689,11 +982,13 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
       const meatWords = ['chicken', 'beef', 'pork', 'bacon', 'ham', 'turkey', 'lamb', 'steak',
         'sausage', 'meat', 'fish', 'shrimp', 'prawn', 'calamari', 'squid', 'crab', 'lobster',
         'salmon', 'tuna', 'duck', 'veal', 'goat', 'mutton'];
-      const foundMeatWord = meatWords.some(word => new RegExp(`\\b${word}\\b`, 'i').test(dishText));
-      if (foundMeatWord) return false;
+      const foundMeatWord = meatWords.find(word => new RegExp(`\\b${word}\\b`, 'i').test(dishText));
+      if (foundMeatWord) {
+        return `the dish name/shared items mention "${foundMeatWord}", which conflicts with a vegan/vegetarian restriction; pick a candidate whose reviews support a compliant dish instead`;
+      }
     }
   }
-  return true;
+  return null;
 }
 
 // "Surprise Me" should actually surprise: asking Claude to pick the single
@@ -786,23 +1081,26 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     ? budgetPool.slice(0, poolSize)
     : pickRandomTopPool(budgetPool, poolSize);
 
+  const t = timer();
   try {
-    const withReviews = await Promise.all(pool.map(async r => ({
-      place_id: r.id,
-      name: r.name,
-      cuisine: r.cuisine,
-      price: r.price,
-      rating: r.rating,
-      reviews: await fetchPlaceReviews(r.id)
-    })));
+    let reviewsCached = 0, reviewsFetched = 0;
+    const withReviews = await Promise.all(pool.map(async r => {
+      const wasCached = Boolean(reviewsCache.get(r.id));
+      const reviews = await fetchPlaceReviews(r.id);
+      if (wasCached) reviewsCached++; else reviewsFetched++;
+      return { place_id: r.id, name: r.name, cuisine: r.cuisine, price: r.price, rating: r.rating, reviews };
+    }));
+    t.mark('reviews');
 
-    const { place_id, dish_suggestion, reason, flavor_tags, shared_items } = await askClaudeForRecommendation(withReviews, targetPrice, {
+    const perfCounters = { claudeCalls: 0 };
+    const { place_id, dish_suggestion, reason, flavor_tags, shared_items, dietary_note } = await askClaudeForRecommendation(withReviews, targetPrice, {
       groupSize: clampedGroupSize,
       sharing: isSharing,
       personalizationText,
       dietaryRestrictions,
       dish: dishCraving
-    });
+    }, perfCounters);
+    t.mark('claude');
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
     // Only surface shared items in sharing mode, and drop any malformed entries
@@ -816,15 +1114,35 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     // strip any that slip through rather than showing them in user-facing text.
     const stripDashes = (str) => typeof str === 'string' ? str.replace(/[—–]/g, ', ').replace(/,\s*,/g, ',') : str;
 
+    // dietary_note is a separate structured field (see recommendationToolDef)
+    // so it can't be silently omitted the way a regex-sniffed sentence inside
+    // `reason` could; append it here so the user-facing text is unchanged.
+    const fullReason = dietary_note ? `${reason} ${dietary_note}` : reason;
+
+    res.setHeader('Server-Timing', t.header());
+    t.log('recommend', { reviewsCached, reviewsFetched, claudeCalls: perfCounters.claudeCalls, poolSize: pool.length });
     res.json({
       restaurant: pick,
       dish: { name: stripDashes(dish_suggestion), flavorTags: flavor_tags, sharedItems: sharedItems.map(stripDashes) },
-      reason: stripDashes(reason)
+      reason: stripDashes(fullReason)
     });
   } catch (err) {
     console.error('Recommendation failed:', err);
     res.status(502).json({ error: "Couldn't generate a recommendation right now. Try again in a moment." });
   }
+});
+
+// Intent-triggered warm-up for the reviews cache (item 12 in the plan): fired
+// from a hover/focus on the Surprise Me button, before the click itself, so
+// the fan-out in /api/recommend above can hit a warm cache. Deliberately NOT
+// called automatically after every search - Place Details is billed per call,
+// and most searches never lead to a Surprise Me click.
+app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
+  const placeIds = Array.isArray(req.body.placeIds)
+    ? req.body.placeIds.filter(id => typeof id === 'string').slice(0, 15)
+    : [];
+  Promise.allSettled(placeIds.map(id => fetchPlaceReviews(id))).catch(() => {});
+  res.status(202).json({ warming: placeIds.length });
 });
 
 function shapeVisit(row) {

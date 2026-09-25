@@ -10,6 +10,19 @@ const dbPath = process.env.DB_PATH || path.join(__dirname, 'foodfindr.db');
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new DatabaseSync(dbPath);
 
+// WAL is the textbook fix for write latency, but DB_PATH on a host like Azure
+// App Service points into /home, an SMB network share where SQLite WAL's
+// shared-memory (-shm) mapping is unreliable - so assert what actually took
+// instead of assuming it did. `synchronous = NORMAL` delivers most of the
+// write-latency win regardless of filesystem, and is an acceptable durability
+// tradeoff for this data specifically (see recordDiscovered below) - it is
+// NOT applied selectively to users/sessions, which stay on the stricter default.
+const journalMode = db.prepare('PRAGMA journal_mode = WAL').get();
+if (!journalMode || String(journalMode.journal_mode).toLowerCase() !== 'wal') {
+  console.warn('WAL unavailable, staying on', journalMode && journalMode.journal_mode);
+}
+db.exec('PRAGMA synchronous = NORMAL');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -253,14 +266,25 @@ function savePreferences(userId, { favoriteCuisines, dietaryRestrictions, spiceT
   return shapePreferences(row);
 }
 
+// Hoisted to module level (prepared once, not per call) - this and the
+// explicit BEGIN/COMMIT batching below turn what used to be ~60 individual
+// implicit-transaction fsyncs per search into 1.
+const insertDiscoveredStmt = db.prepare(`
+  INSERT OR IGNORE INTO discovered_restaurants (user_id, place_id, name, city, lat, lng, first_seen_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+
 function recordDiscovered(userId, restaurants, city) {
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO discovered_restaurants (user_id, place_id, name, city, lat, lng, first_seen_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
   const now = new Date().toISOString();
-  for (const r of restaurants) {
-    insert.run(userId, r.id, r.name, city, r.lat, r.lng, now);
+  db.exec('BEGIN');
+  try {
+    for (const r of restaurants) {
+      insertDiscoveredStmt.run(userId, r.id, r.name, city, r.lat, r.lng, now);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw err;
   }
 }
 

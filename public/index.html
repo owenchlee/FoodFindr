@@ -15,8 +15,11 @@
 <link rel="icon" type="image/png" href="/images/favicon.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://maps.googleapis.com" crossorigin />
+<link rel="preconnect" href="https://maps.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/css/style.css" />
+<script src="/js/config.js"></script>
 </head>
 <body>
 
@@ -99,6 +102,7 @@
         Filters
       </button>
     </div>
+    <span class="search-refining-pill" id="search-refining-pill" hidden aria-live="polite">Updating results…</span>
     <button type="button" class="cta" id="recommend-btn">Surprise Me</button>
   </div>
 
@@ -421,12 +425,25 @@
   <p class="loading-text">Finding something good…</p>
 </div>
 
-<script src="/js/map.js"></script>
-<script src="/js/app.js"></script>
+<script src="/js/map.js" defer></script>
+<script src="/js/app.js" defer></script>
 <script>
-(async function bootstrapMap() {
-  const response = await fetch('/api/config');
-  const config = await response.json();
+// /js/config.js (loaded synchronously in <head>) sets window.__FF_CONFIG
+// before this runs, which removes what used to be a serial HTML-parses ->
+// await fetch('/api/config') -> inject Maps <script> chain (item 14): the
+// Maps tag can now be injected immediately instead of waiting on a round trip.
+//
+// This inline script itself can't carry `defer` (the attribute has no effect
+// without a `src`), so it still runs synchronously at its position during
+// parsing - BEFORE map.js/app.js, which are now deferred. The setTimeout
+// below pushes bootstrapMap's own execution to right after parsing finishes
+// (and deferred scripts have run), so its 'maps-loaded' dispatch can't fire
+// into the void before app.js has registered the listener for it - the one
+// path here (a missing Maps key) that dispatches synchronously rather than
+// from a later network callback.
+setTimeout(bootstrapMap, 0);
+function bootstrapMap() {
+  const config = window.__FF_CONFIG || {};
   const defaultCenter = { lat: 40.7300, lng: -73.9950 };
 
   if (!config.mapsBrowserKey) {
@@ -449,7 +466,7 @@
     window.dispatchEvent(new Event('maps-loaded'));
   };
   document.head.appendChild(script);
-})();
+}
 </script>
 </body>
 </html>

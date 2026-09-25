@@ -120,13 +120,23 @@ function showRestaurantInfo(restaurant) {
   infoWindow.open(map);
 }
 
+// Diffs against the currently-rendered set instead of tearing everything down
+// and rebuilding it, so calling this a second time per search (phase-1 markers,
+// then phase-2 topping up 20 -> ~57, see loadRestaurants) doesn't flicker or
+// redo synchronous marker-construction work for the ~20 that didn't change.
 function renderMarkers(restaurants) {
   if (!map) return;
 
-  Object.values(markersById).forEach(marker => { marker.map = null; });
-  markersById = {};
+  const nextIds = new Set(restaurants.map(r => r.id));
+  Object.entries(markersById).forEach(([id, marker]) => {
+    if (!nextIds.has(id)) {
+      marker.map = null;
+      delete markersById[id];
+    }
+  });
 
   restaurants.forEach(restaurant => {
+    if (markersById[restaurant.id]) return; // already on the map, untouched
     const marker = new google.maps.marker.AdvancedMarkerElement({
       map,
       position: { lat: restaurant.lat, lng: restaurant.lng },

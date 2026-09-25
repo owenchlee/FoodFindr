@@ -1,4 +1,5 @@
 let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false, dish: '' };
+let allRestaurants = [];
 let lastFilteredRestaurants = [];
 let userLocation = null;
 let usingCustomLocation = false;
@@ -14,6 +15,46 @@ let authMode = 'login';
 let isGuest = false;
 let groups = [];
 let activeGroupId = null;
+
+// ?perf=1 opt-in client-side timing (Tier 0, item 2). Off by default so it
+// never shows up in a normal user's console.
+const PERF = new URLSearchParams(location.search).has('perf');
+function perfLog(label, t0) {
+  if (PERF) console.log(`[perf] ${label}=${(performance.now() - t0).toFixed(0)}ms`);
+}
+
+// Debounce + abort + sequence-guard scheduler for loadRestaurants (item 6).
+// A single filter-tuning burst (dragging the distance slider, tabbing through
+// cuisines) used to fire one full search per intermediate value; this
+// collapses that to one search per settled interaction while still feeling
+// instant for a single deliberate change (a `change` event only fires once
+// per settled interaction anyway).
+let searchSeq = 0;
+let searchTimer = null;
+let searchAbort = null;
+// Resolves once the current search's background phase-2 fetch (if any)
+// finishes - awaited by getRecommendation so a Surprise Me click doesn't
+// sample from only the first 20 results (see loadRestaurants/getRecommendation).
+let pendingRestPromise = null;
+
+function scheduleSearch({ immediate = false } = {}) {
+  clearTimeout(searchTimer);
+  // Set synchronously, NOT inside the async loadRestaurants call. Enter on the
+  // dish field relies on this being true immediately so getRecommendation()
+  // queues itself via pendingRecommendation instead of racing the old results
+  // (see the dish input's keydown handler in init()).
+  restaurantsLoading = true;
+  if (immediate) { runSearch(); return; }
+  searchTimer = setTimeout(runSearch, 300);
+}
+
+function runSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = null;
+  if (searchAbort) searchAbort.abort();
+  searchAbort = new AbortController();
+  loadRestaurants(++searchSeq, searchAbort.signal);
+}
 
 const LAST_LOCATION_KEY = 'ff_last_location';
 const ACTIVE_GROUP_KEY = 'ff_active_group_id';
@@ -75,7 +116,7 @@ function useLastLocationOrShowEmptyState(reason) {
     setOriginMarker(last.lat, last.lng);
     recenterMap(last.lat, last.lng);
     showLocationBanner(`${reason}, showing spots near your last searched area.`);
-    loadRestaurants();
+    scheduleSearch({ immediate: true });
   } else {
     showNoLocationState();
   }
@@ -114,13 +155,15 @@ function init() {
       document.querySelectorAll('#price-filter-toggle button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentFilters.price = Number(btn.dataset.price);
-      loadRestaurants();
+      // Price never reaches Google - it's filtered entirely client-side from
+      // allRestaurants (item 4), so this is a pure local re-render, not a fetch.
+      applyLocalFilters();
     });
   });
 
   document.getElementById('cuisine-select').addEventListener('change', (event) => {
     currentFilters.cuisine = event.target.value;
-    loadRestaurants();
+    scheduleSearch();
   });
 
   const dishInput = document.getElementById('dish-search');
@@ -128,25 +171,29 @@ function init() {
   const updateDishClearBtn = () => { dishClearBtn.hidden = !dishInput.value; };
   dishInput.addEventListener('change', (event) => {
     currentFilters.dish = event.target.value.trim();
-    loadRestaurants();
+    scheduleSearch();
   });
   dishInput.addEventListener('input', updateDishClearBtn);
   dishClearBtn.addEventListener('click', () => {
     dishInput.value = '';
     currentFilters.dish = '';
     updateDishClearBtn();
-    loadRestaurants();
+    scheduleSearch({ immediate: true });
     dishInput.focus();
   });
   dishInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       // blur() synchronously fires 'change' above, which updates
-      // currentFilters.dish and calls loadRestaurants(). By the time blur()
-      // returns, restaurantsLoading is already true, so getRecommendation()
-      // correctly queues itself via the existing pendingRecommendation
-      // mechanism and fires once the new search results are in.
+      // currentFilters.dish. The explicit scheduleSearch({immediate:true})
+      // below - not the debounced one 'change' would otherwise trigger - sets
+      // restaurantsLoading = true synchronously and skips the 300ms debounce
+      // window entirely, so getRecommendation() correctly queues itself via
+      // the existing pendingRecommendation mechanism instead of racing the
+      // previous search's results. Debouncing this path would silently break
+      // that invariant, so don't replace this with a plain scheduleSearch().
       dishInput.blur();
+      scheduleSearch({ immediate: true });
       getRecommendation();
     }
   });
@@ -158,10 +205,30 @@ function init() {
   });
   distanceInput.addEventListener('change', (event) => {
     currentFilters.maxDistance = Number(event.target.value);
-    loadRestaurants();
+    scheduleSearch();
   });
 
-  document.getElementById('recommend-btn').addEventListener('click', getRecommendation);
+  const recommendBtn = document.getElementById('recommend-btn');
+  recommendBtn.addEventListener('click', getRecommendation);
+  // Intent-triggered reviews prewarm (item 12): fires before the click, so the
+  // review fan-out in /api/recommend has a head start. Only warms on actual
+  // hover/focus intent, not on every search, since Place Details is billed
+  // per call. Guarded to at most once per search (lastPrewarmedSeq) so
+  // repeated hovering over the same result set doesn't re-request it.
+  let lastPrewarmedSeq = -1;
+  const prewarm = () => {
+    if (lastFilteredRestaurants.length === 0 || lastPrewarmedSeq === searchSeq) return;
+    lastPrewarmedSeq = searchSeq;
+    const placeIds = lastFilteredRestaurants.slice(0, 15).map(r => r.id);
+    fetch('/api/prewarm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ placeIds })
+    }).catch(() => {});
+  };
+  recommendBtn.addEventListener('mouseenter', prewarm);
+  recommendBtn.addEventListener('focus', prewarm);
+  recommendBtn.addEventListener('touchstart', prewarm, { passive: true });
 
   document.getElementById('ticket-close-btn').addEventListener('click', hideTicket);
 
@@ -262,6 +329,9 @@ function init() {
       }
       setRailExpanded(false);
       openDrawer(btn.dataset.tab);
+      // Opened on demand instead of being fetched on every search (item 9);
+      // force a refresh here since the location bucket may not have changed.
+      if (btn.dataset.tab === 'progress') loadProgress({ force: true });
     });
   });
   document.getElementById('filters-toggle').addEventListener('click', () => {
@@ -525,29 +595,53 @@ function hideLoading() {
   document.getElementById('loading-overlay').hidden = true;
 }
 
-async function loadProgress() {
+// Non-blocking equivalent of showLoading/hideLoading, used for filter
+// refinements instead of the full-screen overlay (item 9) - the map and
+// existing markers stay visible and pannable underneath it.
+function showRefining() {
+  document.getElementById('search-refining-pill').hidden = false;
+}
+function hideRefining() {
+  document.getElementById('search-refining-pill').hidden = true;
+}
+
+// Dedupes redundant /api/progress calls: it was previously re-fetched on
+// every single search (even ones that don't move the lat/lng bucket it keys
+// on) for a panel the user usually isn't looking at. force:true is used when
+// the Progress tab is actually opened, or right after logging a visit, since
+// either can change the numbers without moving location.
+let lastProgressLocationKey = null;
+async function loadProgress({ force = false } = {}) {
   if (!userLocation) return;
+  const key = `${userLocation.lat.toFixed(3)},${userLocation.lng.toFixed(3)}`;
+  if (!force && key === lastProgressLocationKey) return;
+  lastProgressLocationKey = key;
 
-  const params = new URLSearchParams({ lat: userLocation.lat, lng: userLocation.lng });
-  const response = await fetch(`/api/progress?${params.toString()}`);
-  const data = await response.json();
+  try {
+    const params = new URLSearchParams({ lat: userLocation.lat, lng: userLocation.lng });
+    const response = await fetch(`/api/progress?${params.toString()}`);
+    const data = await response.json();
 
-  const block = document.getElementById('progress-block');
-  const empty = document.getElementById('progress-empty');
+    const block = document.getElementById('progress-block');
+    const empty = document.getElementById('progress-empty');
 
-  if (!response.ok || !data.city || data.discovered === 0) {
-    block.hidden = true;
-    empty.hidden = false;
-    return;
+    if (!response.ok || !data.city || data.discovered === 0) {
+      block.hidden = true;
+      empty.hidden = false;
+      return;
+    }
+
+    const percent = Math.round((data.visited / data.discovered) * 100);
+    document.getElementById('progress-city').textContent = `in ${data.city}`;
+    document.getElementById('progress-bar-fill').style.width = `${percent}%`;
+    document.getElementById('progress-count').textContent =
+      `${data.visited} of ${data.discovered} restaurants you've searched up so far, not the whole city`;
+    block.hidden = false;
+    empty.hidden = true;
+  } catch (err) {
+    // A network failure here shouldn't surface as an app-breaking error (it
+    // used to be an unhandled promise rejection); the panel just stays as-is.
   }
-
-  const percent = Math.round((data.visited / data.discovered) * 100);
-  document.getElementById('progress-city').textContent = `in ${data.city}`;
-  document.getElementById('progress-bar-fill').style.width = `${percent}%`;
-  document.getElementById('progress-count').textContent =
-    `${data.visited} of ${data.discovered} restaurants you've searched up so far, not the whole city`;
-  block.hidden = false;
-  empty.hidden = true;
 }
 
 async function loadStreaks() {
@@ -723,7 +817,7 @@ function setActiveGroup(groupId) {
   saveActiveGroupId(activeGroupId);
   renderGroups();
   updateActiveGroupBanner();
-  loadRestaurants();
+  scheduleSearch({ immediate: true });
 }
 
 async function loadGroups() {
@@ -828,7 +922,7 @@ function requestUserLocation() {
       saveLastLocation(userLocation.lat, userLocation.lng);
       setOriginMarker(userLocation.lat, userLocation.lng);
       recenterMap(userLocation.lat, userLocation.lng);
-      loadRestaurants();
+      scheduleSearch({ immediate: true });
     },
     () => {
       if (usingCustomLocation) return;
@@ -891,12 +985,26 @@ function onLocationPicked(lat, lng, source) {
     ? 'Searching near your chosen location. Dismiss to switch back to your current location.'
     : 'Searching near your dropped pin. Dismiss to switch back to your current location.';
   showLocationBanner(message);
-  loadRestaurants();
+  scheduleSearch({ immediate: true });
 }
 
-async function loadRestaurants() {
+// Price is intentionally NOT a query param (see item 4): it never reaches
+// Google, so a price-tier change can be a pure client-side re-filter of
+// allRestaurants with zero network round trip (see applyLocalFilters).
+function applyLocalFilters() {
+  lastFilteredRestaurants = currentFilters.price
+    ? allRestaurants.filter(r => r.price == null || r.price <= currentFilters.price)
+    : allRestaurants.slice();
+  renderMarkers(lastFilteredRestaurants);
+}
+
+// seq/signal come from scheduleSearch's sequence guard (item 6): every render
+// path below bails out if a newer search has since started, so an
+// out-of-order response can never overwrite fresher results.
+async function loadRestaurants(seq, signal) {
   if (!userLocation) {
     showNoLocationState();
+    restaurantsLoading = false;
     return;
   }
   hideNoLocationState();
@@ -904,29 +1012,37 @@ async function loadRestaurants() {
   const params = new URLSearchParams();
   params.set('lat', userLocation.lat);
   params.set('lng', userLocation.lng);
-  if (currentFilters.price) params.set('price', currentFilters.price);
   if (currentFilters.cuisine) params.set('cuisine', currentFilters.cuisine);
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
   if (currentFilters.dish) params.set('dish', currentFilters.dish);
   if (activeGroupId) params.set('groupId', activeGroupId);
 
-  restaurantsLoading = true;
-  showLoading('Scanning nearby spots…');
+  // The very first load has nothing on screen yet, so the full blocking
+  // overlay is fine; every refinement after that uses the non-blocking pill
+  // instead so the map and existing markers stay visible (item 9).
+  const isInitialLoad = allRestaurants.length === 0;
+  const t0 = performance.now();
+  if (isInitialLoad) showLoading('Scanning nearby spots…');
+  else showRefining();
+  pendingRestPromise = null;
+
   try {
-    const response = await fetch(`/api/restaurants?${params.toString()}`);
+    const response = await fetch(`/api/restaurants?${params.toString()}`, { signal });
     const data = await response.json();
+    if (seq !== searchSeq) return; // superseded by a newer search while this was in flight
 
     if (!response.ok) {
       showLocationBanner(data.error || "Couldn't load restaurants nearby. Try again in a moment.");
     }
 
-    lastFilteredRestaurants = data.restaurants || [];
-    renderMarkers(lastFilteredRestaurants);
+    allRestaurants = data.restaurants || [];
+    applyLocalFilters();
     hideTicket();
     loadProgress();
-  } finally {
+    perfLog('search phase1', t0);
+
+    if (isInitialLoad) hideLoading(); else hideRefining();
     restaurantsLoading = false;
-    hideLoading();
     // A "Surprise Me" click that landed while this search was still in
     // flight (e.g. right after dropping a pin) previously got silently
     // swallowed by the loading overlay. This replays it now that fresh
@@ -934,6 +1050,33 @@ async function loadRestaurants() {
     if (pendingRecommendation) {
       pendingRecommendation = false;
       getRecommendation();
+    }
+
+    if (data.searchId && !data.complete) {
+      // Phase 2: pages 2-3 filling in the background on the server. Not
+      // awaited here - additive re-render (item 13, in renderMarkers) when it
+      // lands, or silently kept at phase-1 results if it fails/times out.
+      const restParams = new URLSearchParams(params);
+      restParams.set('searchId', data.searchId);
+      pendingRestPromise = fetch(`/api/restaurants/rest?${restParams.toString()}`, { signal })
+        .then(r => (r.ok || r.status === 410) ? r.json() : null)
+        .then(more => {
+          if (!more || seq !== searchSeq) return;
+          if (more.restaurants && more.restaurants.length > 0) {
+            allRestaurants = more.restaurants;
+            applyLocalFilters();
+            perfLog('search phase2', t0);
+          }
+        })
+        .catch(() => {}) // aborted or failed: keep phase-1 results
+        .finally(() => { pendingRestPromise = null; });
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return; // superseded; the new search owns loading state now
+    if (seq === searchSeq) {
+      showLocationBanner("Couldn't reach the server. Check your connection and try again.");
+      restaurantsLoading = false;
+      if (isInitialLoad) hideLoading(); else hideRefining();
     }
   }
 }
@@ -980,16 +1123,27 @@ async function getRecommendation() {
     return;
   }
 
-  if (lastFilteredRestaurants.length === 0) {
-    showTicketError('No restaurants match your filters. Try widening your distance or price range.');
-    return;
-  }
-
   const button = document.getElementById('recommend-btn');
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = 'Thinking...';
   showLoading('Reading reviews and picking a spot…');
+  const t0 = performance.now();
+
+  if (pendingRestPromise) {
+    // A phase-2 background fetch (pages 2-3) is still in flight; wait for it
+    // so the candidate pool is the full ~57 results instead of just phase 1's
+    // first 20 (see the risk note on item 3 in the search-latency plan).
+    await pendingRestPromise;
+  }
+
+  if (lastFilteredRestaurants.length === 0) {
+    showTicketError('No restaurants match your filters. Try widening your distance or price range.');
+    button.disabled = false;
+    button.textContent = originalLabel;
+    hideLoading();
+    return;
+  }
 
   try {
     const response = await fetch('/api/recommend', {
@@ -1015,6 +1169,7 @@ async function getRecommendation() {
     showTicket(data);
     highlightPick(data.restaurant.id, lastFilteredRestaurants);
     centerOnPick(data.restaurant.lat, data.restaurant.lng);
+    perfLog('recommend', t0);
   } catch (err) {
     showTicketError("Couldn't reach the server. Check your connection and try again.");
   } finally {
@@ -1183,7 +1338,7 @@ async function submitVisit() {
   status.textContent = 'Visit logged!';
   status.className = 'visit-status visit-status--ok';
   status.hidden = false;
-  loadProgress();
+  loadProgress({ force: true });
   loadStreaks();
   loadBadges();
   loadLeaderboard();

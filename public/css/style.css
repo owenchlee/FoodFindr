@@ -1425,6 +1425,35 @@ select.visit-input option {
   }
 }
 
+/* Non-blocking refinement indicator (item 9): shown instead of the full
+   .loading-overlay for filter changes, so the map/markers stay visible and
+   pannable instead of the whole screen feeling frozen. The full overlay is
+   reserved for the initial location-acquisition load and Surprise Me. */
+.search-refining-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  background: var(--color-char-2);
+  color: var(--color-paper-dim);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.search-refining-pill[hidden] { display: none; }
+.search-refining-pill::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--color-turmeric);
+  border-top-color: transparent;
+  animation: refining-spin 0.7s linear infinite;
+}
+@keyframes refining-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ---------- Loading overlay ---------- */
 .loading-overlay {
   position: fixed;
