@@ -123,6 +123,14 @@ function useLastLocationOrShowEmptyState(reason) {
 }
 
 function init() {
+  // launchAutoHide is off (capacitor.config.json) so the native splash stays
+  // up through the initial network fetch of this remote-loaded page instead
+  // of showing a blank/white flash; hide it now that the page's own JS is
+  // running and about to render real content.
+  if (window.Capacitor?.isNativePlatform?.()) {
+    window.Capacitor.Plugins.SplashScreen?.hide();
+  }
+
   document.getElementById('location-banner-dismiss').addEventListener('click', () => {
     document.getElementById('location-banner').hidden = true;
     if (usingCustomLocation) {
