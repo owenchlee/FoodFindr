@@ -38,6 +38,11 @@
 html, body {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
 }
 
 body {
