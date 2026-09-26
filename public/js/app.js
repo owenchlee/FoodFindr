@@ -93,6 +93,14 @@ window.addEventListener('offline', updateOfflineBanner);
 updateOfflineBanner();
 
 function init() {
+  // launchAutoHide is off (capacitor.config.json) so the native splash stays
+  // up through the initial network fetch of this remote-loaded page instead
+  // of showing a blank/white flash; hide it now that the page's own JS is
+  // running and about to render real content.
+  if (window.Capacitor?.isNativePlatform?.()) {
+    window.Capacitor.Plugins.SplashScreen?.hide();
+  }
+
   // WKWebView (Capacitor's iOS engine) doesn't open target="_blank" links on
   // its own - there's no browser tab for them to go to, so they'd otherwise
   // just silently do nothing (e.g. the "View on Google Maps" ticket link).
