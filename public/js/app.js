@@ -176,13 +176,6 @@ window.addEventListener('offline', updateOfflineBanner);
 updateOfflineBanner();
 
 function init() {
-  // launchAutoHide is off (capacitor.config.json) so the native splash stays
-  // up through the initial network fetch of this remote-loaded page instead
-  // of showing a blank/white flash; hide it now that the page's own JS is
-  // running and about to render real content.
-  if (window.Capacitor?.isNativePlatform?.()) {
-    window.Capacitor.Plugins.SplashScreen?.hide();
-  }
 
   // WKWebView (Capacitor's iOS engine) doesn't open target="_blank" links on
   // its own - there's no browser tab for them to go to, so they'd otherwise
@@ -1780,6 +1773,49 @@ window.addEventListener('maps-loaded', () => {
   tryStartApp();
 });
 
+// Native shell setup (iOS/Capacitor only; a no-op in a browser). Runs as
+// soon as this script does rather than in init(), which waits for the ~480KB
+// Maps script: the sign-in screen / top bar are already painted by now, so
+// holding the splash until Maps loaded just hid a usable UI for no reason.
+// Every plugin call is feature-detected and its rejection swallowed, since
+// Capacitor.Plugins hands back a stub for plugins the build doesn't include.
+function setupNativeShell() {
+  if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+  const plugins = window.Capacitor.Plugins;
+  const safely = (fn) => {
+    try {
+      const result = fn();
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch {
+      // Plugin not in this build of the shell.
+    }
+  };
+
+  // launchAutoHide is off (capacitor.config.json) so the native splash covers
+  // the remote page load instead of a blank flash. Two frames = the first
+  // frame with real content has actually been committed to the screen.
+  requestAnimationFrame(() => requestAnimationFrame(() => safely(() => plugins.SplashScreen.hide())));
+
+  // Light status bar content on the dark theme. Also set in
+  // capacitor.config.json; repeated here for shells built before that.
+  safely(() => plugins.SystemBars.setStyle({ style: 'DARK' }));
+
+  // Keyboard (resize: native shrinks the web view): keep the focused field
+  // visible, e.g. the Log a Visit / group inputs lower in the drawer.
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  safely(() => plugins.Keyboard.addListener('keyboardWillShow', () => {
+    document.body.classList.add('keyboard-open');
+    const el = document.activeElement;
+    if (el && el.matches('input, textarea, select')) {
+      setTimeout(() => el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' }), 50);
+    }
+  }));
+  safely(() => plugins.Keyboard.addListener('keyboardWillHide', () => {
+    document.body.classList.remove('keyboard-open');
+  }));
+}
+
+setupNativeShell();
 bindAuthEvents();
 checkAuth();
 

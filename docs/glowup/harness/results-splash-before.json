@@ -1,0 +1,255 @@
+{
+  "label": "splash-before",
+  "date": "2026-09-27T04:36:52.056Z",
+  "runs": 3,
+  "mode": "replay",
+  "summary": {
+    "fcp": 528,
+    "gateVisible": 649.5,
+    "mapsLoaded": 1043.5,
+    "guestToMarkers": 1889.6000000238419,
+    "searchToMarkers": 1345.9000000357628,
+    "searchLongTasks": 2,
+    "searchLongTaskMs": 118,
+    "searchMaxLongTaskMs": 68,
+    "surpriseToFeedback": 49.09999996423721,
+    "surpriseOverlayMs": 0,
+    "surpriseToName": 2632.599999964237,
+    "surpriseToFull": 3705,
+    "firstPartyJs": 21906,
+    "firstPartyCss": 13173,
+    "thirdPartyJs": 478078,
+    "thirdPartyCss": 5460,
+    "relaunchFcp": 180,
+    "relaunchGateVisible": 376.2000000476837,
+    "relaunchGuestToMarkers": 511,
+    "relaunchNavToMarkers": 1115.6000000238419,
+    "splashHideAt": 1045.1000000238419
+  },
+  "results": [
+    {
+      "run": 1,
+      "fcp": 528,
+      "gateVisible": 628.1000000238419,
+      "mapsLoaded": 1005.6999999880791,
+      "guestToMarkers": 1889.6000000238419,
+      "splashHideAt": 1007.3999999761581,
+      "searchToMarkers": 1364.3999999761581,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 118,
+      "searchMaxLongTaskMs": 68,
+      "surpriseToName": 2632.599999964237,
+      "surpriseToFull": 3808.199999988079,
+      "surpriseToFeedback": 64.39999997615814,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21906,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478069,
+      "thirdPartyCss": 5511,
+      "relaunchFcp": 228,
+      "relaunchGateVisible": 418.89999997615814,
+      "relaunchGuestToMarkers": 529.0999999642372,
+      "relaunchNavToMarkers": 1210.2999999523163,
+      "pageErrors": []
+    },
+    {
+      "run": 2,
+      "fcp": 516,
+      "gateVisible": 649.5,
+      "mapsLoaded": 1043.5,
+      "guestToMarkers": 1211.800000011921,
+      "splashHideAt": 1045.1000000238419,
+      "searchToMarkers": 1345.9000000357628,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 116,
+      "searchMaxLongTaskMs": 59,
+      "surpriseToName": 2619.7000000476837,
+      "surpriseToFull": 3705,
+      "surpriseToFeedback": 47.30000001192093,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21906,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478079,
+      "thirdPartyCss": 5460,
+      "relaunchFcp": 168,
+      "relaunchGateVisible": 362.2000000476837,
+      "relaunchGuestToMarkers": 511,
+      "relaunchNavToMarkers": 1115.6000000238419,
+      "pageErrors": []
+    },
+    {
+      "run": 3,
+      "fcp": 556,
+      "gateVisible": 687.9000000357628,
+      "mapsLoaded": 1067.1000000238419,
+      "guestToMarkers": 2004.800000011921,
+      "splashHideAt": 1068.2000000476837,
+      "searchToMarkers": 1337.3999999761581,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 121,
+      "searchMaxLongTaskMs": 71,
+      "surpriseToName": 2637.199999988079,
+      "surpriseToFull": 3702.599999964237,
+      "surpriseToFeedback": 49.09999996423721,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21906,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478078,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 180,
+      "relaunchGateVisible": 376.2000000476837,
+      "relaunchGuestToMarkers": 456.30000001192093,
+      "relaunchNavToMarkers": 1097.9000000357628,
+      "nativeCalls": [
+        {
+          "plugin": "SplashScreen",
+          "method": "hide",
+          "t": 372.30000001192093
+        },
+        {
+          "plugin": "Haptics",
+          "method": "notification",
+          "arg": {
+            "type": "SUCCESS"
+          },
+          "t": 4258.600000023842
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 5468.400000035763
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 6476.200000047684
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 6928.200000047684
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 8967.5
+        },
+        {
+          "plugin": "Haptics",
+          "method": "notification",
+          "arg": {
+            "type": "SUCCESS"
+          },
+          "t": 9251.800000011921
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 9523.400000035763
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 9939.600000023842
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 10480.800000011921
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 10774
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 11418
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 11793.600000023842
+        }
+      ],
+      "flow": [
+        [
+          "Surprise Me (after relaunch)",
+          "ok"
+        ],
+        [
+          "open drawer (Filters)",
+          "ok"
+        ],
+        [
+          "close drawer",
+          "ok"
+        ],
+        [
+          "guest tab bounces to sign-up gate",
+          "ok"
+        ],
+        [
+          "sign up test account",
+          "ok"
+        ],
+        [
+          "skip taste-profile prompt",
+          "ok"
+        ],
+        [
+          "log a visit from the recommendation",
+          "ok"
+        ],
+        [
+          "visit shows in Past Reviews",
+          "ok"
+        ],
+        [
+          "badges + leaderboard render",
+          "ok"
+        ],
+        [
+          "groups: create one",
+          "ok"
+        ],
+        [
+          "log out",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    }
+  ]
+}

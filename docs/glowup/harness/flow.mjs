@@ -202,6 +202,13 @@ async function oneRun(browser, i, { full }) {
     let m = await marks(page);
     r.fcp = m.fcp; r.gateVisible = m.gateVisible; r.mapsLoaded = m.mapsLoaded;
     r.guestToMarkers = m.bootMarkers - m.guestClick;
+    if (FAKE_NATIVE) {
+      // When the native splash would lift on a cold first launch.
+      r.splashHideAt = await page.evaluate(() => {
+        const c = window.__nativeCalls.find(x => x.plugin === 'SplashScreen' && x.method === 'hide');
+        return c ? c.t : null;
+      });
+    }
     if (SHOTS && full) await page.screenshot({ path: path.join(HERE, '..', SHOTS, '1-map.png') });
 
     await searchLocation(page, SEARCH_QUERY);
@@ -381,7 +388,7 @@ await browser.close();
 
 const keys = ['fcp', 'gateVisible', 'mapsLoaded', 'guestToMarkers', 'searchToMarkers', 'searchLongTasks', 'searchLongTaskMs',
   'searchMaxLongTaskMs', 'surpriseToFeedback', 'surpriseOverlayMs', 'surpriseToName', 'surpriseToFull', 'firstPartyJs', 'firstPartyCss', 'thirdPartyJs', 'thirdPartyCss',
-  'relaunchFcp', 'relaunchGateVisible', 'relaunchGuestToMarkers', 'relaunchNavToMarkers'];
+  'relaunchFcp', 'relaunchGateVisible', 'relaunchGuestToMarkers', 'relaunchNavToMarkers', 'splashHideAt'];
 const summary = Object.fromEntries(keys.map(k => [k, median(results.map(r => r[k]))]));
 const out = { label: LABEL, date: new Date().toISOString(), runs: RUNS, mode: MODE, summary, results };
 fs.writeFileSync(path.join(HERE, `results-${LABEL}.json`), JSON.stringify(out, null, 2));

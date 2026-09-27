@@ -7,12 +7,21 @@
     "cleartext": false
   },
   "ios": {
-    "contentInset": "always"
+    "contentInset": "never",
+    "allowsLinkPreview": false,
+    "backgroundColor": "#1c1512"
   },
   "plugins": {
     "SplashScreen": {
       "launchAutoHide": false,
       "backgroundColor": "#1c1512"
+    },
+    "SystemBars": {
+      "style": "DARK"
+    },
+    "Keyboard": {
+      "resize": "native",
+      "style": "DARK"
     }
   }
 }
