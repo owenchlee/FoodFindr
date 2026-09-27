@@ -292,6 +292,14 @@ async function functionalFlow(page, r) {
           document.getElementById('ticket-reason').textContent.length > 20 && !t.classList.contains('is-streaming');
       }, null, { timeout: 20000 });
     });
+    await step('exactly one highlighted pick marker, matching the card', async () => {
+      const res = await page.evaluate(() => {
+        const picks = [...document.querySelectorAll('.marker--pick')];
+        const host = picks[0] && picks[0].closest('gmp-advanced-marker');
+        return { n: picks.length, title: host ? (host.getAttribute('title') || '') : '', name: document.getElementById('ticket-name').textContent };
+      });
+      if (res.n !== 1 || !res.title.startsWith(res.name)) throw new Error(JSON.stringify(res));
+    });
     await step('open drawer (Filters)', async () => {
       await page.click('#filters-toggle');
       await page.waitForSelector('#tab-drawer.open', { timeout: 5000 });
