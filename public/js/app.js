@@ -468,6 +468,10 @@ function onAuthenticated(user) {
 }
 
 function showAuthGate() {
+  // A guest tapping a locked rail tab lands here with the rail still
+  // expanded; left open, it sits over the drawer they land in after signing
+  // up (e.g. covering the Log a Visit star rating).
+  setRailExpanded(false);
   document.getElementById('auth-gate').hidden = false;
 }
 
