@@ -19,9 +19,9 @@ const DIR = path.join(__dirname, 'fixtures');
 fs.mkdirSync(DIR, { recursive: true });
 
 // Latencies modelled on what the real APIs did from a home connection in
-// Sept 2026 (see PERF.md). Claude: ~700ms to first token, ~3s to the end of
-// a ~150-token tool call on Haiku 4.5.
-const LATENCY = { places: 600, geocode: 250, details: 350, claudeTtft: 700, claudeTotal: 3000 };
+// Sept 2026 (see PERF.md). Claude: ~2s to first tool-input token (measured
+// live with eager_input_streaming on Haiku 4.5), ~3s to the end of the call.
+const LATENCY = { places: 600, geocode: 250, details: 350, claudeTtft: 2000, claudeTotal: 3000 };
 
 let seed = 0x5eed;
 Math.random = function mulberry32() {

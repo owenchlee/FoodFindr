@@ -940,7 +940,18 @@ async function streamClaudeToolCall(requestBody, onPartial) {
       'content-type': 'application/json'
     },
     signal: AbortSignal.timeout(20000),
-    body: JSON.stringify({ ...requestBody, stream: true })
+    // eager_input_streaming turns off the API's per-parameter buffering, so
+    // place_id arrives as soon as it's generated instead of after the whole
+    // key/value is done (measured: ~2.7s -> first byte otherwise). The trade
+    // is that the API no longer validates this input against the schema -
+    // strict:true's guarantee doesn't hold for the streamed call - which is
+    // fine here because every result goes through isValidRecommendation and
+    // the (non-streamed, strict) repair retry anyway.
+    body: JSON.stringify({
+      ...requestBody,
+      stream: true,
+      tools: requestBody.tools.map(t => ({ ...t, eager_input_streaming: true }))
+    })
   });
 
   const contentType = response.headers.get('content-type') || '';
@@ -955,6 +966,7 @@ async function streamClaudeToolCall(requestBody, onPartial) {
   let buffered = '';
   let json = '';
   let toolUseId = null;
+  let stopReason = null;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -969,7 +981,9 @@ async function streamClaudeToolCall(requestBody, onPartial) {
       if (event.type === 'error') {
         throw new Error(`Anthropic API error: ${event.error.type}: ${event.error.message}`);
       }
-      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+      if (event.type === 'message_delta' && event.delta && event.delta.stop_reason) {
+        stopReason = event.delta.stop_reason;
+      } else if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
         toolUseId = event.content_block.id;
       } else if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
         json += event.delta.partial_json;
@@ -979,7 +993,14 @@ async function streamClaudeToolCall(requestBody, onPartial) {
   }
 
   if (!toolUseId) throw new Error('Claude did not return a structured recommendation.');
-  return { input: json ? JSON.parse(json) : {}, toolUseId };
+  // Unvalidated eager input can be invalid JSON, or cut off by max_tokens.
+  // Either way hand back an empty object: isValidRecommendation rejects it
+  // and the repair retry takes over, same as any other malformed answer.
+  let input = {};
+  if (stopReason !== 'max_tokens') {
+    try { input = JSON.parse(json); } catch { input = {}; }
+  }
+  return { input, toolUseId };
 }
 
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
