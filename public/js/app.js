@@ -1057,6 +1057,50 @@ function applyLocalFilters() {
   renderMarkers(lastFilteredRestaurants);
 }
 
+// Client-side result cache for stale-while-revalidate (see loadRestaurants).
+// Keyed like the server's placesCache (3-decimal lat/lng, ~110m) plus every
+// filter that changes what the server returns, and the account, since the
+// server folds a signed-in user's dietary restrictions into the query.
+const SEARCH_CACHE_KEY = 'ff_search_cache_v1';
+const SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
+const SEARCH_CACHE_MAX = 8;
+
+function searchCacheKey(params) {
+  return [
+    Number(params.get('lat')).toFixed(3), Number(params.get('lng')).toFixed(3),
+    params.get('cuisine') || '', params.get('maxDistance') || '', (params.get('dish') || '').toLowerCase(),
+    params.get('groupId') || '', currentUser ? currentUser.id : 'guest'
+  ].join('|');
+}
+
+function readSearchCacheStore() {
+  try {
+    const store = JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY) || '{}');
+    return store && typeof store === 'object' ? store : {};
+  } catch {
+    return {};
+  }
+}
+
+function readSearchCache(key) {
+  const entry = readSearchCacheStore()[key];
+  if (!entry || Date.now() - entry.at > SEARCH_CACHE_TTL_MS || !Array.isArray(entry.restaurants)) return null;
+  return entry.restaurants.length > 0 ? entry.restaurants : null;
+}
+
+function writeSearchCache(key, restaurants) {
+  if (!restaurants || restaurants.length === 0) return;
+  try {
+    const store = readSearchCacheStore();
+    store[key] = { at: Date.now(), restaurants };
+    const keys = Object.keys(store).sort((a, b) => store[b].at - store[a].at);
+    keys.slice(SEARCH_CACHE_MAX).forEach(k => delete store[k]);
+    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(store));
+  } catch {
+    // Quota or private mode: the cache is an optimisation, losing it is fine.
+  }
+}
+
 // seq/signal come from scheduleSearch's sequence guard (item 6): every render
 // path below bails out if a newer search has since started, so an
 // out-of-order response can never overwrite fresher results.
@@ -1075,6 +1119,19 @@ async function loadRestaurants(seq, signal) {
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
   if (currentFilters.dish) params.set('dish', currentFilters.dish);
   if (activeGroupId) params.set('groupId', activeGroupId);
+
+  // Stale-while-revalidate: if this exact search (same ~110m spot, same
+  // filters, same account) ran recently, paint its markers now and let the
+  // fresh response below reconcile them (renderMarkers diffs, so unchanged
+  // markers don't flicker). restaurantsLoading stays true until the fresh
+  // data lands, so Surprise Me never picks from the cached copy.
+  const cacheKey = searchCacheKey(params);
+  const cached = readSearchCache(cacheKey);
+  if (cached) {
+    allRestaurants = cached;
+    applyLocalFilters();
+    if (PERF) console.log(`[perf] search cached-paint n=${cached.length}`);
+  }
 
   // The very first load has nothing on screen yet, so the full blocking
   // overlay is fine; every refinement after that uses the non-blocking pill
@@ -1095,6 +1152,7 @@ async function loadRestaurants(seq, signal) {
     }
 
     allRestaurants = data.restaurants || [];
+    if (response.ok) writeSearchCache(cacheKey, allRestaurants);
     applyLocalFilters();
     hideTicket();
     loadProgress();
@@ -1123,6 +1181,7 @@ async function loadRestaurants(seq, signal) {
           if (!more || seq !== searchSeq) return;
           if (more.restaurants && more.restaurants.length > 0) {
             allRestaurants = more.restaurants;
+            writeSearchCache(cacheKey, allRestaurants);
             applyLocalFilters();
             perfLog('search phase2', t0);
           }
