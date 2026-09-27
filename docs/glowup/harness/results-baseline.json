@@ -1,0 +1,164 @@
+{
+  "label": "baseline",
+  "date": "2026-09-27T03:53:48.921Z",
+  "runs": 5,
+  "mode": "replay",
+  "summary": {
+    "fcp": 580,
+    "gateVisible": 703.3000000119209,
+    "mapsLoaded": 1357.5999999642372,
+    "guestToMarkers": 1240,
+    "searchToMarkers": 1376.4000000357628,
+    "searchLongTasks": 2,
+    "searchLongTaskMs": 150,
+    "searchMaxLongTaskMs": 78,
+    "surpriseToName": 3565.400000035763,
+    "surpriseToFull": 3565.7000000476837,
+    "firstPartyJs": 19725,
+    "firstPartyCss": 11877,
+    "thirdPartyJs": 517112,
+    "thirdPartyCss": 5455,
+    "relaunchFcp": 404,
+    "relaunchGateVisible": 612.5,
+    "relaunchGuestToMarkers": 505.09999999403954
+  },
+  "results": [
+    {
+      "run": 1,
+      "fcp": 584,
+      "gateVisible": 666.8999999761581,
+      "mapsLoaded": 1357.5999999642372,
+      "guestToMarkers": 1195.5,
+      "searchToMarkers": 1374.300000011921,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 148,
+      "searchMaxLongTaskMs": 75,
+      "surpriseToName": 3565.400000035763,
+      "surpriseToFull": 3565.7000000476837,
+      "firstPartyJs": 19725,
+      "firstPartyCss": 11877,
+      "thirdPartyJs": 517112,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 376,
+      "relaunchGateVisible": 601.7999999523163,
+      "relaunchGuestToMarkers": 501.80000001192093,
+      "pageErrors": []
+    },
+    {
+      "run": 2,
+      "fcp": 580,
+      "gateVisible": 678.7999999523163,
+      "mapsLoaded": 1314.0999999642372,
+      "guestToMarkers": 2020.3999999761581,
+      "searchToMarkers": 1364.2999999523163,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 159,
+      "searchMaxLongTaskMs": 89,
+      "surpriseToName": 3556.100000023842,
+      "surpriseToFull": 3556.300000011921,
+      "firstPartyJs": 19725,
+      "firstPartyCss": 11877,
+      "thirdPartyJs": 517374,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 404,
+      "relaunchGateVisible": 612.5,
+      "relaunchGuestToMarkers": 508.39999997615814,
+      "pageErrors": []
+    },
+    {
+      "run": 3,
+      "fcp": 580,
+      "gateVisible": 714.1000000238419,
+      "mapsLoaded": 1387.800000011921,
+      "guestToMarkers": 1106.0999999642372,
+      "searchToMarkers": 1423.300000011921,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 125,
+      "searchMaxLongTaskMs": 67,
+      "surpriseToName": 3572.599999964237,
+      "surpriseToFull": 3572.800000011921,
+      "firstPartyJs": 19725,
+      "firstPartyCss": 11877,
+      "thirdPartyJs": 517103,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 412,
+      "relaunchGateVisible": 692.5,
+      "error": "TimeoutError: page.waitForFunction: Timeout 30000ms exceeded.",
+      "pageErrors": [
+        "ReferenceError: initMap is not defined"
+      ]
+    },
+    {
+      "run": 4,
+      "fcp": 576,
+      "gateVisible": 707.5,
+      "mapsLoaded": 1334,
+      "guestToMarkers": 1884.5,
+      "searchToMarkers": 1376.4000000357628,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 236,
+      "searchMaxLongTaskMs": 154,
+      "surpriseToName": 3624.400000035763,
+      "surpriseToFull": 3624.800000011921,
+      "firstPartyJs": 19725,
+      "firstPartyCss": 11877,
+      "thirdPartyJs": 517383,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 448,
+      "relaunchGateVisible": 699,
+      "relaunchGuestToMarkers": 520.6000000238419,
+      "pageErrors": []
+    },
+    {
+      "run": 5,
+      "fcp": 604,
+      "gateVisible": 703.3000000119209,
+      "mapsLoaded": 1363.800000011921,
+      "guestToMarkers": 1240,
+      "searchToMarkers": 1386.2000000476837,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 150,
+      "searchMaxLongTaskMs": 78,
+      "surpriseToName": 3564.199999988079,
+      "surpriseToFull": 3564.300000011921,
+      "firstPartyJs": 19725,
+      "firstPartyCss": 11877,
+      "thirdPartyJs": 517103,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 380,
+      "relaunchGateVisible": 589.1999999880791,
+      "relaunchGuestToMarkers": 460.7000000476837,
+      "flow": [
+        [
+          "Surprise Me (after relaunch)",
+          "ok"
+        ],
+        [
+          "open drawer (Filters)",
+          "ok"
+        ],
+        [
+          "close drawer",
+          "ok"
+        ],
+        [
+          "guest tab bounces to sign-up gate",
+          "ok"
+        ],
+        [
+          "sign up test account",
+          "ok"
+        ],
+        [
+          "skip taste-profile prompt",
+          "ok"
+        ],
+        [
+          "log a visit from the recommendation",
+          "FAIL: TimeoutError: page.click: Timeout 30000ms exceeded."
+        ]
+      ],
+      "pageErrors": []
+    }
+  ]
+}

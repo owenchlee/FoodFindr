@@ -1,0 +1,9 @@
+{
+  "name": "foodfindr-glowup-harness",
+  "private": true,
+  "type": "module",
+  "description": "Perf + end-to-end flow harness for the glow-up branch. Uses the system Chrome; never downloads browsers.",
+  "dependencies": {
+    "playwright-core": "^1.55.0"
+  }
+}
