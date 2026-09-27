@@ -77,7 +77,8 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
   maxAge: '1h',
   etag: true,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    // sw.js too: a stale worker script would keep serving an old shell.
+    if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
   }
 }));
 

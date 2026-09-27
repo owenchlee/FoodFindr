@@ -1782,3 +1782,15 @@ window.addEventListener('maps-loaded', () => {
 
 bindAuthEvents();
 checkAuth();
+
+// App-shell cache (public/sw.js). Feature-detected: WKWebView only exposes
+// navigator.serviceWorker for App-Bound Domains, so inside the iOS shell this
+// is a no-op until that's configured. Registered after load so it never
+// competes with first paint or the Maps download.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Unsupported or blocked (private mode, policy): the app works without it.
+    });
+  });
+}

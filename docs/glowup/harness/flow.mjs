@@ -27,6 +27,7 @@ const RUNS = Number(args.runs || 5);
 const MODE = args.mode || 'replay';
 const SHOTS = args.shots || null;
 const FAKE_NATIVE = Boolean(args['fake-native']);
+const NO_SW = Boolean(args['no-sw']);
 
 // Stand-in for the Capacitor bridge (--fake-native): every
 // Plugins.<Name>.<method>(arg) resolves and is recorded, so the flow can
@@ -130,7 +131,7 @@ async function newContext(browser) {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
     geolocation: HOME,
     permissions: ['geolocation'],
-    serviceWorkers: 'allow'
+    serviceWorkers: NO_SW ? 'block' : 'allow'
   });
   await context.addInitScript(INSTRUMENT);
   if (FAKE_NATIVE) await context.addInitScript(FAKE_CAPACITOR);
@@ -241,6 +242,10 @@ async function oneRun(browser, i, { full }) {
       await waitMark(page, 'bootMarkers', 30000);
       m = await marks(page);
       r.relaunchGuestToMarkers = m.bootMarkers - m.guestClick;
+      // Navigation -> markers on screen. Guest -> markers alone can go UP when
+      // the sign-in screen gets faster, because an earlier tap then waits on
+      // the Maps download; this is the number a user actually feels.
+      r.relaunchNavToMarkers = m.bootMarkers;
     }
     if (full) await functionalFlow(page, r);
 
@@ -376,7 +381,7 @@ await browser.close();
 
 const keys = ['fcp', 'gateVisible', 'mapsLoaded', 'guestToMarkers', 'searchToMarkers', 'searchLongTasks', 'searchLongTaskMs',
   'searchMaxLongTaskMs', 'surpriseToFeedback', 'surpriseOverlayMs', 'surpriseToName', 'surpriseToFull', 'firstPartyJs', 'firstPartyCss', 'thirdPartyJs', 'thirdPartyCss',
-  'relaunchFcp', 'relaunchGateVisible', 'relaunchGuestToMarkers'];
+  'relaunchFcp', 'relaunchGateVisible', 'relaunchGuestToMarkers', 'relaunchNavToMarkers'];
 const summary = Object.fromEntries(keys.map(k => [k, median(results.map(r => r[k]))]));
 const out = { label: LABEL, date: new Date().toISOString(), runs: RUNS, mode: MODE, summary, results };
 fs.writeFileSync(path.join(HERE, `results-${LABEL}.json`), JSON.stringify(out, null, 2));

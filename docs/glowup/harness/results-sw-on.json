@@ -1,0 +1,196 @@
+{
+  "label": "sw-on",
+  "date": "2026-09-27T04:29:44.925Z",
+  "runs": 5,
+  "mode": "replay",
+  "summary": {
+    "fcp": 524,
+    "gateVisible": 671.8999999761581,
+    "mapsLoaded": 1045.5,
+    "guestToMarkers": 1406.199999988079,
+    "searchToMarkers": 1367.300000011921,
+    "searchLongTasks": 2,
+    "searchLongTaskMs": 134,
+    "searchMaxLongTaskMs": 74,
+    "surpriseToFeedback": 47.30000001192093,
+    "surpriseOverlayMs": 0,
+    "surpriseToName": 2616.600000023842,
+    "surpriseToFull": 3743.900000035763,
+    "firstPartyJs": 21769,
+    "firstPartyCss": 13173,
+    "thirdPartyJs": 478077,
+    "thirdPartyCss": 5455,
+    "relaunchFcp": 176,
+    "relaunchGateVisible": 364.89999997615814,
+    "relaunchGuestToMarkers": 526.5999999642372,
+    "relaunchNavToMarkers": 1140.199999988079
+  },
+  "results": [
+    {
+      "run": 1,
+      "fcp": 540,
+      "gateVisible": 671.8999999761581,
+      "mapsLoaded": 1064,
+      "guestToMarkers": 1978.8999999761581,
+      "searchToMarkers": 1383.5,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 136,
+      "searchMaxLongTaskMs": 74,
+      "surpriseToName": 2609.800000011921,
+      "surpriseToFull": 3696.300000011921,
+      "surpriseToFeedback": 48.90000003576279,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21769,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478077,
+      "thirdPartyCss": 5453,
+      "relaunchFcp": 176,
+      "relaunchGateVisible": 364.89999997615814,
+      "relaunchGuestToMarkers": 526.5999999642372,
+      "relaunchNavToMarkers": 1140.199999988079,
+      "pageErrors": []
+    },
+    {
+      "run": 2,
+      "fcp": 520,
+      "gateVisible": 649.8999999761581,
+      "mapsLoaded": 1045.5,
+      "guestToMarkers": 1184.8999999761581,
+      "searchToMarkers": 1385.199999988079,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 148,
+      "searchMaxLongTaskMs": 78,
+      "surpriseToName": 2614.099999964237,
+      "surpriseToFull": 3756.599999964237,
+      "surpriseToFeedback": 41.5,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21769,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478078,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 180,
+      "relaunchGateVisible": 383.5,
+      "relaunchGuestToMarkers": 611.6000000238419,
+      "relaunchNavToMarkers": 1268.1000000238419,
+      "pageErrors": []
+    },
+    {
+      "run": 3,
+      "fcp": 524,
+      "gateVisible": 674.7999999523163,
+      "mapsLoaded": 1067.3999999761581,
+      "guestToMarkers": 1178.1000000238419,
+      "searchToMarkers": 1367.300000011921,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 119,
+      "searchMaxLongTaskMs": 66,
+      "surpriseToName": 2631,
+      "surpriseToFull": 3684.600000023842,
+      "surpriseToFeedback": 47.30000001192093,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21769,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478077,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 172,
+      "relaunchGateVisible": 281.69999998807907,
+      "relaunchGuestToMarkers": 309.5,
+      "relaunchNavToMarkers": 1207.0999999642372,
+      "pageErrors": []
+    },
+    {
+      "run": 4,
+      "fcp": 524,
+      "gateVisible": 657.6000000238419,
+      "mapsLoaded": 1044.9000000357628,
+      "guestToMarkers": 2079,
+      "searchToMarkers": 1366.3999999761581,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 129,
+      "searchMaxLongTaskMs": 69,
+      "surpriseToName": 2616.600000023842,
+      "surpriseToFull": 3749.199999988079,
+      "surpriseToFeedback": 53.30000001192093,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21769,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478068,
+      "thirdPartyCss": 5506,
+      "relaunchFcp": 188,
+      "relaunchGateVisible": 389.39999997615814,
+      "relaunchGuestToMarkers": 425.10000002384186,
+      "relaunchNavToMarkers": 1085.199999988079,
+      "pageErrors": []
+    },
+    {
+      "run": 5,
+      "fcp": 532,
+      "gateVisible": 681.9000000357628,
+      "mapsLoaded": 1038.6000000238419,
+      "guestToMarkers": 1406.199999988079,
+      "searchToMarkers": 1352.5,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 134,
+      "searchMaxLongTaskMs": 77,
+      "surpriseToName": 2618.900000035763,
+      "surpriseToFull": 3743.900000035763,
+      "surpriseToFeedback": 40,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 21769,
+      "firstPartyCss": 13173,
+      "thirdPartyJs": 478078,
+      "thirdPartyCss": 5455,
+      "relaunchFcp": 160,
+      "relaunchGateVisible": 353.80000001192093,
+      "relaunchGuestToMarkers": 535.6999999880791,
+      "relaunchNavToMarkers": 1132.5,
+      "flow": [
+        [
+          "Surprise Me (after relaunch)",
+          "ok"
+        ],
+        [
+          "open drawer (Filters)",
+          "ok"
+        ],
+        [
+          "close drawer",
+          "ok"
+        ],
+        [
+          "guest tab bounces to sign-up gate",
+          "ok"
+        ],
+        [
+          "sign up test account",
+          "ok"
+        ],
+        [
+          "skip taste-profile prompt",
+          "ok"
+        ],
+        [
+          "log a visit from the recommendation",
+          "ok"
+        ],
+        [
+          "visit shows in Past Reviews",
+          "ok"
+        ],
+        [
+          "badges + leaderboard render",
+          "ok"
+        ],
+        [
+          "groups: create one",
+          "ok"
+        ],
+        [
+          "log out",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    }
+  ]
+}
