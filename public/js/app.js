@@ -264,7 +264,12 @@ function init() {
   recommendBtn.addEventListener('focus', prewarm);
   recommendBtn.addEventListener('touchstart', prewarm, { passive: true });
 
-  document.getElementById('ticket-close-btn').addEventListener('click', hideTicket);
+  document.getElementById('ticket-close-btn').addEventListener('click', () => {
+    // Dismissing the card while a recommendation is still streaming in
+    // means "not interested": don't pop it back open on the next event.
+    ticketDismissed = true;
+    hideTicket();
+  });
 
   document.getElementById('group-size-minus').addEventListener('click', () => {
     currentFilters.groupSize = Math.max(1, currentFilters.groupSize - 1);
@@ -1181,7 +1186,11 @@ async function getRecommendation() {
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = 'Thinking...';
-  showLoading('Reading reviews and picking a spot…');
+  // Skeleton card instead of the old full-screen overlay: the map stays
+  // visible and pannable, and the card appears exactly where the answer will
+  // land, so the streamed restaurant/dish fill in place instead of popping in.
+  ticketDismissed = false;
+  showTicketSkeleton();
   const t0 = performance.now();
 
   if (pendingRestPromise) {
@@ -1231,6 +1240,7 @@ async function getRecommendation() {
 
     let finished = false;
     await readEventStream(response, (event, data) => {
+      if (ticketDismissed) return;
       if (event === 'pick') {
         hideLoading();
         showTicketStreaming(data.restaurant);
@@ -1295,7 +1305,10 @@ function showRecommendation(data) {
 }
 
 function setTicketRestaurant(restaurant) {
-  document.getElementById('ticket-name').textContent = restaurant.name;
+  const nameEl = document.getElementById('ticket-name');
+  nameEl.classList.remove('skeleton-line');
+  nameEl.textContent = restaurant.name;
+  document.getElementById('ticket').classList.remove('is-skeleton');
   document.getElementById('ticket-cuisine').textContent = restaurant.cuisine;
   document.getElementById('ticket-price').textContent = restaurant.price ? '$'.repeat(restaurant.price) : '';
   document.getElementById('ticket-rating').textContent = restaurant.rating != null ? `★ ${restaurant.rating}` : '';
@@ -1380,12 +1393,36 @@ function showTicket(data) {
 
 function showTicketError(message) {
   const ticket = document.getElementById('ticket');
+  document.getElementById('ticket-name').classList.remove('skeleton-line');
   document.getElementById('ticket-name').textContent = 'No match';
+  ticket.classList.remove('is-skeleton');
   document.getElementById('ticket-reason').textContent = message;
   document.getElementById('ticket-dish').classList.remove('skeleton-line');
   document.getElementById('ticket-reason').classList.remove('skeleton-block');
   ticket.classList.remove('is-streaming');
   ticket.classList.add('visible', 'ticket--error');
+}
+
+let ticketDismissed = false;
+
+function showTicketSkeleton() {
+  const ticket = document.getElementById('ticket');
+  const nameEl = document.getElementById('ticket-name');
+  nameEl.textContent = '';
+  nameEl.classList.add('skeleton-line');
+  ['ticket-cuisine', 'ticket-price', 'ticket-rating', 'ticket-distance'].forEach(id => {
+    document.getElementById(id).textContent = '';
+  });
+  document.getElementById('ticket-shared-items').replaceChildren();
+  document.getElementById('ticket-flavors').replaceChildren();
+  const dishEl = document.getElementById('ticket-dish');
+  dishEl.textContent = '';
+  dishEl.classList.add('skeleton-line');
+  const reasonEl = document.getElementById('ticket-reason');
+  reasonEl.textContent = '';
+  reasonEl.classList.add('skeleton-block');
+  ticket.classList.remove('ticket--error');
+  ticket.classList.add('visible', 'is-streaming', 'is-skeleton');
 }
 
 function hideTicket() {

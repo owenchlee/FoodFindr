@@ -86,6 +86,11 @@ const INSTRUMENT = () => {
     if (M.marks.searchSubmit != null && M.snapshot && titles.some(t => !M.snapshot.has(t))) mark('searchMarkers');
     if (M.marks.surpriseClick != null) {
       const ticket = document.getElementById('ticket');
+      const overlay = document.getElementById('loading-overlay');
+      const overlayUp = overlay && !overlay.hidden;
+      if (overlayUp || (ticket && ticket.classList.contains('visible'))) mark('recoFeedback');
+      const now = performance.now();
+      if (overlayUp && M.marks.recoFull == null) M.overlayMs = (M.overlayMs || 0) + (now - (M.lastFrame || now));
       const name = document.getElementById('ticket-name');
       const reason = document.getElementById('ticket-reason');
       if (ticket && ticket.classList.contains('visible') && !ticket.classList.contains('ticket--error') &&
@@ -93,6 +98,7 @@ const INSTRUMENT = () => {
       if (ticket && ticket.classList.contains('visible') && reason.textContent.trim().length > 20 &&
           !ticket.classList.contains('is-streaming') && visible(reason)) mark('recoFull');
     }
+    M.lastFrame = performance.now();
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -199,6 +205,8 @@ async function oneRun(browser, i, { full }) {
     m = await marks(page);
     r.surpriseToName = m.recoName - m.surpriseClick;
     r.surpriseToFull = m.recoFull - m.surpriseClick;
+    r.surpriseToFeedback = m.recoFeedback - m.surpriseClick;
+    r.surpriseOverlayMs = Math.round(await page.evaluate(() => window.__ff.overlayMs || 0));
     await sleep(400);
     if (SHOTS && full) await page.screenshot({ path: path.join(HERE, '..', SHOTS, '3-recommendation.png') });
     Object.assign(r, bytes);
@@ -343,7 +351,7 @@ for (let i = 1; i <= RUNS; i++) {
 await browser.close();
 
 const keys = ['fcp', 'gateVisible', 'mapsLoaded', 'guestToMarkers', 'searchToMarkers', 'searchLongTasks', 'searchLongTaskMs',
-  'searchMaxLongTaskMs', 'surpriseToName', 'surpriseToFull', 'firstPartyJs', 'firstPartyCss', 'thirdPartyJs', 'thirdPartyCss',
+  'searchMaxLongTaskMs', 'surpriseToFeedback', 'surpriseOverlayMs', 'surpriseToName', 'surpriseToFull', 'firstPartyJs', 'firstPartyCss', 'thirdPartyJs', 'thirdPartyCss',
   'relaunchFcp', 'relaunchGateVisible', 'relaunchGuestToMarkers'];
 const summary = Object.fromEntries(keys.map(k => [k, median(results.map(r => r[k]))]));
 const out = { label: LABEL, date: new Date().toISOString(), runs: RUNS, mode: MODE, summary, results };

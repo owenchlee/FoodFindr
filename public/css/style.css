@@ -1423,6 +1423,10 @@ select.visit-input option {
 }
 .ticket.is-streaming .ticket-map-link,
 .ticket.is-streaming .ticket-log-btn { visibility: hidden; }
+/* Tap-to-skeleton: shown the instant Surprise Me is pressed, before the
+   server has picked anything. */
+.ticket-name.skeleton-line { height: 1.3em; width: 55%; margin-bottom: var(--space-2); }
+.ticket.is-skeleton .ticket-meta { min-height: 1em; }
 
 .ticket--error .ticket-meta,
 .ticket--error .ticket-divider,
