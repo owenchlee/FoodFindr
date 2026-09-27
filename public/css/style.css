@@ -1395,6 +1395,35 @@ select.visit-input option {
   margin: 0;
 }
 
+/* Streaming state (see showTicketStreaming): placeholder bars hold the space
+   for text that's still being written so the card doesn't jump when it
+   lands. The links are hidden rather than removed so the card height stays
+   put, and because the validated result can still swap the restaurant. */
+.skeleton-line,
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+  color: transparent;
+  border-radius: var(--radius-sm);
+  background: rgba(242, 234, 225, 0.08);
+}
+.skeleton-line { height: 1.1em; width: 70%; }
+.skeleton-block { height: 3.6em; width: 100%; }
+.skeleton-line::after,
+.skeleton-block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(242, 234, 225, 0.08), transparent);
+  animation: skeleton-shimmer 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+.ticket.is-streaming .ticket-map-link,
+.ticket.is-streaming .ticket-log-btn { visibility: hidden; }
+
 .ticket--error .ticket-meta,
 .ticket--error .ticket-divider,
 .ticket--error .ticket-dish,

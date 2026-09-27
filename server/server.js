@@ -815,6 +815,12 @@ function dishCravingInstruction(dish, dietaryRestrictions) {
     `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.${restrictionClause}`;
 }
 
+// The prompt tells Claude to avoid em/en dashes, but that's not guaranteed;
+// strip any that slip through rather than showing them in user-facing text.
+function stripDashesText(str) {
+  return typeof str === 'string' ? str.replace(/[—–]/g, ', ').replace(/,\s*,/g, ',') : str;
+}
+
 // The unsuffixed ID is the documented current one; the old date-suffixed
 // string (claude-haiku-4-5-20251001) still works but pins to a snapshot.
 const CLAUDE_HAIKU_MODEL = 'claude-haiku-4-5';
@@ -861,7 +867,122 @@ function recommendationToolDef(requireDietaryNote) {
   };
 }
 
-async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters) {
+// Best-effort parse of a JSON object prefix, as it arrives in a streamed
+// tool_use input (input_json_delta fragments). Only handles what the
+// recommend_restaurant schema produces: string values and arrays of strings.
+// Returns every completed key in `values`, plus the in-progress string (if
+// the prefix ends mid-string) under its key in `partial`.
+function parsePartialToolInput(src) {
+  const values = {};
+  const partial = {};
+  let i = 0;
+  const ws = () => { while (i < src.length && /\s/.test(src[i])) i++; };
+  // Reads a JSON string starting at src[i] === '"'. Returns { value, done }.
+  const str = () => {
+    const start = i;
+    i++;
+    while (i < src.length) {
+      if (src[i] === '\\') { i += 2; continue; }
+      if (src[i] === '"') { i++; return { value: JSON.parse(src.slice(start, i)), done: true }; }
+      i++;
+    }
+    // Unterminated: drop a dangling escape (e.g. a lone `\` or partial \uXX)
+    // before closing it off so JSON.parse can read what we have so far.
+    const raw = src.slice(start).replace(/\\(u[0-9a-fA-F]{0,3})?$/, '');
+    try { return { value: JSON.parse(raw + '"'), done: false }; } catch { return { value: '', done: false }; }
+  };
+  ws();
+  if (src[i] !== '{') return { values, partial };
+  i++;
+  while (i < src.length) {
+    ws();
+    if (src[i] === '}' || src[i] !== '"') break;
+    const key = str();
+    if (!key.done) break;
+    ws();
+    if (src[i] !== ':') break;
+    i++; ws();
+    if (src[i] === '"') {
+      const v = str();
+      if (v.done) values[key.value] = v.value; else { partial[key.value] = v.value; break; }
+    } else if (src[i] === '[') {
+      i++;
+      const arr = [];
+      let closed = false;
+      while (i < src.length) {
+        ws();
+        if (src[i] === ']') { i++; closed = true; break; }
+        if (src[i] === ',') { i++; continue; }
+        if (src[i] !== '"') break;
+        const v = str();
+        if (!v.done) break;
+        arr.push(v.value);
+      }
+      if (closed) values[key.value] = arr; else { partial[key.value] = arr; break; }
+    } else {
+      break;
+    }
+    ws();
+    if (src[i] === ',') i++;
+  }
+  return { values, partial };
+}
+
+// Streams one Messages API call (stream:true) and returns the same
+// { input, toolUseId } shape as the non-streamed call, calling onPartial with
+// parsePartialToolInput's output each time more tool input arrives.
+async function streamClaudeToolCall(requestBody, onPartial) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json'
+    },
+    signal: AbortSignal.timeout(20000),
+    body: JSON.stringify({ ...requestBody, stream: true })
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok || !contentType.includes('text/event-stream')) {
+    const data = await response.json().catch(() => ({}));
+    const e = data.error || { type: `http_${response.status}`, message: 'unexpected response' };
+    throw new Error(`Anthropic API error: ${e.type}: ${e.message}`);
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let buffered = '';
+  let json = '';
+  let toolUseId = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffered += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buffered.indexOf('\n\n')) !== -1) {
+      const rawEvent = buffered.slice(0, sep);
+      buffered = buffered.slice(sep + 2);
+      const dataLine = rawEvent.split('\n').find(l => l.startsWith('data:'));
+      if (!dataLine) continue;
+      const event = JSON.parse(dataLine.slice(5).trim());
+      if (event.type === 'error') {
+        throw new Error(`Anthropic API error: ${event.error.type}: ${event.error.message}`);
+      }
+      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+        toolUseId = event.content_block.id;
+      } else if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
+        json += event.delta.partial_json;
+        if (onPartial) onPartial(parsePartialToolInput(json));
+      }
+    }
+  }
+
+  if (!toolUseId) throw new Error('Claude did not return a structured recommendation.');
+  return { input: json ? JSON.parse(json) : {}, toolUseId };
+}
+
+async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
   const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
@@ -880,6 +1001,17 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
 
   async function callClaude(extraMessages) {
     if (perfCounters) perfCounters.claudeCalls++;
+    const requestBody = {
+      model: CLAUDE_HAIKU_MODEL,
+      max_tokens: 1024,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'recommend_restaurant' },
+      messages: [{ role: 'user', content: prompt }, ...(extraMessages || [])]
+    };
+    // Only the first call streams: a repair retry replaces whatever was
+    // streamed, so there's nothing useful to show from it early.
+    if (onPartial && !extraMessages) return streamClaudeToolCall(requestBody, onPartial);
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -888,13 +1020,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
         'content-type': 'application/json'
       },
       signal: AbortSignal.timeout(20000),
-      body: JSON.stringify({
-        model: CLAUDE_HAIKU_MODEL,
-        max_tokens: 1024,
-        tools: [tool],
-        tool_choice: { type: 'tool', name: 'recommend_restaurant' },
-        messages: [{ role: 'user', content: prompt }, ...(extraMessages || [])]
-      })
+      body: JSON.stringify(requestBody)
     });
 
     const data = await response.json();
@@ -1081,6 +1207,62 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     ? budgetPool.slice(0, poolSize)
     : pickRandomTopPool(budgetPool, poolSize);
 
+  // Streaming mode (Accept: text/event-stream): same pipeline, but sends the
+  // chosen restaurant the moment Claude has emitted its place_id, then the
+  // dish/reason text as it's generated, then the fully validated result.
+  // The final `result` event is always authoritative - it's produced by the
+  // exact same validation + repair path as the JSON response, and may even
+  // name a different restaurant if the repair retry picked another one.
+  const wantsStream = (req.get('accept') || '').includes('text/event-stream');
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    // compression() buffers until flushed; without this nothing reaches the
+    // client until the response ends, which defeats the point.
+    if (typeof res.flush === 'function') res.flush();
+  };
+  if (wantsStream) {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+  }
+
+  // The dish name and reason are only validated once the whole tool call has
+  // arrived (isValidRecommendation). With a dietary restriction that
+  // validation can reject the dish itself (a diet label the reviews don't
+  // support, meat for a vegan), so in that case only the restaurant - whose
+  // place_id is checked against the pool right here - is sent early, and the
+  // dish/reason wait for the validated result. Without one, the only checks
+  // on those fields are non-empty/no-markup, so streaming them is safe; stray
+  // markup is stripped from partial text below as well.
+  const streamText = !hasDietaryRestriction;
+  const stripMarkup = (s) => typeof s === 'string' ? s.replace(/<\/?\w*[^>]*>?/g, '') : s;
+  let sentPickId = null;
+  let lastPartialJson = '';
+  const onPartial = wantsStream ? ({ values, partial }) => {
+    const placeId = values.place_id;
+    if (placeId && placeId !== sentPickId) {
+      const pickNow = pool.find(r => r.id === placeId);
+      if (!pickNow) return; // not a real candidate; the repair path will handle it
+      sentPickId = placeId;
+      t.mark('first-pick');
+      send('pick', { restaurant: pickNow });
+    }
+    if (!streamText || !sentPickId || isSharing) return;
+    const dishText = values.dish_suggestion ?? partial.dish_suggestion;
+    const reasonText = values.reason ?? partial.reason;
+    const payload = {
+      dish: dishText ? stripDashesText(stripMarkup(dishText)) : null,
+      reason: reasonText ? stripDashesText(stripMarkup(reasonText)) : null
+    };
+    const serialized = JSON.stringify(payload);
+    if (serialized !== lastPartialJson) {
+      lastPartialJson = serialized;
+      send('partial', payload);
+    }
+  } : null;
+
   const t = timer();
   try {
     let reviewsCached = 0, reviewsFetched = 0;
@@ -1099,7 +1281,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
       personalizationText,
       dietaryRestrictions,
       dish: dishCraving
-    }, perfCounters);
+    }, perfCounters, onPartial);
     t.mark('claude');
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
@@ -1110,25 +1292,33 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
       ? shared_items.filter(item => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
       : [];
 
-    // The prompt tells Claude to avoid em/en dashes, but that's not guaranteed;
-    // strip any that slip through rather than showing them in user-facing text.
-    const stripDashes = (str) => typeof str === 'string' ? str.replace(/[—–]/g, ', ').replace(/,\s*,/g, ',') : str;
-
     // dietary_note is a separate structured field (see recommendationToolDef)
     // so it can't be silently omitted the way a regex-sniffed sentence inside
     // `reason` could; append it here so the user-facing text is unchanged.
     const fullReason = dietary_note ? `${reason} ${dietary_note}` : reason;
 
-    res.setHeader('Server-Timing', t.header());
-    t.log('recommend', { reviewsCached, reviewsFetched, claudeCalls: perfCounters.claudeCalls, poolSize: pool.length });
-    res.json({
+    const payload = {
       restaurant: pick,
-      dish: { name: stripDashes(dish_suggestion), flavorTags: flavor_tags, sharedItems: sharedItems.map(stripDashes) },
-      reason: stripDashes(fullReason)
-    });
+      dish: { name: stripDashesText(dish_suggestion), flavorTags: flavor_tags, sharedItems: sharedItems.map(stripDashesText) },
+      reason: stripDashesText(fullReason)
+    };
+    t.log('recommend', { reviewsCached, reviewsFetched, claudeCalls: perfCounters.claudeCalls, poolSize: pool.length, stream: wantsStream });
+    if (wantsStream) {
+      send('result', payload);
+      res.end();
+    } else {
+      res.setHeader('Server-Timing', t.header());
+      res.json(payload);
+    }
   } catch (err) {
     console.error('Recommendation failed:', err);
-    res.status(502).json({ error: "Couldn't generate a recommendation right now. Try again in a moment." });
+    const error = "Couldn't generate a recommendation right now. Try again in a moment.";
+    if (wantsStream) {
+      send('error', { error });
+      res.end();
+    } else {
+      res.status(502).json({ error });
+    }
   }
 });
 

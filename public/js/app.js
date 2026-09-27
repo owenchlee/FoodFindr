@@ -1202,7 +1202,11 @@ async function getRecommendation() {
   try {
     const response = await fetch('/api/recommend', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Asks for the streamed variant (see /api/recommend): the restaurant
+      // shows up as soon as Claude has picked it, and the dish/reason fill in
+      // as they're written. A server that doesn't stream (or an error before
+      // streaming starts) just answers with plain JSON, handled below.
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream, application/json' },
       body: JSON.stringify({
         restaurants: lastFilteredRestaurants,
         price: currentFilters.price,
@@ -1213,17 +1217,38 @@ async function getRecommendation() {
       })
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      showTicketError(data.error);
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream') || !response.body) {
+      const data = await response.json();
+      if (!response.ok) {
+        showTicketError(data.error);
+        return;
+      }
+      showRecommendation(data);
+      perfLog('recommend', t0);
       return;
     }
 
-    showTicket(data);
-    highlightPick(data.restaurant.id, lastFilteredRestaurants);
-    centerOnPick(data.restaurant.lat, data.restaurant.lng);
-    perfLog('recommend', t0);
+    let finished = false;
+    await readEventStream(response, (event, data) => {
+      if (event === 'pick') {
+        hideLoading();
+        showTicketStreaming(data.restaurant);
+        highlightPick(data.restaurant.id, lastFilteredRestaurants);
+        centerOnPick(data.restaurant.lat, data.restaurant.lng);
+        perfLog('recommend first-pick', t0);
+      } else if (event === 'partial') {
+        updateTicketStreaming(data);
+      } else if (event === 'result') {
+        finished = true;
+        showRecommendation(data);
+        perfLog('recommend', t0);
+      } else if (event === 'error') {
+        finished = true;
+        showTicketError(data.error);
+      }
+    });
+    if (!finished) showTicketError("The recommendation got cut off. Try again in a moment.");
   } catch (err) {
     showTicketError("Couldn't reach the server. Check your connection and try again.");
   } finally {
@@ -1233,14 +1258,93 @@ async function getRecommendation() {
   }
 }
 
+// Minimal SSE reader over a fetch() body (EventSource can't POST).
+async function readEventStream(response, onEvent) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffered += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buffered.indexOf('\n\n')) !== -1) {
+      const raw = buffered.slice(0, sep);
+      buffered = buffered.slice(sep + 2);
+      let event = 'message';
+      let data = '';
+      raw.split('\n').forEach(line => {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      });
+      if (data) onEvent(event, JSON.parse(data));
+    }
+  }
+}
+
+function showRecommendation(data) {
+  const previousPickId = lastRecommendation && lastRecommendation.restaurant.id;
+  showTicket(data);
+  // The streamed `pick` already highlighted and centred this restaurant; only
+  // redo it if the validated result ended up naming a different one.
+  if (previousPickId !== data.restaurant.id || !streamedPickId) {
+    highlightPick(data.restaurant.id, lastFilteredRestaurants);
+    centerOnPick(data.restaurant.lat, data.restaurant.lng);
+  }
+  streamedPickId = null;
+}
+
+function setTicketRestaurant(restaurant) {
+  document.getElementById('ticket-name').textContent = restaurant.name;
+  document.getElementById('ticket-cuisine').textContent = restaurant.cuisine;
+  document.getElementById('ticket-price').textContent = restaurant.price ? '$'.repeat(restaurant.price) : '';
+  document.getElementById('ticket-rating').textContent = restaurant.rating != null ? `★ ${restaurant.rating}` : '';
+  document.getElementById('ticket-distance').textContent = `${restaurant.distance} mi`;
+}
+
+// Streaming state of the card: the restaurant is known (and its place_id
+// already checked against the candidates server-side), the rest is still
+// being written. Placeholder lines hold the space so nothing jumps around
+// when the text lands; the Maps/log links stay hidden until the validated
+// result arrives, since the result can still swap in a different pick.
+let streamedPickId = null;
+function showTicketStreaming(restaurant) {
+  streamedPickId = restaurant.id;
+  lastRecommendation = { restaurant, dish: { name: '', flavorTags: [], sharedItems: [] }, reason: '' };
+  const ticket = document.getElementById('ticket');
+  setTicketRestaurant(restaurant);
+  document.getElementById('ticket-shared-items').replaceChildren();
+  document.getElementById('ticket-flavors').replaceChildren();
+  const dishEl = document.getElementById('ticket-dish');
+  dishEl.textContent = '';
+  dishEl.classList.add('skeleton-line');
+  const reasonEl = document.getElementById('ticket-reason');
+  reasonEl.textContent = '';
+  reasonEl.classList.add('skeleton-block');
+  ticket.classList.remove('ticket--error');
+  ticket.classList.add('visible', 'is-streaming');
+}
+
+function updateTicketStreaming({ dish, reason }) {
+  const dishEl = document.getElementById('ticket-dish');
+  const reasonEl = document.getElementById('ticket-reason');
+  if (dish) {
+    dishEl.classList.remove('skeleton-line');
+    dishEl.textContent = `Order: ${dish}`;
+  }
+  if (reason) {
+    reasonEl.classList.remove('skeleton-block');
+    reasonEl.textContent = reason;
+  }
+}
+
 function showTicket(data) {
   lastRecommendation = data;
   const ticket = document.getElementById('ticket');
-  document.getElementById('ticket-name').textContent = data.restaurant.name;
-  document.getElementById('ticket-cuisine').textContent = data.restaurant.cuisine;
-  document.getElementById('ticket-price').textContent = '$'.repeat(data.restaurant.price);
-  document.getElementById('ticket-rating').textContent = `★ ${data.restaurant.rating}`;
-  document.getElementById('ticket-distance').textContent = `${data.restaurant.distance} mi`;
+  ticket.classList.remove('is-streaming');
+  document.getElementById('ticket-dish').classList.remove('skeleton-line');
+  document.getElementById('ticket-reason').classList.remove('skeleton-block');
+  setTicketRestaurant(data.restaurant);
 
   const dishEl = document.getElementById('ticket-dish');
   const sharedList = document.getElementById('ticket-shared-items');
@@ -1278,6 +1382,9 @@ function showTicketError(message) {
   const ticket = document.getElementById('ticket');
   document.getElementById('ticket-name').textContent = 'No match';
   document.getElementById('ticket-reason').textContent = message;
+  document.getElementById('ticket-dish').classList.remove('skeleton-line');
+  document.getElementById('ticket-reason').classList.remove('skeleton-block');
+  ticket.classList.remove('is-streaming');
   ticket.classList.add('visible', 'ticket--error');
 }
 
