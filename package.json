@@ -7,6 +7,12 @@
     "start": "node server/server.js"
   },
   "dependencies": {
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
     "compression": "^1.8.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",

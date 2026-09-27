@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>FoodFindr: Find your next meal</title>
 <meta name="description" content="FoodFindr picks one restaurant and one specific dish near you, tailored to your budget, cravings, group, and taste. It also tracks how much of your city you've explored." />
 <meta name="theme-color" content="#1c1512" />
@@ -126,6 +126,10 @@
       <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
     </div>
   </div>
+
+  <p class="floating-card offline-banner" id="offline-banner" hidden role="status">
+    You're offline. Showing what was already loaded — reconnect to search or get a recommendation.
+  </p>
 
   <p class="floating-card location-banner" id="location-banner" hidden>
     <span id="location-banner-text"></span>
