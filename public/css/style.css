@@ -31,7 +31,57 @@
   --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
 
   --top-bar-height: 68px;
+
+  /* iOS-like motion: UIKit's sheet/drawer curve (fast start, long settle) and
+     a gentle overshoot for small pop-ins. Durations stay in the 200-350ms
+     band; everything animated with these is transform/opacity only. */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --dur-fast: 200ms;
+  --dur-med: 300ms;
 }
+
+/* ---------- Native-feel baseline (WKWebView) ----------
+   Removes the tells that make a web view read as a web page: the grey tap
+   flash, text selection and the long-press callout on UI chrome, focus
+   rings after a tap, text inflation on rotate, and the 300ms double-tap
+   zoom wait. Real content (inputs, the recommendation text, reviews, FAQ)
+   stays selectable. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+input, textarea, select,
+.ticket-name, .ticket-dish, .ticket-reason, .ticket-shared-list,
+.faq-answer, .visit-item-dish, .map-info-window {
+  -webkit-user-select: text;
+  user-select: text;
+}
+input, textarea { -webkit-touch-callout: default; }
+button, a, input, select, label, [role="button"] { touch-action: manipulation; }
+/* Mouse/keyboard users still get :focus-visible rings (defined per control
+   below); a finger tap no longer leaves one behind. */
+:focus:not(:focus-visible) { outline: none; }
+
+/* Press state on everything tappable: a quick shrink like UIKit buttons.
+   Uses the individual `scale` property so it composes with any transform a
+   control already has (e.g. translateX(-50%) centring) instead of replacing
+   it. */
+button, .cta, .chip, a.ticket-map-link {
+  transition-property: scale, background, color, border-color, opacity, box-shadow;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-ios);
+}
+button:active:not(:disabled), .cta:active:not(:disabled), .chip:active, a.ticket-map-link:active {
+  scale: 0.97;
+}
+.rail-btn:active, .tabs-toggle:active, .star-rating button:active { scale: 0.92; }
 
 * { box-sizing: border-box; }
 
@@ -232,7 +282,7 @@ body {
   background: none;
   color: var(--color-paper-dim);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, scale 160ms var(--ease-ios);
 }
 /* Invisible hit-area expansion to a 44x44pt minimum tap target (Apple HIG)
    without changing the button's visible 20x20 glyph size or the surrounding
@@ -256,7 +306,7 @@ body {
   border: 1px solid rgba(242, 234, 225, 0.14);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, scale 160ms var(--ease-ios);
 }
 .filters-toggle:hover { border-color: rgba(242, 234, 225, 0.35); }
 .filters-toggle.active {
@@ -404,7 +454,7 @@ body {
   border: 1px solid rgba(242, 234, 225, 0.14);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, scale 160ms var(--ease-ios);
 }
 .price-toggle button:hover { border-color: rgba(242, 234, 225, 0.35); }
 .price-toggle button.active {
@@ -484,10 +534,10 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   cursor: pointer;
   margin-top: 4px;
   margin-bottom: 32px;
-  transition: background 150ms ease, transform 150ms ease;
+  transition: background 150ms ease, scale 160ms var(--ease-ios);
 }
 .cta:hover { background: var(--color-chili-dim); }
-.cta:active { transform: translateY(1px); }
+.cta:active { transform: none; }
 .cta:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
 .cta:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 
@@ -554,7 +604,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   border: 1px solid rgba(242, 234, 225, 0.14);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease, scale 160ms var(--ease-ios);
 }
 /* 44x44pt minimum tap target (Apple HIG) via an invisible hit-area, same
    technique as .dish-clear-btn::before - keeps the compact rail visuals. */
@@ -578,7 +628,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font: inherit;
   font-size: 0.85rem;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, scale 160ms var(--ease-ios);
 }
 .rail-btn svg { flex-shrink: 0; }
 .rail-btn::before { content: ''; position: absolute; inset: -2px 0; }
@@ -601,7 +651,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   height: 2px;
   background: var(--color-paper-dim);
   border-radius: 1px;
-  transition: background 150ms ease;
+  transition: background 150ms ease, scale 160ms var(--ease-ios);
 }
 .tabs-toggle.active {
   background: var(--color-turmeric);
@@ -625,7 +675,8 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   border-right: 1px solid var(--color-hairline);
   box-shadow: var(--shadow-lg);
   transform: translateX(-110%);
-  transition: transform 280ms ease;
+  transition: transform var(--dur-med) var(--ease-ios);
+  overscroll-behavior: contain;
 }
 .tab-drawer.open { transform: translateX(0); }
 .tab-drawer[hidden] { display: none; }
@@ -663,7 +714,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, scale 160ms var(--ease-ios);
 }
 .drawer-close:hover { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
 .drawer-close:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
@@ -814,7 +865,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   border: 1px solid rgba(242, 234, 225, 0.14);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, scale 160ms var(--ease-ios);
 }
 .group-item-actions button:hover { border-color: rgba(242, 234, 225, 0.35); color: var(--color-paper); }
 .group-item-actions button::before { content: ''; position: absolute; inset: -10px -6px; }
@@ -923,7 +974,7 @@ select.visit-input option {
   line-height: 1;
   padding: 2px;
   color: var(--color-paper-dim);
-  transition: color 150ms ease;
+  transition: color 150ms ease, scale 160ms var(--ease-ios);
 }
 .star-rating button.filled { color: var(--color-turmeric); }
 .star-rating button:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
@@ -1077,7 +1128,7 @@ select.visit-input option {
   background: none;
   color: var(--color-paper-dim);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, scale 160ms var(--ease-ios);
 }
 .password-toggle-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
 .password-toggle-btn:focus-visible { outline: 2px solid var(--color-turmeric); outline-offset: 2px; }
@@ -1141,7 +1192,7 @@ select.visit-input option {
   border-radius: 999px;
   padding: var(--space-1) var(--space-3);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, scale 160ms var(--ease-ios);
 }
 .chip:hover { border-color: rgba(242, 234, 225, 0.35); }
 .chip.active {
@@ -1315,7 +1366,10 @@ select.visit-input option {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
-.ticket.visible { display: block; }
+.ticket.visible { display: block; animation: ticket-in var(--dur-med) var(--ease-ios); }
+@keyframes ticket-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
 
 .ticket-close-btn {
   position: absolute;

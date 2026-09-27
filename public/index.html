@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- maximum-scale=1: stops iOS zooming the whole page when a sub-16px input
+     (the search pill) is focused, a classic "this is a website" tell. The map
+     has its own pinch-zoom, so page-level zoom isn't needed. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>FoodFindr: Find your next meal</title>
 <meta name="description" content="FoodFindr picks one restaurant and one specific dish near you, tailored to your budget, cravings, group, and taste. It also tracks how much of your city you've explored." />
 <meta name="theme-color" content="#1c1512" />
