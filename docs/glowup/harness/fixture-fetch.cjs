@@ -23,12 +23,21 @@ fs.mkdirSync(DIR, { recursive: true });
 // live with eager_input_streaming on Haiku 4.5), ~3s to the end of the call.
 const LATENCY = { places: 600, geocode: 250, details: 350, claudeTtft: 2000, claudeTotal: 3000 };
 
+// Seeded only for the Surprise Me candidate shuffle (pickRandomTopPool), so
+// its pool - and the recorded Claude answer keyed on it - repeats every run.
+// Everything else (e.g. group invite codes in db.js) stays truly random;
+// seeding those too made every fresh server mint the same codes, which then
+// collided with groups created by earlier runs in the persistent DB.
+const realRandom = Math.random;
 let seed = 0x5eed;
-Math.random = function mulberry32() {
+function seeded() {
   seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+Math.random = function harnessRandom() {
+  return (new Error().stack || '').includes('pickRandomTopPool') ? seeded() : realRandom();
 };
 
 const realFetch = globalThis.fetch;

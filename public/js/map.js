@@ -143,7 +143,10 @@ function renderMarkers(restaurants) {
       content: markerContent(restaurant, false),
       title: `${restaurant.name} · ${'$'.repeat(restaurant.price)}`
     });
-    marker.addListener('click', () => showRestaurantInfo(restaurant));
+    marker.addListener('click', () => {
+      if (typeof haptics !== 'undefined') haptics.selection();
+      showRestaurantInfo(restaurant);
+    });
     markersById[restaurant.id] = marker;
   });
 }

@@ -26,6 +26,23 @@ const LABEL = args.label || 'run';
 const RUNS = Number(args.runs || 5);
 const MODE = args.mode || 'replay';
 const SHOTS = args.shots || null;
+const FAKE_NATIVE = Boolean(args['fake-native']);
+
+// Stand-in for the Capacitor bridge (--fake-native): every
+// Plugins.<Name>.<method>(arg) resolves and is recorded, so the flow can
+// assert the web side calls native APIs at the right moments.
+const FAKE_CAPACITOR = () => {
+  window.__nativeCalls = [];
+  const plugin = (name) => new Proxy({}, { get: (_, method) => (arg) => {
+    window.__nativeCalls.push({ plugin: name, method: String(method), arg, t: performance.now() });
+    return Promise.resolve({});
+  } });
+  window.Capacitor = {
+    isNativePlatform: () => true,
+    getPlatform: () => 'ios',
+    Plugins: new Proxy({}, { get: (_, name) => plugin(String(name)) })
+  };
+};
 const PORT = 3000;
 const BASE = `http://localhost:${PORT}`;
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -116,6 +133,7 @@ async function newContext(browser) {
     serviceWorkers: 'allow'
   });
   await context.addInitScript(INSTRUMENT);
+  if (FAKE_NATIVE) await context.addInitScript(FAKE_CAPACITOR);
   return context;
 }
 
@@ -241,6 +259,7 @@ async function oneRun(browser, i, { full }) {
 
 // The rest of the product flow, run once per label as a regression check:
 // drawer -> sign up -> log a visit.
+let nativeCallsBeforeLogout = [];
 async function functionalFlow(page, r) {
   const steps = [];
   const step = async (name, fn) => {
@@ -324,12 +343,17 @@ async function functionalFlow(page, r) {
       await page.click('#drawer-close-btn');
       await page.waitForSelector('#tab-drawer', { state: 'hidden', timeout: 5000 });
     });
+    if (FAKE_NATIVE) nativeCallsBeforeLogout = await page.evaluate(() => window.__nativeCalls);
     await step('log out', async () => {
       await page.click('#tabs-toggle');
       await Promise.all([page.waitForNavigation({ timeout: 10000 }), page.click('#logout-btn')]);
       await page.waitForSelector('#auth-gate:not([hidden])', { timeout: 10000 });
     });
   } catch { /* recorded in steps */ }
+  if (FAKE_NATIVE) {
+    // Collected before logout reloads the page (the log survives within the page only).
+    r.nativeCalls = nativeCallsBeforeLogout;
+  }
   r.flow = steps;
 }
 
@@ -359,6 +383,13 @@ fs.writeFileSync(path.join(HERE, `results-${LABEL}.json`), JSON.stringify(out, n
 console.log('\nMEDIANS', LABEL);
 for (const [k, v] of Object.entries(summary)) console.log(`  ${k.padEnd(24)} ${v == null ? '-' : Math.round(v)}`);
 const flow = results[results.length - 1].flow || [];
+if (FAKE_NATIVE) {
+  const calls = results[results.length - 1].nativeCalls || [];
+  const tally = {};
+  calls.forEach(c => { const k = `${c.plugin}.${c.method}(${JSON.stringify(c.arg)})`; tally[k] = (tally[k] || 0) + 1; });
+  console.log('\nNATIVE CALLS (functional flow page)');
+  Object.entries(tally).forEach(([k, n]) => console.log(`  ${n}x ${k}`));
+}
 console.log('\nFLOW');
 flow.forEach(([n, s]) => console.log(`  ${s === 'ok' ? 'PASS' : 'FAIL'} ${n}${s === 'ok' ? '' : ' ' + s}`));
 const failed = results.some(r => r.error) || flow.some(([, s]) => s !== 'ok') || flow.length === 0;

@@ -56,6 +56,48 @@ function runSearch() {
   loadRestaurants(++searchSeq, searchAbort.signal);
 }
 
+// Native haptics via the Capacitor Haptics plugin, only inside the iOS
+// shell. window.Capacitor.Plugins is a proxy that hands back a stub for any
+// plugin name and rejects when the native side isn't installed, so every
+// call swallows its promise rejection; in a plain browser these are no-ops.
+const haptics = (() => {
+  const plugin = () => (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+    ? window.Capacitor.Plugins.Haptics : null;
+  const call = (method, arg) => {
+    const p = plugin();
+    if (!p) return;
+    try {
+      const result = p[method](arg);
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch {
+      // Plugin missing from this build of the shell.
+    }
+  };
+  return {
+    selection: () => call('impact', { style: 'LIGHT' }),
+    success: () => call('notification', { type: 'SUCCESS' }),
+    warning: () => call('notification', { type: 'WARNING' })
+  };
+})();
+
+// Selection-style controls get a light tick, like a native segmented
+// control or picker. Delegated so dynamically built chips/buttons get it too.
+const HAPTIC_SELECTION_SELECTOR = [
+  '.price-toggle button', '.chip', '.star-rating button', '.rail-btn', '.tabs-toggle',
+  '.filters-toggle', '.group-size-row button', '.group-search-btn', '#dish-clear-btn'
+].join(',');
+document.addEventListener('click', (event) => {
+  if (event.target.closest && event.target.closest(HAPTIC_SELECTION_SELECTOR)) haptics.selection();
+}, true);
+
+// Every inline form error (auth, visits, groups, prefs) goes through one of
+// the static .visit-status elements; buzz when one flips into its error style.
+const hapticStatusObserver = new MutationObserver(records => {
+  if (records.some(r => r.target.classList.contains('visit-status--error') && !r.target.hidden)) haptics.warning();
+});
+document.querySelectorAll('.visit-status').forEach(el =>
+  hapticStatusObserver.observe(el, { attributes: true, attributeFilter: ['class', 'hidden'] }));
+
 const LAST_LOCATION_KEY = 'ff_last_location';
 const ACTIVE_GROUP_KEY = 'ff_active_group_id';
 
@@ -1303,6 +1345,7 @@ async function getRecommendation() {
       if (event === 'pick') {
         hideLoading();
         showTicketStreaming(data.restaurant);
+        haptics.success();
         highlightPick(data.restaurant.id, lastFilteredRestaurants);
         centerOnPick(data.restaurant.lat, data.restaurant.lng);
         perfLog('recommend first-pick', t0);
@@ -1353,6 +1396,8 @@ async function readEventStream(response, onEvent) {
 
 function showRecommendation(data) {
   const previousPickId = lastRecommendation && lastRecommendation.restaurant.id;
+  // The streamed path already fired this at the reveal (the pick event).
+  if (!streamedPickId) haptics.success();
   showTicket(data);
   // The streamed `pick` already highlighted and centred this restaurant; only
   // redo it if the validated result ended up naming a different one.
@@ -1451,6 +1496,7 @@ function showTicket(data) {
 }
 
 function showTicketError(message) {
+  haptics.warning();
   const ticket = document.getElementById('ticket');
   document.getElementById('ticket-name').classList.remove('skeleton-line');
   document.getElementById('ticket-name').textContent = 'No match';
@@ -1598,6 +1644,7 @@ async function submitVisit() {
     renderVisitList();
     resetVisitForm();
     status.textContent = 'Visit logged!';
+    haptics.success();
     status.className = 'visit-status visit-status--ok';
     status.hidden = false;
     loadProgress({ force: true });
