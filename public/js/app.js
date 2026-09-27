@@ -391,6 +391,7 @@ function init() {
   });
 
   document.getElementById('drawer-close-btn').addEventListener('click', closeDrawer);
+  bindDrawerDrag();
 
   document.getElementById('tabs-toggle').addEventListener('click', toggleRailExpanded);
   document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
@@ -637,14 +638,90 @@ function closeDrawer() {
   document.getElementById('location-banner').classList.remove('hidden-by-drawer');
   document.getElementById('active-group-banner').classList.remove('hidden-by-drawer');
 
-  drawer.addEventListener('transitionend', function onClosed() {
+  // Finish on the drawer's own transform transition only: transitionend
+  // bubbles, and the buttons inside have press-state transitions of their
+  // own that would otherwise hide the drawer partway through its slide. The
+  // timer covers reduced motion (no transition, so no transitionend at all)
+  // and a close on an already-hidden drawer.
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
     drawer.removeEventListener('transitionend', onClosed);
     if (!drawer.classList.contains('open')) {
       drawer.hidden = true;
       if (drawerTriggerEl && document.body.contains(drawerTriggerEl)) drawerTriggerEl.focus();
       drawerTriggerEl = null;
     }
+  };
+  function onClosed(event) {
+    if (event.target === drawer && event.propertyName === 'transform') finish();
+  }
+  drawer.addEventListener('transitionend', onClosed);
+  setTimeout(finish, 450);
+}
+
+// Drag-to-dismiss for the drawer, like an iOS sheet: a horizontal drag moves
+// it 1:1 with the finger (transform only), and on release it closes if it
+// was pulled far enough or flicked fast enough, otherwise springs back.
+// touch-action: pan-y on the drawer (style.css) keeps vertical scrolling
+// native while horizontal moves come to us as pointer events.
+function bindDrawerDrag() {
+  const drawer = document.getElementById('tab-drawer');
+  const LOCK_PX = 8;
+  const CLOSE_FRACTION = 0.35;
+  const CLOSE_VELOCITY = 0.5; // px/ms, leftwards
+  let drag = null;
+
+  drawer.addEventListener('pointerdown', (event) => {
+    if (!drawer.classList.contains('open') || event.button > 0) return;
+    // Let form controls keep their own gestures (range slider, text selection).
+    if (event.target.closest('input, select, textarea')) return;
+    drag = { id: event.pointerId, x0: event.clientX, y0: event.clientY, dx: 0, locked: null, samples: [] };
   });
+
+  drawer.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x0;
+    const dy = event.clientY - drag.y0;
+    if (drag.locked === null) {
+      if (Math.abs(dx) < LOCK_PX && Math.abs(dy) < LOCK_PX) return;
+      drag.locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (drag.locked === 'y') { drag = null; return; } // a scroll, not a dismiss
+      drawer.setPointerCapture(event.pointerId);
+      drawer.classList.add('dragging');
+    }
+    drag.dx = Math.min(0, dx); // only towards closed; no rubber band outwards
+    drawer.style.transform = `translateX(${drag.dx}px)`;
+    drag.samples.push({ t: event.timeStamp, x: event.clientX });
+    if (drag.samples.length > 6) drag.samples.shift();
+  });
+
+  const release = (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const wasDragging = drag.locked === 'x';
+    const { dx, samples } = drag;
+    drag = null;
+    if (!wasDragging) return;
+    drawer.dataset.justDragged = '1';
+    setTimeout(() => { delete drawer.dataset.justDragged; }, 60);
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const velocity = first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+    const shouldClose = -dx > drawer.offsetWidth * CLOSE_FRACTION || velocity < -CLOSE_VELOCITY;
+    // Hand back to the CSS transition from wherever the finger left it: the
+    // inline transform and the class change land in the same style pass, so
+    // the transition runs from the dragged position.
+    drawer.classList.remove('dragging');
+    drawer.style.transform = '';
+    if (shouldClose) closeDrawer();
+  };
+  drawer.addEventListener('pointerup', release);
+  drawer.addEventListener('pointercancel', release);
+  // A drag that ended over a button shouldn't also activate it.
+  drawer.addEventListener('click', (event) => {
+    if (drawer.dataset.justDragged) { event.stopPropagation(); event.preventDefault(); }
+  }, true);
 }
 
 function toggleRailExpanded() {

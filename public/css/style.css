@@ -677,7 +677,13 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   transform: translateX(-110%);
   transition: transform var(--dur-med) var(--ease-ios);
   overscroll-behavior: contain;
+  /* Vertical scrolling stays native; horizontal moves drive drag-to-dismiss
+     (bindDrawerDrag in app.js). */
+  touch-action: pan-y;
 }
+/* Follow the finger exactly while dragging; the transition comes back for
+   the release so it springs closed/open from wherever it was let go. */
+.tab-drawer.dragging { transition: none; }
 .tab-drawer.open { transform: translateX(0); }
 .tab-drawer[hidden] { display: none; }
 

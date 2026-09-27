@@ -28,6 +28,7 @@ const MODE = args.mode || 'replay';
 const SHOTS = args.shots || null;
 const FAKE_NATIVE = Boolean(args['fake-native']);
 const NO_SW = Boolean(args['no-sw']);
+const REDUCED_MOTION = Boolean(args['reduced-motion']);
 
 // Stand-in for the Capacitor bridge (--fake-native): every
 // Plugins.<Name>.<method>(arg) resolves and is recorded, so the flow can
@@ -131,7 +132,8 @@ async function newContext(browser) {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
     geolocation: HOME,
     permissions: ['geolocation'],
-    serviceWorkers: NO_SW ? 'block' : 'allow'
+    serviceWorkers: NO_SW ? 'block' : 'allow',
+    reducedMotion: REDUCED_MOTION ? 'reduce' : 'no-preference'
   });
   await context.addInitScript(INSTRUMENT);
   if (FAKE_NATIVE) await context.addInitScript(FAKE_CAPACITOR);
@@ -309,6 +311,38 @@ async function functionalFlow(page, r) {
     await step('close drawer', async () => {
       await page.click('#drawer-close-btn');
       await page.waitForSelector('#tab-drawer', { state: 'hidden', timeout: 5000 });
+    });
+    const dragDrawer = async (fraction) => {
+      const box = await page.locator('#drawer-title').boundingBox();
+      const width = (await page.locator('#tab-drawer').boundingBox()).width;
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      // ~16ms per step, i.e. a deliberate (not flicked) drag.
+      const steps = 12;
+      for (let i = 1; i <= steps; i++) {
+        await page.mouse.move(x - (width * fraction * i) / steps, y);
+        await sleep(16);
+      }
+      await sleep(120); // come to rest before letting go, so velocity ~0
+      await page.mouse.up();
+    };
+    await step('short drawer drag springs back open', async () => {
+      await page.click('#filters-toggle');
+      await page.waitForSelector('#tab-drawer.open', { timeout: 5000 });
+      await sleep(400);
+      await dragDrawer(0.15);
+      await sleep(500);
+      const state = await page.evaluate(() => {
+        const d = document.getElementById('tab-drawer');
+        return { open: d.classList.contains('open'), hidden: d.hidden, x: new DOMMatrix(getComputedStyle(d).transform).m41 };
+      });
+      if (!state.open || state.hidden || Math.abs(state.x) > 1) throw new Error(JSON.stringify(state));
+    });
+    await step('long drawer drag dismisses it', async () => {
+      await dragDrawer(0.6);
+      await page.waitForSelector('#tab-drawer', { state: 'hidden', timeout: 3000 });
     });
     await step('guest tab bounces to sign-up gate', async () => {
       await page.click('#tabs-toggle');
