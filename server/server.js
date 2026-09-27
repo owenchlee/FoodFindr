@@ -105,7 +105,7 @@ function sendIndexHtml(req, res, next) {
     const config = clientConfig();
     // </script> can't appear in JSON.stringify output of these values, but
     // escape '<' anyway so no future config field can break out of the tag.
-    const inline = JSON.stringify(config).replace(/</g, '\u003c');
+    const inline = JSON.stringify(config).replace(/</g, '\\u003c');
     const preload = config.mapsScriptUrl
       ? `<link rel="preload" as="script" href="${config.mapsScriptUrl.replace(/&/g, '&amp;')}" />
 `
