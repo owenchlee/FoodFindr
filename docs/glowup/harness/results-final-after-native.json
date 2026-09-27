@@ -1,0 +1,296 @@
+{
+  "label": "final-after-native",
+  "date": "2026-09-27T04:58:51.492Z",
+  "runs": 3,
+  "mode": "replay",
+  "summary": {
+    "navToMarkers": null,
+    "fcp": 536,
+    "gateVisible": 674,
+    "mapsLoaded": 1074.5,
+    "guestToMarkers": 1524,
+    "searchToMarkers": 1288.8999999761581,
+    "searchLongTasks": 1,
+    "searchLongTaskMs": 53,
+    "searchMaxLongTaskMs": 53,
+    "surpriseToFeedback": 46.39999997615814,
+    "surpriseOverlayMs": 0,
+    "surpriseToName": 2614.5,
+    "surpriseToFull": 3710.900000035763,
+    "firstPartyJs": 24280,
+    "firstPartyCss": 13345,
+    "thirdPartyJs": 478077,
+    "thirdPartyCss": 5458,
+    "relaunchFcp": 192,
+    "relaunchGateVisible": 378.5999999642372,
+    "relaunchGuestToMarkers": 514.8000000119209,
+    "relaunchNavToMarkers": 1127.5,
+    "splashHideAt": 576.8000000119209
+  },
+  "results": [
+    {
+      "run": 1,
+      "fcp": 536,
+      "gateVisible": 618,
+      "mapsLoaded": 999.8999999761581,
+      "guestToMarkers": 1524,
+      "splashHideAt": 523.6999999880791,
+      "searchToMarkers": 1344.800000011921,
+      "searchLongTasks": 1,
+      "searchLongTaskMs": 52,
+      "searchMaxLongTaskMs": 52,
+      "surpriseToName": 2630.5,
+      "surpriseToFull": 3689.2999999523163,
+      "surpriseToFeedback": 46.39999997615814,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 24280,
+      "firstPartyCss": 13345,
+      "thirdPartyJs": 478077,
+      "thirdPartyCss": 5456,
+      "relaunchFcp": 176,
+      "relaunchGateVisible": 362.19999998807907,
+      "relaunchGuestToMarkers": 495.7000000476837,
+      "relaunchNavToMarkers": 1121.1000000238419,
+      "pageErrors": []
+    },
+    {
+      "run": 2,
+      "fcp": 520,
+      "gateVisible": 674,
+      "mapsLoaded": 1074.5,
+      "guestToMarkers": 1189.3999999761581,
+      "splashHideAt": 576.8000000119209,
+      "searchToMarkers": 1276.699999988079,
+      "searchLongTasks": 2,
+      "searchLongTaskMs": 112,
+      "searchMaxLongTaskMs": 59,
+      "surpriseToName": 2614.5,
+      "surpriseToFull": 3710.900000035763,
+      "surpriseToFeedback": 44,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 24280,
+      "firstPartyCss": 13345,
+      "thirdPartyJs": 478077,
+      "thirdPartyCss": 5458,
+      "relaunchFcp": 192,
+      "relaunchGateVisible": 378.5999999642372,
+      "relaunchGuestToMarkers": 515.6999999880791,
+      "relaunchNavToMarkers": 1127.5,
+      "pageErrors": []
+    },
+    {
+      "run": 3,
+      "fcp": 536,
+      "gateVisible": 684.1999999880791,
+      "mapsLoaded": 1078.5999999642372,
+      "guestToMarkers": 2026.0999999642372,
+      "splashHideAt": 577.3999999761581,
+      "searchToMarkers": 1288.8999999761581,
+      "searchLongTasks": 1,
+      "searchLongTaskMs": 53,
+      "searchMaxLongTaskMs": 53,
+      "surpriseToName": 2591.199999988079,
+      "surpriseToFull": 3717.199999988079,
+      "surpriseToFeedback": 46.89999997615814,
+      "surpriseOverlayMs": 0,
+      "firstPartyJs": 24280,
+      "firstPartyCss": 13345,
+      "thirdPartyJs": 478069,
+      "thirdPartyCss": 5562,
+      "relaunchFcp": 244,
+      "relaunchGateVisible": 422.80000001192093,
+      "relaunchGuestToMarkers": 514.8000000119209,
+      "relaunchNavToMarkers": 1204.4000000357628,
+      "nativeCalls": [
+        {
+          "plugin": "SystemBars",
+          "method": "setStyle",
+          "arg": {
+            "style": "DARK"
+          },
+          "t": 225.80000001192093
+        },
+        {
+          "plugin": "Keyboard",
+          "method": "addListener",
+          "arg": "keyboardWillShow",
+          "t": 225.9000000357628
+        },
+        {
+          "plugin": "Keyboard",
+          "method": "addListener",
+          "arg": "keyboardWillHide",
+          "t": 225.9000000357628
+        },
+        {
+          "plugin": "SplashScreen",
+          "method": "hide",
+          "t": 250.10000002384186
+        },
+        {
+          "plugin": "Haptics",
+          "method": "notification",
+          "arg": {
+            "type": "SUCCESS"
+          },
+          "t": 4307.400000035763
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 5539.5
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 6978
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 10185.700000047684
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 10550.100000023842
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 11984.700000047684
+        },
+        {
+          "plugin": "Haptics",
+          "method": "notification",
+          "arg": {
+            "type": "SUCCESS"
+          },
+          "t": 12235.200000047684
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 12781.100000023842
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 13169.5
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 14094.5
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 14443.300000011921
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 15046.900000035763
+        },
+        {
+          "plugin": "Haptics",
+          "method": "impact",
+          "arg": {
+            "style": "LIGHT"
+          },
+          "t": 15472.700000047684
+        }
+      ],
+      "flow": [
+        [
+          "Surprise Me (after relaunch)",
+          "ok"
+        ],
+        [
+          "exactly one highlighted pick marker, matching the card",
+          "ok"
+        ],
+        [
+          "open drawer (Filters)",
+          "ok"
+        ],
+        [
+          "close drawer",
+          "ok"
+        ],
+        [
+          "short drawer drag springs back open",
+          "ok"
+        ],
+        [
+          "long drawer drag dismisses it",
+          "ok"
+        ],
+        [
+          "guest tab bounces to sign-up gate",
+          "ok"
+        ],
+        [
+          "sign up test account",
+          "ok"
+        ],
+        [
+          "skip taste-profile prompt",
+          "ok"
+        ],
+        [
+          "log a visit from the recommendation",
+          "ok"
+        ],
+        [
+          "visit shows in Past Reviews",
+          "ok"
+        ],
+        [
+          "badges + leaderboard render",
+          "ok"
+        ],
+        [
+          "groups: create one",
+          "ok"
+        ],
+        [
+          "log out",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    }
+  ]
+}

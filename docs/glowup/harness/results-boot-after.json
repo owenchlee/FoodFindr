@@ -1,0 +1,212 @@
+{
+  "label": "boot-after",
+  "date": "2026-09-27T04:57:18.283Z",
+  "runs": 12,
+  "mode": "replay",
+  "summary": {
+    "navToMarkers": 4580.899999976158,
+    "fcp": 520,
+    "gateVisible": 668.5,
+    "mapsLoaded": 1064.3499999940395,
+    "guestToMarkers": 1979.300000011921,
+    "searchToMarkers": null,
+    "searchLongTasks": null,
+    "searchLongTaskMs": null,
+    "searchMaxLongTaskMs": null,
+    "surpriseToFeedback": null,
+    "surpriseOverlayMs": null,
+    "surpriseToName": null,
+    "surpriseToFull": null,
+    "firstPartyJs": null,
+    "firstPartyCss": null,
+    "thirdPartyJs": null,
+    "thirdPartyCss": null,
+    "relaunchFcp": null,
+    "relaunchGateVisible": null,
+    "relaunchGuestToMarkers": null,
+    "relaunchNavToMarkers": null,
+    "splashHideAt": null
+  },
+  "results": [
+    {
+      "run": 1,
+      "fcp": 508,
+      "gateVisible": 625.5,
+      "mapsLoaded": 985.0999999642372,
+      "guestToMarkers": 1892,
+      "navToMarkers": 4514.5,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 2,
+      "fcp": 528,
+      "gateVisible": 660.8000000119209,
+      "mapsLoaded": 1071,
+      "guestToMarkers": 1985,
+      "navToMarkers": 4577.599999964237,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 3,
+      "fcp": 528,
+      "gateVisible": 661.4000000357628,
+      "mapsLoaded": 1065.9000000357628,
+      "guestToMarkers": 2022.5,
+      "navToMarkers": 4698.400000035763,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 4,
+      "fcp": 544,
+      "gateVisible": 691.0999999642372,
+      "mapsLoaded": 1067.5999999642372,
+      "guestToMarkers": 1192.5999999642372,
+      "navToMarkers": 3758.099999964237,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 5,
+      "fcp": 520,
+      "gateVisible": 668.5,
+      "mapsLoaded": 1032.3999999761581,
+      "guestToMarkers": 1993.9000000357628,
+      "navToMarkers": 4584.199999988079,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 6,
+      "fcp": 540,
+      "gateVisible": 687.6000000238419,
+      "mapsLoaded": 1065.699999988079,
+      "guestToMarkers": 1973.6000000238419,
+      "navToMarkers": 4637.800000011921,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 7,
+      "fcp": 520,
+      "gateVisible": 669.4000000357628,
+      "mapsLoaded": 1052.7000000476837,
+      "guestToMarkers": 2031,
+      "navToMarkers": 4650,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 8,
+      "fcp": 524,
+      "gateVisible": 671.5999999642372,
+      "mapsLoaded": 1063,
+      "guestToMarkers": 1165.7999999523163,
+      "navToMarkers": 3731.2999999523163,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 9,
+      "fcp": 520,
+      "gateVisible": 668.5,
+      "mapsLoaded": 1063.199999988079,
+      "guestToMarkers": 1226,
+      "navToMarkers": 3758.599999964237,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 10,
+      "fcp": 516,
+      "gateVisible": 665.6999999880791,
+      "mapsLoaded": 1071.6000000238419,
+      "guestToMarkers": 2020.3999999761581,
+      "navToMarkers": 4763.199999988079,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 11,
+      "fcp": 512,
+      "gateVisible": 678,
+      "mapsLoaded": 1065.5,
+      "guestToMarkers": 2025.1000000238419,
+      "navToMarkers": 4599.300000011921,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    },
+    {
+      "run": 12,
+      "fcp": 512,
+      "gateVisible": 659.6999999880791,
+      "mapsLoaded": 1047.5,
+      "guestToMarkers": 1165.6000000238419,
+      "navToMarkers": 2888,
+      "flow": [
+        [
+          "boot only",
+          "ok"
+        ]
+      ],
+      "pageErrors": []
+    }
+  ]
+}

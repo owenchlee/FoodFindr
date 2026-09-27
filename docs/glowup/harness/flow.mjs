@@ -17,18 +17,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '..', '..', '..');
+const ROOT_DEFAULT = path.resolve(HERE, '..', '..', '..');
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : true]);
   return acc;
 }, []));
 const LABEL = args.label || 'run';
+// --root <dir>: run the app from another checkout (e.g. a worktree of the
+// baseline commit) with this harness, for like-for-like before/after numbers.
+const ROOT = args.root ? path.resolve(args.root) : ROOT_DEFAULT;
 const RUNS = Number(args.runs || 5);
 const MODE = args.mode || 'replay';
 const SHOTS = args.shots || null;
 const FAKE_NATIVE = Boolean(args['fake-native']);
 const NO_SW = Boolean(args['no-sw']);
 const REDUCED_MOTION = Boolean(args['reduced-motion']);
+// --boot-only: stop each run once the first markers are up (for sampling
+// the cold-launch metrics many more times than the full flow allows).
+const BOOT_ONLY = Boolean(args['boot-only']);
 
 // Stand-in for the Capacitor bridge (--fake-native): every
 // Plugins.<Name>.<method>(arg) resolves and is recorded, so the flow can
@@ -200,6 +206,12 @@ async function oneRun(browser, i, { full }) {
     await page.waitForSelector('#continue-as-guest-btn', { state: 'visible' });
     await page.click('#continue-as-guest-btn');
     await waitMark(page, 'bootMarkers', 30000);
+    if (BOOT_ONLY) {
+      const mb = await marks(page);
+      Object.assign(r, { fcp: mb.fcp, gateVisible: mb.gateVisible, mapsLoaded: mb.mapsLoaded,
+        guestToMarkers: mb.bootMarkers - mb.guestClick, navToMarkers: mb.bootMarkers, flow: [['boot only', 'ok']] });
+      return r;
+    }
     await waitSearchSettled(page);
     let m = await marks(page);
     r.fcp = m.fcp; r.gateVisible = m.gateVisible; r.mapsLoaded = m.mapsLoaded;
@@ -228,7 +240,15 @@ async function oneRun(browser, i, { full }) {
     }
 
     await page.click('#recommend-btn');
+    if (SHOTS && full) {
+      await sleep(250); // skeleton card, before the server has picked
+      await page.screenshot({ path: path.join(HERE, '..', SHOTS, '3a-surprise-tapped.png') });
+    }
     await waitMark(page, 'recoName', 30000);
+    if (SHOTS && full) {
+      await sleep(150); // restaurant known, dish/reason still streaming
+      await page.screenshot({ path: path.join(HERE, '..', SHOTS, '3b-streaming.png') });
+    }
     await waitMark(page, 'recoFull', 30000);
     m = await marks(page);
     r.surpriseToName = m.recoName - m.surpriseClick;
@@ -428,7 +448,7 @@ for (let i = 1; i <= RUNS; i++) {
 }
 await browser.close();
 
-const keys = ['fcp', 'gateVisible', 'mapsLoaded', 'guestToMarkers', 'searchToMarkers', 'searchLongTasks', 'searchLongTaskMs',
+const keys = ['navToMarkers', 'fcp', 'gateVisible', 'mapsLoaded', 'guestToMarkers', 'searchToMarkers', 'searchLongTasks', 'searchLongTaskMs',
   'searchMaxLongTaskMs', 'surpriseToFeedback', 'surpriseOverlayMs', 'surpriseToName', 'surpriseToFull', 'firstPartyJs', 'firstPartyCss', 'thirdPartyJs', 'thirdPartyCss',
   'relaunchFcp', 'relaunchGateVisible', 'relaunchGuestToMarkers', 'relaunchNavToMarkers', 'splashHideAt'];
 const summary = Object.fromEntries(keys.map(k => [k, median(results.map(r => r[k]))]));
