@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 const {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
@@ -70,6 +71,8 @@ app.use(parseCookies);
 // TTL on app.js would strand users on stale code after a deploy. etag gives
 // cheap 304s in the meantime. index.html stays no-cache so a deploy is picked
 // up immediately instead of waiting out a stale cached shell.
+// Before express.static, which would otherwise serve the raw file for "/".
+app.get(['/', '/index.html'], sendIndexHtml);
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   maxAge: '1h',
   etag: true,
@@ -78,16 +81,51 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
   }
 }));
 
+function clientConfig() {
+  const mapsBrowserKey = process.env.GOOGLE_MAPS_BROWSER_KEY || null;
+  return {
+    mapsBrowserKey,
+    mapId: process.env.GOOGLE_MAPS_MAP_ID || null,
+    mapsScriptUrl: mapsBrowserKey
+      ? `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(mapsBrowserKey)}&libraries=marker&v=weekly&loading=async&callback=onGoogleMapsReady`
+      : null
+  };
+}
+
+// index.html with the config inlined instead of a blocking <script src>
+// round trip, plus a <link rel=preload> for the ~500KB Maps script so it
+// starts downloading while the page is still parsing rather than after.
+// Re-read when the file changes, so editing it in dev doesn't need a restart.
+const INDEX_PATH = path.join(__dirname, '..', 'public', 'index.html');
+let indexCache = { mtimeMs: 0, html: '' };
+function sendIndexHtml(req, res, next) {
+  let stat;
+  try { stat = fs.statSync(INDEX_PATH); } catch (err) { return next(err); }
+  if (stat.mtimeMs !== indexCache.mtimeMs) {
+    const config = clientConfig();
+    // </script> can't appear in JSON.stringify output of these values, but
+    // escape '<' anyway so no future config field can break out of the tag.
+    const inline = JSON.stringify(config).replace(/</g, '\u003c');
+    const preload = config.mapsScriptUrl
+      ? `<link rel="preload" as="script" href="${config.mapsScriptUrl.replace(/&/g, '&amp;')}" />
+`
+      : '';
+    const html = fs.readFileSync(INDEX_PATH, 'utf8')
+      .replace('<script src="/js/config.js"></script>', `${preload}<script>window.__FF_CONFIG = ${inline};</script>`);
+    indexCache = { mtimeMs: stat.mtimeMs, html };
+  }
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(indexCache.html);
+}
+
 // Serves the same config the /api/config JSON endpoint does, but as a plain
 // synchronous script so the client doesn't need to await a fetch before it
 // can inject the Maps <script> tag (see the bootstrap in index.html).
 app.get('/js/config.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'no-cache');
-  res.send(`window.__FF_CONFIG = ${JSON.stringify({
-    mapsBrowserKey: process.env.GOOGLE_MAPS_BROWSER_KEY || null,
-    mapId: process.env.GOOGLE_MAPS_MAP_ID || null
-  })};`);
+  res.send(`window.__FF_CONFIG = ${JSON.stringify(clientConfig())};`);
 });
 
 // /api/restaurants and /api/recommend hit billed Google Places/Anthropic
