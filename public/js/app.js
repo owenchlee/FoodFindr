@@ -84,7 +84,8 @@ const haptics = (() => {
 // control or picker. Delegated so dynamically built chips/buttons get it too.
 const HAPTIC_SELECTION_SELECTOR = [
   '.price-toggle button', '.chip', '.star-rating button', '.rail-btn', '.tabs-toggle',
-  '.filters-toggle', '.group-size-row button', '.group-search-btn', '#dish-clear-btn'
+  '.filters-toggle', '.group-size-row button', '.group-search-btn', '#dish-clear-btn',
+  '.tab-bar-btn', '.inset-row'
 ].join(',');
 document.addEventListener('click', (event) => {
   if (event.target.closest && event.target.closest(HAPTIC_SELECTION_SELECTOR)) haptics.selection();
@@ -394,21 +395,36 @@ function init() {
   bindDrawerDrag();
 
   document.getElementById('tabs-toggle').addEventListener('click', toggleRailExpanded);
-  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      // FAQ needs no account; the other tabs (log-review, past-reviews,
-      // progress) are all account-only, so bounce a guest to sign up instead.
-      if (isGuest && GUEST_LOCKED_TABS.has(btn.dataset.tab)) {
-        showAuthGate();
-        return;
-      }
-      setRailExpanded(false);
-      openDrawer(btn.dataset.tab);
-      // Opened on demand instead of being fetched on every search (item 9);
-      // force a refresh here since the location bucket may not have changed.
-      if (btn.dataset.tab === 'progress') loadProgress({ force: true });
-    });
+  // Side rail and bottom tab bar buttons (data-tab) toggle their panel;
+  // rows inside a panel (data-open-tab) always switch to theirs.
+  const openTabFromButton = (tab, { toggle }) => {
+    // FAQ and the You panel need no account; the other tabs are all
+    // account-only, so bounce a guest to sign up instead.
+    if (isGuest && GUEST_LOCKED_TABS.has(tab)) {
+      showAuthGate();
+      return;
+    }
+    setRailExpanded(false);
+    const drawer = document.getElementById('tab-drawer');
+    if (!toggle && drawer.classList.contains('open') && drawer.dataset.activeTab === tab) return;
+    openDrawer(tab);
+    // Opened on demand instead of being fetched on every search (item 9);
+    // force a refresh here since the location bucket may not have changed.
+    if (tab === 'progress') loadProgress({ force: true });
+  };
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => openTabFromButton(btn.dataset.tab, { toggle: true }));
   });
+  document.querySelectorAll('[data-open-tab]').forEach(btn => {
+    btn.addEventListener('click', () => openTabFromButton(btn.dataset.openTab, { toggle: false }));
+  });
+  document.querySelector('.tab-bar [data-action="explore"]').addEventListener('click', closeDrawer);
+  document.querySelector('[data-action="taste-profile"]').addEventListener('click', () => {
+    document.getElementById('edit-preferences-btn').click();
+  });
+  document.getElementById('more-signup-btn').addEventListener('click', showAuthGate);
+  document.getElementById('more-logout-btn').addEventListener('click', logout);
+  document.getElementById('sheet-backdrop').addEventListener('click', closeDrawer);
   document.getElementById('filters-toggle').addEventListener('click', () => {
     setRailExpanded(false);
     openDrawer('filters');
@@ -497,6 +513,7 @@ function onAuthenticated(user) {
   document.getElementById('rail-account-guest').hidden = true;
   document.getElementById('rail-account').hidden = false;
   document.getElementById('account-email').textContent = user.email;
+  setMoreAccount(user);
   tryStartApp();
   if (wasGuest && appStarted) {
     loadRecentVisits();
@@ -521,7 +538,16 @@ function continueAsGuest() {
   document.getElementById('auth-gate').hidden = true;
   document.getElementById('rail-account').hidden = true;
   document.getElementById('rail-account-guest').hidden = false;
+  setMoreAccount(null);
   tryStartApp();
+}
+
+// Header and account buttons of the phone "You" panel.
+function setMoreAccount(user) {
+  document.getElementById('more-account-name').textContent = user ? user.email.split('@')[0] : 'Browsing as guest';
+  document.getElementById('more-account-sub').textContent = user ? user.email : 'Sign up to save visits and your taste';
+  document.getElementById('more-signup-btn').parentElement.hidden = Boolean(user);
+  document.getElementById('more-logout-btn').parentElement.hidden = !user;
 }
 
 function toggleAuthMode() {
@@ -575,15 +601,19 @@ async function logout() {
 
 const GUEST_LOCKED_TABS = new Set(['log-review', 'past-reviews', 'progress', 'group']);
 
-const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'group', 'faq'];
+const DRAWER_PANEL_TABS = ['filters', 'log-review', 'past-reviews', 'progress', 'group', 'faq', 'more'];
 const DRAWER_TAB_LABELS = {
   filters: 'Filters',
-  'log-review': 'Log a Review',
-  'past-reviews': 'Past Reviews',
+  'log-review': 'Log a Visit',
+  'past-reviews': 'Your Visits',
   progress: 'Your Progress',
   group: 'Friend Group',
-  faq: 'How It Works & FAQ'
+  faq: 'How It Works',
+  more: 'You'
 };
+
+// Phone layout (bottom tab bar + bottom sheet) vs the desktop side rail.
+const phoneLayout = window.matchMedia('(max-width: 720px)');
 
 let drawerTriggerEl = null;
 
@@ -611,7 +641,7 @@ function openDrawer(tab) {
   void drawer.offsetHeight;
   drawer.classList.add('open');
 
-  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
+  document.querySelectorAll('[data-tab]').forEach(btn => {
     const isActiveTab = btn.dataset.tab === tab;
     btn.classList.toggle('active', isActiveTab);
     btn.setAttribute('aria-expanded', String(isActiveTab));
@@ -627,7 +657,7 @@ function openDrawer(tab) {
 function closeDrawer() {
   const drawer = document.getElementById('tab-drawer');
   drawer.classList.remove('open');
-  document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
+  document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.classList.remove('active');
     btn.setAttribute('aria-expanded', 'false');
   });
@@ -661,23 +691,27 @@ function closeDrawer() {
   setTimeout(finish, 450);
 }
 
-// Drag-to-dismiss for the drawer, like an iOS sheet: a horizontal drag moves
-// it 1:1 with the finger (transform only), and on release it closes if it
-// was pulled far enough or flicked fast enough, otherwise springs back.
-// touch-action: pan-y on the drawer (style.css) keeps vertical scrolling
-// native while horizontal moves come to us as pointer events.
+// Drag-to-dismiss for the drawer, like an iOS sheet: a drag towards closed
+// moves it 1:1 with the finger (transform only), and on release it closes if
+// it was pulled far enough or flicked fast enough, otherwise springs back.
+// Desktop side drawer: horizontal drag anywhere, with touch-action: pan-y
+// (style.css) keeping vertical scrolling native. Phone bottom sheet: a
+// downward drag on the header/grabber, which has touch-action: none, so the
+// sheet's content still scrolls normally.
 function bindDrawerDrag() {
   const drawer = document.getElementById('tab-drawer');
   const LOCK_PX = 8;
   const CLOSE_FRACTION = 0.35;
-  const CLOSE_VELOCITY = 0.5; // px/ms, leftwards
+  const CLOSE_VELOCITY = 0.5; // px/ms, towards closed
   let drag = null;
 
   drawer.addEventListener('pointerdown', (event) => {
     if (!drawer.classList.contains('open') || event.button > 0) return;
     // Let form controls keep their own gestures (range slider, text selection).
     if (event.target.closest('input, select, textarea')) return;
-    drag = { id: event.pointerId, x0: event.clientX, y0: event.clientY, dx: 0, locked: null, samples: [] };
+    const axis = phoneLayout.matches ? 'y' : 'x';
+    if (axis === 'y' && !event.target.closest('.drawer-header')) return;
+    drag = { id: event.pointerId, axis, x0: event.clientX, y0: event.clientY, d: 0, locked: null, samples: [] };
   });
 
   drawer.addEventListener('pointermove', (event) => {
@@ -687,28 +721,31 @@ function bindDrawerDrag() {
     if (drag.locked === null) {
       if (Math.abs(dx) < LOCK_PX && Math.abs(dy) < LOCK_PX) return;
       drag.locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-      if (drag.locked === 'y') { drag = null; return; } // a scroll, not a dismiss
+      if (drag.locked !== drag.axis) { drag = null; return; } // a scroll, not a dismiss
       drawer.setPointerCapture(event.pointerId);
       drawer.classList.add('dragging');
     }
-    drag.dx = Math.min(0, dx); // only towards closed; no rubber band outwards
-    drawer.style.transform = `translateX(${drag.dx}px)`;
-    drag.samples.push({ t: event.timeStamp, x: event.clientX });
+    // Only towards closed (left for the side drawer, down for the sheet);
+    // no rubber band outwards.
+    drag.d = drag.axis === 'x' ? Math.min(0, dx) : Math.max(0, dy);
+    drawer.style.transform = drag.axis === 'x' ? `translateX(${drag.d}px)` : `translateY(${drag.d}px)`;
+    drag.samples.push({ t: event.timeStamp, p: drag.axis === 'x' ? -event.clientX : event.clientY });
     if (drag.samples.length > 6) drag.samples.shift();
   });
 
   const release = (event) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const wasDragging = drag.locked === 'x';
-    const { dx, samples } = drag;
+    const wasDragging = drag.locked === drag.axis;
+    const { d, axis, samples } = drag;
     drag = null;
     if (!wasDragging) return;
     drawer.dataset.justDragged = '1';
     setTimeout(() => { delete drawer.dataset.justDragged; }, 60);
     const first = samples[0];
     const last = samples[samples.length - 1];
-    const velocity = first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
-    const shouldClose = -dx > drawer.offsetWidth * CLOSE_FRACTION || velocity < -CLOSE_VELOCITY;
+    const velocity = first && last && last.t > first.t ? (last.p - first.p) / (last.t - first.t) : 0;
+    const size = axis === 'x' ? drawer.offsetWidth : drawer.offsetHeight;
+    const shouldClose = Math.abs(d) > size * CLOSE_FRACTION || velocity > CLOSE_VELOCITY;
     // Hand back to the CSS transition from wherever the finger left it: the
     // inline transform and the class change land in the same style pass, so
     // the transition runs from the dragged position.
@@ -1355,8 +1392,11 @@ async function getRecommendation() {
 
   const button = document.getElementById('recommend-btn');
   button.disabled = true;
-  const originalLabel = button.textContent;
-  button.textContent = 'Thinking...';
+  // Only the text span changes, so the sparkle icon stays (and spins).
+  const label = button.querySelector('.cta-label') || button;
+  const originalLabel = label.textContent;
+  label.textContent = 'Thinking…';
+  button.classList.add('is-thinking');
   // Skeleton card instead of the old full-screen overlay: the map stays
   // visible and pannable, and the card appears exactly where the answer will
   // land, so the streamed restaurant/dish fill in place instead of popping in.
@@ -1374,7 +1414,8 @@ async function getRecommendation() {
   if (lastFilteredRestaurants.length === 0) {
     showTicketError('No restaurants match your filters. Try widening your distance or price range.');
     button.disabled = false;
-    button.textContent = originalLabel;
+    label.textContent = originalLabel;
+    button.classList.remove('is-thinking');
     hideLoading();
     return;
   }
@@ -1435,7 +1476,8 @@ async function getRecommendation() {
     showTicketError("Couldn't reach the server. Check your connection and try again.");
   } finally {
     button.disabled = false;
-    button.textContent = originalLabel;
+    label.textContent = originalLabel;
+    button.classList.remove('is-thinking');
     hideLoading();
   }
 }
