@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- maximum-scale=1: stops iOS zooming the whole page when a sub-16px input
+     (the search pill) is focused, a classic "this is a website" tell. The map
+     has its own pinch-zoom, so page-level zoom isn't needed. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>FoodFindr: Find your next meal</title>
 <meta name="description" content="FoodFindr picks one restaurant and one specific dish near you, tailored to your budget, cravings, group, and taste. It also tracks how much of your city you've explored." />
 <meta name="theme-color" content="#1c1512" />
@@ -14,11 +17,22 @@
 
 <link rel="icon" type="image/png" href="/images/favicon.png" />
 
-<link rel="preconnect" href="https://fonts.googleapis.com" />
+<!-- The Maps <script> is a plain (non-CORS) request, so its preconnect must
+     not be crossorigin or the warmed connection can't be reused for it; the
+     Maps API's own XHR/fonts use CORS, hence both variants for googleapis. -->
+<link rel="preconnect" href="https://maps.googleapis.com" />
 <link rel="preconnect" href="https://maps.googleapis.com" crossorigin />
-<link rel="preconnect" href="https://maps.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://maps.gstatic.com" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Web fonts load without blocking first paint (display=swap already
+     falls back to the system stack until they arrive). -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" /></noscript>
 <link rel="stylesheet" href="/css/style.css" />
+<!-- The server swaps this tag for the same config inlined, plus a preload
+     for the Maps script (see sendIndexHtml in server.js), saving a blocking
+     round trip. Served as a plain file it still works as-is. -->
 <script src="/js/config.js"></script>
 </head>
 <body>
@@ -463,7 +477,10 @@ function bootstrapMap() {
   };
 
   const script = document.createElement('script');
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsBrowserKey)}&libraries=marker&v=weekly&callback=onGoogleMapsReady`;
+  // Same URL the server preloaded in <head> (config.mapsScriptUrl), so this
+  // reuses that in-flight download instead of starting a new one.
+  script.src = config.mapsScriptUrl ||
+    `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsBrowserKey)}&libraries=marker&v=weekly&loading=async&callback=onGoogleMapsReady`;
   script.onerror = () => {
     document.getElementById('map').innerHTML =
       '<div class="map-placeholder">Couldn\'t load Google Maps. Check your API key and internet connection.</div>';
