@@ -1,0 +1,27 @@
+{
+  "appId": "tech.foodfindr.app",
+  "appName": "FoodFindr",
+  "webDir": "public",
+  "server": {
+    "url": "https://foodfindr.tech",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "never",
+    "allowsLinkPreview": false,
+    "backgroundColor": "#1c1512"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#1c1512"
+    },
+    "SystemBars": {
+      "style": "DARK"
+    },
+    "Keyboard": {
+      "resize": "native",
+      "style": "DARK"
+    }
+  }
+}

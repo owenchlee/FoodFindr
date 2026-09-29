@@ -56,6 +56,48 @@ function runSearch() {
   loadRestaurants(++searchSeq, searchAbort.signal);
 }
 
+// Native haptics via the Capacitor Haptics plugin, only inside the iOS
+// shell. window.Capacitor.Plugins is a proxy that hands back a stub for any
+// plugin name and rejects when the native side isn't installed, so every
+// call swallows its promise rejection; in a plain browser these are no-ops.
+const haptics = (() => {
+  const plugin = () => (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+    ? window.Capacitor.Plugins.Haptics : null;
+  const call = (method, arg) => {
+    const p = plugin();
+    if (!p) return;
+    try {
+      const result = p[method](arg);
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch {
+      // Plugin missing from this build of the shell.
+    }
+  };
+  return {
+    selection: () => call('impact', { style: 'LIGHT' }),
+    success: () => call('notification', { type: 'SUCCESS' }),
+    warning: () => call('notification', { type: 'WARNING' })
+  };
+})();
+
+// Selection-style controls get a light tick, like a native segmented
+// control or picker. Delegated so dynamically built chips/buttons get it too.
+const HAPTIC_SELECTION_SELECTOR = [
+  '.price-toggle button', '.chip', '.star-rating button', '.rail-btn', '.tabs-toggle',
+  '.filters-toggle', '.group-size-row button', '.group-search-btn', '#dish-clear-btn'
+].join(',');
+document.addEventListener('click', (event) => {
+  if (event.target.closest && event.target.closest(HAPTIC_SELECTION_SELECTOR)) haptics.selection();
+}, true);
+
+// Every inline form error (auth, visits, groups, prefs) goes through one of
+// the static .visit-status elements; buzz when one flips into its error style.
+const hapticStatusObserver = new MutationObserver(records => {
+  if (records.some(r => r.target.classList.contains('visit-status--error') && !r.target.hidden)) haptics.warning();
+});
+document.querySelectorAll('.visit-status').forEach(el =>
+  hapticStatusObserver.observe(el, { attributes: true, attributeFilter: ['class', 'hidden'] }));
+
 const LAST_LOCATION_KEY = 'ff_last_location';
 const ACTIVE_GROUP_KEY = 'ff_active_group_id';
 
@@ -134,13 +176,6 @@ window.addEventListener('offline', updateOfflineBanner);
 updateOfflineBanner();
 
 function init() {
-  // launchAutoHide is off (capacitor.config.json) so the native splash stays
-  // up through the initial network fetch of this remote-loaded page instead
-  // of showing a blank/white flash; hide it now that the page's own JS is
-  // running and about to render real content.
-  if (window.Capacitor?.isNativePlatform?.()) {
-    window.Capacitor.Plugins.SplashScreen?.hide();
-  }
 
   // WKWebView (Capacitor's iOS engine) doesn't open target="_blank" links on
   // its own - there's no browser tab for them to go to, so they'd otherwise
@@ -264,7 +299,12 @@ function init() {
   recommendBtn.addEventListener('focus', prewarm);
   recommendBtn.addEventListener('touchstart', prewarm, { passive: true });
 
-  document.getElementById('ticket-close-btn').addEventListener('click', hideTicket);
+  document.getElementById('ticket-close-btn').addEventListener('click', () => {
+    // Dismissing the card while a recommendation is still streaming in
+    // means "not interested": don't pop it back open on the next event.
+    ticketDismissed = true;
+    hideTicket();
+  });
 
   document.getElementById('group-size-minus').addEventListener('click', () => {
     currentFilters.groupSize = Math.max(1, currentFilters.groupSize - 1);
@@ -351,6 +391,7 @@ function init() {
   });
 
   document.getElementById('drawer-close-btn').addEventListener('click', closeDrawer);
+  bindDrawerDrag();
 
   document.getElementById('tabs-toggle').addEventListener('click', toggleRailExpanded);
   document.querySelectorAll('.rail-btn[data-tab]').forEach(btn => {
@@ -468,6 +509,10 @@ function onAuthenticated(user) {
 }
 
 function showAuthGate() {
+  // A guest tapping a locked rail tab lands here with the rail still
+  // expanded; left open, it sits over the drawer they land in after signing
+  // up (e.g. covering the Log a Visit star rating).
+  setRailExpanded(false);
   document.getElementById('auth-gate').hidden = false;
 }
 
@@ -593,14 +638,90 @@ function closeDrawer() {
   document.getElementById('location-banner').classList.remove('hidden-by-drawer');
   document.getElementById('active-group-banner').classList.remove('hidden-by-drawer');
 
-  drawer.addEventListener('transitionend', function onClosed() {
+  // Finish on the drawer's own transform transition only: transitionend
+  // bubbles, and the buttons inside have press-state transitions of their
+  // own that would otherwise hide the drawer partway through its slide. The
+  // timer covers reduced motion (no transition, so no transitionend at all)
+  // and a close on an already-hidden drawer.
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
     drawer.removeEventListener('transitionend', onClosed);
     if (!drawer.classList.contains('open')) {
       drawer.hidden = true;
       if (drawerTriggerEl && document.body.contains(drawerTriggerEl)) drawerTriggerEl.focus();
       drawerTriggerEl = null;
     }
+  };
+  function onClosed(event) {
+    if (event.target === drawer && event.propertyName === 'transform') finish();
+  }
+  drawer.addEventListener('transitionend', onClosed);
+  setTimeout(finish, 450);
+}
+
+// Drag-to-dismiss for the drawer, like an iOS sheet: a horizontal drag moves
+// it 1:1 with the finger (transform only), and on release it closes if it
+// was pulled far enough or flicked fast enough, otherwise springs back.
+// touch-action: pan-y on the drawer (style.css) keeps vertical scrolling
+// native while horizontal moves come to us as pointer events.
+function bindDrawerDrag() {
+  const drawer = document.getElementById('tab-drawer');
+  const LOCK_PX = 8;
+  const CLOSE_FRACTION = 0.35;
+  const CLOSE_VELOCITY = 0.5; // px/ms, leftwards
+  let drag = null;
+
+  drawer.addEventListener('pointerdown', (event) => {
+    if (!drawer.classList.contains('open') || event.button > 0) return;
+    // Let form controls keep their own gestures (range slider, text selection).
+    if (event.target.closest('input, select, textarea')) return;
+    drag = { id: event.pointerId, x0: event.clientX, y0: event.clientY, dx: 0, locked: null, samples: [] };
   });
+
+  drawer.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x0;
+    const dy = event.clientY - drag.y0;
+    if (drag.locked === null) {
+      if (Math.abs(dx) < LOCK_PX && Math.abs(dy) < LOCK_PX) return;
+      drag.locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (drag.locked === 'y') { drag = null; return; } // a scroll, not a dismiss
+      drawer.setPointerCapture(event.pointerId);
+      drawer.classList.add('dragging');
+    }
+    drag.dx = Math.min(0, dx); // only towards closed; no rubber band outwards
+    drawer.style.transform = `translateX(${drag.dx}px)`;
+    drag.samples.push({ t: event.timeStamp, x: event.clientX });
+    if (drag.samples.length > 6) drag.samples.shift();
+  });
+
+  const release = (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const wasDragging = drag.locked === 'x';
+    const { dx, samples } = drag;
+    drag = null;
+    if (!wasDragging) return;
+    drawer.dataset.justDragged = '1';
+    setTimeout(() => { delete drawer.dataset.justDragged; }, 60);
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const velocity = first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+    const shouldClose = -dx > drawer.offsetWidth * CLOSE_FRACTION || velocity < -CLOSE_VELOCITY;
+    // Hand back to the CSS transition from wherever the finger left it: the
+    // inline transform and the class change land in the same style pass, so
+    // the transition runs from the dragged position.
+    drawer.classList.remove('dragging');
+    drawer.style.transform = '';
+    if (shouldClose) closeDrawer();
+  };
+  drawer.addEventListener('pointerup', release);
+  drawer.addEventListener('pointercancel', release);
+  // A drag that ended over a button shouldn't also activate it.
+  drawer.addEventListener('click', (event) => {
+    if (drawer.dataset.justDragged) { event.stopPropagation(); event.preventDefault(); }
+  }, true);
 }
 
 function toggleRailExpanded() {
@@ -1048,6 +1169,50 @@ function applyLocalFilters() {
   renderMarkers(lastFilteredRestaurants);
 }
 
+// Client-side result cache for stale-while-revalidate (see loadRestaurants).
+// Keyed like the server's placesCache (3-decimal lat/lng, ~110m) plus every
+// filter that changes what the server returns, and the account, since the
+// server folds a signed-in user's dietary restrictions into the query.
+const SEARCH_CACHE_KEY = 'ff_search_cache_v1';
+const SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
+const SEARCH_CACHE_MAX = 8;
+
+function searchCacheKey(params) {
+  return [
+    Number(params.get('lat')).toFixed(3), Number(params.get('lng')).toFixed(3),
+    params.get('cuisine') || '', params.get('maxDistance') || '', (params.get('dish') || '').toLowerCase(),
+    params.get('groupId') || '', currentUser ? currentUser.id : 'guest'
+  ].join('|');
+}
+
+function readSearchCacheStore() {
+  try {
+    const store = JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY) || '{}');
+    return store && typeof store === 'object' ? store : {};
+  } catch {
+    return {};
+  }
+}
+
+function readSearchCache(key) {
+  const entry = readSearchCacheStore()[key];
+  if (!entry || Date.now() - entry.at > SEARCH_CACHE_TTL_MS || !Array.isArray(entry.restaurants)) return null;
+  return entry.restaurants.length > 0 ? entry.restaurants : null;
+}
+
+function writeSearchCache(key, restaurants) {
+  if (!restaurants || restaurants.length === 0) return;
+  try {
+    const store = readSearchCacheStore();
+    store[key] = { at: Date.now(), restaurants };
+    const keys = Object.keys(store).sort((a, b) => store[b].at - store[a].at);
+    keys.slice(SEARCH_CACHE_MAX).forEach(k => delete store[k]);
+    localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(store));
+  } catch {
+    // Quota or private mode: the cache is an optimisation, losing it is fine.
+  }
+}
+
 // seq/signal come from scheduleSearch's sequence guard (item 6): every render
 // path below bails out if a newer search has since started, so an
 // out-of-order response can never overwrite fresher results.
@@ -1066,6 +1231,19 @@ async function loadRestaurants(seq, signal) {
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
   if (currentFilters.dish) params.set('dish', currentFilters.dish);
   if (activeGroupId) params.set('groupId', activeGroupId);
+
+  // Stale-while-revalidate: if this exact search (same ~110m spot, same
+  // filters, same account) ran recently, paint its markers now and let the
+  // fresh response below reconcile them (renderMarkers diffs, so unchanged
+  // markers don't flicker). restaurantsLoading stays true until the fresh
+  // data lands, so Surprise Me never picks from the cached copy.
+  const cacheKey = searchCacheKey(params);
+  const cached = readSearchCache(cacheKey);
+  if (cached) {
+    allRestaurants = cached;
+    applyLocalFilters();
+    if (PERF) console.log(`[perf] search cached-paint n=${cached.length}`);
+  }
 
   // The very first load has nothing on screen yet, so the full blocking
   // overlay is fine; every refinement after that uses the non-blocking pill
@@ -1086,6 +1264,7 @@ async function loadRestaurants(seq, signal) {
     }
 
     allRestaurants = data.restaurants || [];
+    if (response.ok) writeSearchCache(cacheKey, allRestaurants);
     applyLocalFilters();
     hideTicket();
     loadProgress();
@@ -1114,6 +1293,7 @@ async function loadRestaurants(seq, signal) {
           if (!more || seq !== searchSeq) return;
           if (more.restaurants && more.restaurants.length > 0) {
             allRestaurants = more.restaurants;
+            writeSearchCache(cacheKey, allRestaurants);
             applyLocalFilters();
             perfLog('search phase2', t0);
           }
@@ -1177,7 +1357,11 @@ async function getRecommendation() {
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = 'Thinking...';
-  showLoading('Reading reviews and picking a spot…');
+  // Skeleton card instead of the old full-screen overlay: the map stays
+  // visible and pannable, and the card appears exactly where the answer will
+  // land, so the streamed restaurant/dish fill in place instead of popping in.
+  ticketDismissed = false;
+  showTicketSkeleton();
   const t0 = performance.now();
 
   if (pendingRestPromise) {
@@ -1198,7 +1382,11 @@ async function getRecommendation() {
   try {
     const response = await fetch('/api/recommend', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Asks for the streamed variant (see /api/recommend): the restaurant
+      // shows up as soon as Claude has picked it, and the dish/reason fill in
+      // as they're written. A server that doesn't stream (or an error before
+      // streaming starts) just answers with plain JSON, handled below.
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream, application/json' },
       body: JSON.stringify({
         restaurants: lastFilteredRestaurants,
         price: currentFilters.price,
@@ -1209,17 +1397,40 @@ async function getRecommendation() {
       })
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      showTicketError(data.error);
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream') || !response.body) {
+      const data = await response.json();
+      if (!response.ok) {
+        showTicketError(data.error);
+        return;
+      }
+      showRecommendation(data);
+      perfLog('recommend', t0);
       return;
     }
 
-    showTicket(data);
-    highlightPick(data.restaurant.id, lastFilteredRestaurants);
-    centerOnPick(data.restaurant.lat, data.restaurant.lng);
-    perfLog('recommend', t0);
+    let finished = false;
+    await readEventStream(response, (event, data) => {
+      if (ticketDismissed) return;
+      if (event === 'pick') {
+        hideLoading();
+        showTicketStreaming(data.restaurant);
+        haptics.success();
+        highlightPick(data.restaurant.id, lastFilteredRestaurants);
+        centerOnPick(data.restaurant.lat, data.restaurant.lng);
+        perfLog('recommend first-pick', t0);
+      } else if (event === 'partial') {
+        updateTicketStreaming(data);
+      } else if (event === 'result') {
+        finished = true;
+        showRecommendation(data);
+        perfLog('recommend', t0);
+      } else if (event === 'error') {
+        finished = true;
+        showTicketError(data.error);
+      }
+    });
+    if (!finished) showTicketError("The recommendation got cut off. Try again in a moment.");
   } catch (err) {
     showTicketError("Couldn't reach the server. Check your connection and try again.");
   } finally {
@@ -1229,14 +1440,98 @@ async function getRecommendation() {
   }
 }
 
+// Minimal SSE reader over a fetch() body (EventSource can't POST).
+async function readEventStream(response, onEvent) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffered += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buffered.indexOf('\n\n')) !== -1) {
+      const raw = buffered.slice(0, sep);
+      buffered = buffered.slice(sep + 2);
+      let event = 'message';
+      let data = '';
+      raw.split('\n').forEach(line => {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      });
+      if (data) onEvent(event, JSON.parse(data));
+    }
+  }
+}
+
+function showRecommendation(data) {
+  const previousPickId = lastRecommendation && lastRecommendation.restaurant.id;
+  // The streamed path already fired this at the reveal (the pick event).
+  if (!streamedPickId) haptics.success();
+  showTicket(data);
+  // The streamed `pick` already highlighted and centred this restaurant; only
+  // redo it if the validated result ended up naming a different one.
+  if (previousPickId !== data.restaurant.id || !streamedPickId) {
+    highlightPick(data.restaurant.id, lastFilteredRestaurants);
+    centerOnPick(data.restaurant.lat, data.restaurant.lng);
+  }
+  streamedPickId = null;
+}
+
+function setTicketRestaurant(restaurant) {
+  const nameEl = document.getElementById('ticket-name');
+  nameEl.classList.remove('skeleton-line');
+  nameEl.textContent = restaurant.name;
+  document.getElementById('ticket').classList.remove('is-skeleton');
+  document.getElementById('ticket-cuisine').textContent = restaurant.cuisine;
+  document.getElementById('ticket-price').textContent = restaurant.price ? '$'.repeat(restaurant.price) : '';
+  document.getElementById('ticket-rating').textContent = restaurant.rating != null ? `★ ${restaurant.rating}` : '';
+  document.getElementById('ticket-distance').textContent = `${restaurant.distance} mi`;
+}
+
+// Streaming state of the card: the restaurant is known (and its place_id
+// already checked against the candidates server-side), the rest is still
+// being written. Placeholder lines hold the space so nothing jumps around
+// when the text lands; the Maps/log links stay hidden until the validated
+// result arrives, since the result can still swap in a different pick.
+let streamedPickId = null;
+function showTicketStreaming(restaurant) {
+  streamedPickId = restaurant.id;
+  lastRecommendation = { restaurant, dish: { name: '', flavorTags: [], sharedItems: [] }, reason: '' };
+  const ticket = document.getElementById('ticket');
+  setTicketRestaurant(restaurant);
+  document.getElementById('ticket-shared-items').replaceChildren();
+  document.getElementById('ticket-flavors').replaceChildren();
+  const dishEl = document.getElementById('ticket-dish');
+  dishEl.textContent = '';
+  dishEl.classList.add('skeleton-line');
+  const reasonEl = document.getElementById('ticket-reason');
+  reasonEl.textContent = '';
+  reasonEl.classList.add('skeleton-block');
+  ticket.classList.remove('ticket--error');
+  ticket.classList.add('visible', 'is-streaming');
+}
+
+function updateTicketStreaming({ dish, reason }) {
+  const dishEl = document.getElementById('ticket-dish');
+  const reasonEl = document.getElementById('ticket-reason');
+  if (dish) {
+    dishEl.classList.remove('skeleton-line');
+    dishEl.textContent = `Order: ${dish}`;
+  }
+  if (reason) {
+    reasonEl.classList.remove('skeleton-block');
+    reasonEl.textContent = reason;
+  }
+}
+
 function showTicket(data) {
   lastRecommendation = data;
   const ticket = document.getElementById('ticket');
-  document.getElementById('ticket-name').textContent = data.restaurant.name;
-  document.getElementById('ticket-cuisine').textContent = data.restaurant.cuisine;
-  document.getElementById('ticket-price').textContent = '$'.repeat(data.restaurant.price);
-  document.getElementById('ticket-rating').textContent = `★ ${data.restaurant.rating}`;
-  document.getElementById('ticket-distance').textContent = `${data.restaurant.distance} mi`;
+  ticket.classList.remove('is-streaming');
+  document.getElementById('ticket-dish').classList.remove('skeleton-line');
+  document.getElementById('ticket-reason').classList.remove('skeleton-block');
+  setTicketRestaurant(data.restaurant);
 
   const dishEl = document.getElementById('ticket-dish');
   const sharedList = document.getElementById('ticket-shared-items');
@@ -1271,10 +1566,38 @@ function showTicket(data) {
 }
 
 function showTicketError(message) {
+  haptics.warning();
   const ticket = document.getElementById('ticket');
+  document.getElementById('ticket-name').classList.remove('skeleton-line');
   document.getElementById('ticket-name').textContent = 'No match';
+  ticket.classList.remove('is-skeleton');
   document.getElementById('ticket-reason').textContent = message;
+  document.getElementById('ticket-dish').classList.remove('skeleton-line');
+  document.getElementById('ticket-reason').classList.remove('skeleton-block');
+  ticket.classList.remove('is-streaming');
   ticket.classList.add('visible', 'ticket--error');
+}
+
+let ticketDismissed = false;
+
+function showTicketSkeleton() {
+  const ticket = document.getElementById('ticket');
+  const nameEl = document.getElementById('ticket-name');
+  nameEl.textContent = '';
+  nameEl.classList.add('skeleton-line');
+  ['ticket-cuisine', 'ticket-price', 'ticket-rating', 'ticket-distance'].forEach(id => {
+    document.getElementById(id).textContent = '';
+  });
+  document.getElementById('ticket-shared-items').replaceChildren();
+  document.getElementById('ticket-flavors').replaceChildren();
+  const dishEl = document.getElementById('ticket-dish');
+  dishEl.textContent = '';
+  dishEl.classList.add('skeleton-line');
+  const reasonEl = document.getElementById('ticket-reason');
+  reasonEl.textContent = '';
+  reasonEl.classList.add('skeleton-block');
+  ticket.classList.remove('ticket--error');
+  ticket.classList.add('visible', 'is-streaming', 'is-skeleton');
 }
 
 function hideTicket() {
@@ -1391,6 +1714,7 @@ async function submitVisit() {
     renderVisitList();
     resetVisitForm();
     status.textContent = 'Visit logged!';
+    haptics.success();
     status.className = 'visit-status visit-status--ok';
     status.hidden = false;
     loadProgress({ force: true });
@@ -1526,5 +1850,60 @@ window.addEventListener('maps-loaded', () => {
   tryStartApp();
 });
 
+// Native shell setup (iOS/Capacitor only; a no-op in a browser). Runs as
+// soon as this script does rather than in init(), which waits for the ~480KB
+// Maps script: the sign-in screen / top bar are already painted by now, so
+// holding the splash until Maps loaded just hid a usable UI for no reason.
+// Every plugin call is feature-detected and its rejection swallowed, since
+// Capacitor.Plugins hands back a stub for plugins the build doesn't include.
+function setupNativeShell() {
+  if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+  const plugins = window.Capacitor.Plugins;
+  const safely = (fn) => {
+    try {
+      const result = fn();
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch {
+      // Plugin not in this build of the shell.
+    }
+  };
+
+  // launchAutoHide is off (capacitor.config.json) so the native splash covers
+  // the remote page load instead of a blank flash. Two frames = the first
+  // frame with real content has actually been committed to the screen.
+  requestAnimationFrame(() => requestAnimationFrame(() => safely(() => plugins.SplashScreen.hide())));
+
+  // Light status bar content on the dark theme. Also set in
+  // capacitor.config.json; repeated here for shells built before that.
+  safely(() => plugins.SystemBars.setStyle({ style: 'DARK' }));
+
+  // Keyboard (resize: native shrinks the web view): keep the focused field
+  // visible, e.g. the Log a Visit / group inputs lower in the drawer.
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  safely(() => plugins.Keyboard.addListener('keyboardWillShow', () => {
+    document.body.classList.add('keyboard-open');
+    const el = document.activeElement;
+    if (el && el.matches('input, textarea, select')) {
+      setTimeout(() => el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' }), 50);
+    }
+  }));
+  safely(() => plugins.Keyboard.addListener('keyboardWillHide', () => {
+    document.body.classList.remove('keyboard-open');
+  }));
+}
+
+setupNativeShell();
 bindAuthEvents();
 checkAuth();
+
+// App-shell cache (public/sw.js). Feature-detected: WKWebView only exposes
+// navigator.serviceWorker for App-Bound Domains, so inside the iOS shell this
+// is a no-op until that's configured. Registered after load so it never
+// competes with first paint or the Maps download.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Unsupported or blocked (private mode, policy): the app works without it.
+    });
+  });
+}
