@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const {
   insertVisit, listVisits, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
@@ -67,10 +68,11 @@ app.use(helmet({
 app.use(compression());
 app.use(express.json());
 app.use(parseCookies);
-// 1h, not a year: there's no bundler/content-hashed filenames here, so a long
-// TTL on app.js would strand users on stale code after a deploy. etag gives
-// cheap 304s in the meantime. index.html stays no-cache so a deploy is picked
-// up immediately instead of waiting out a stale cached shell.
+// index.html (no-cache) links the CSS/JS as /js/app.js?v=<content hash>
+// (see sendIndexHtml), so those URLs never change meaning and can be cached
+// for a year. Unversioned requests keep a short 1h TTL + etag. Before this,
+// a deploy could pair fresh HTML with a cached old app.js for up to an hour,
+// which left new markup (the phone tab bar) with no click handlers at all.
 // Before express.static, which would otherwise serve the raw file for "/".
 app.get(['/', '/index.html'], sendIndexHtml);
 app.use(express.static(path.join(__dirname, '..', 'public'), {
@@ -79,6 +81,7 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
   setHeaders: (res, filePath) => {
     // sw.js too: a stale worker script would keep serving an old shell.
     if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
+    else if (res.req.query.v) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
 }));
 
@@ -96,13 +99,20 @@ function clientConfig() {
 // index.html with the config inlined instead of a blocking <script src>
 // round trip, plus a <link rel=preload> for the ~500KB Maps script so it
 // starts downloading while the page is still parsing rather than after.
-// Re-read when the file changes, so editing it in dev doesn't need a restart.
-const INDEX_PATH = path.join(__dirname, '..', 'public', 'index.html');
-let indexCache = { mtimeMs: 0, html: '' };
+// The CSS/JS links get a content-hash ?v= so a deploy can never mix new HTML
+// with cached old JS. Rebuilt when any of these files change, so editing
+// them in dev doesn't need a restart.
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const INDEX_PATH = path.join(PUBLIC_DIR, 'index.html');
+const VERSIONED_ASSETS = ['/css/style.css', '/js/map.js', '/js/app.js'];
+let indexCache = { signature: '', html: '' };
 function sendIndexHtml(req, res, next) {
-  let stat;
-  try { stat = fs.statSync(INDEX_PATH); } catch (err) { return next(err); }
-  if (stat.mtimeMs !== indexCache.mtimeMs) {
+  let signature;
+  try {
+    signature = [INDEX_PATH, ...VERSIONED_ASSETS.map(a => path.join(PUBLIC_DIR, a))]
+      .map(f => fs.statSync(f).mtimeMs).join(',');
+  } catch (err) { return next(err); }
+  if (signature !== indexCache.signature) {
     const config = clientConfig();
     // </script> can't appear in JSON.stringify output of these values, but
     // escape '<' anyway so no future config field can break out of the tag.
@@ -111,9 +121,13 @@ function sendIndexHtml(req, res, next) {
       ? `<link rel="preload" as="script" href="${config.mapsScriptUrl.replace(/&/g, '&amp;')}" />
 `
       : '';
-    const html = fs.readFileSync(INDEX_PATH, 'utf8')
+    let html = fs.readFileSync(INDEX_PATH, 'utf8')
       .replace('<script src="/js/config.js"></script>', `${preload}<script>window.__FF_CONFIG = ${inline};</script>`);
-    indexCache = { mtimeMs: stat.mtimeMs, html };
+    for (const asset of VERSIONED_ASSETS) {
+      const hash = crypto.createHash('sha1').update(fs.readFileSync(path.join(PUBLIC_DIR, asset))).digest('hex').slice(0, 10);
+      html = html.replaceAll(`"${asset}"`, `"${asset}?v=${hash}"`);
+    }
+    indexCache = { signature, html };
   }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1043,7 +1057,11 @@ async function streamClaudeToolCall(requestBody, onPartial) {
 }
 
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
-  const prompt = `Pick exactly one restaurant from this list for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
+  // One candidate = the instant path in /api/recommend already chose it.
+  const opener = candidates.length === 1
+    ? 'This restaurant has already been chosen (return its place_id exactly as given) '
+    : 'Pick exactly one restaurant from this list ';
+  const prompt = `${opener}for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
@@ -1197,6 +1215,37 @@ function pickRandomTopPool(restaurants, poolSize) {
   return topN.slice(0, poolSize);
 }
 
+// Instant Surprise Me pick, made here instead of by Claude so the restaurant
+// is on screen in one round trip rather than after Claude's ~2s time to
+// first token. Weighted random over the top-rated places: higher rating,
+// a favorite cuisine, and not having been there recently all raise the odds,
+// so repeated taps still vary. Places whose reviews are already cached (from
+// /api/prewarm or an earlier pick) but give Claude nothing to name a dish
+// from are made unlikely, since the old Claude-picks-from-8 path avoided them.
+function chooseInstantPick(restaurants, favoriteCuisines, recentNames) {
+  const favorites = favoriteCuisines.map(c => c.toLowerCase());
+  const recent = new Set(recentNames.map(n => n.toLowerCase()));
+  const top = restaurants
+    .slice()
+    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    .slice(0, 15);
+  const weights = top.map(r => {
+    let w = Math.max(0.3, (r.rating || 3.5) - 3.3) ** 2;
+    const cuisine = (r.cuisine || '').toLowerCase();
+    if (favorites.some(f => cuisine.includes(f) || f.includes(cuisine))) w *= 2.5;
+    if (recent.has((r.name || '').toLowerCase())) w *= 0.15;
+    const cached = reviewsCache.get(r.id);
+    if (cached && cached.reviews.join(' ').length < 200) w *= 0.1;
+    return w;
+  });
+  let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < top.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return top[i];
+  }
+  return top[top.length - 1];
+}
+
 // Combines every group member's saved preferences and recent visit
 // highlights into one dataset, used for both search-query enrichment
 // (see /api/restaurants) and the recommendation prompt, so a group search
@@ -1243,9 +1292,10 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 
   const dietaryRestrictions = groupData ? groupData.dietaryRestrictions : (preferences ? preferences.dietaryRestrictions : []);
 
+  const visitHighlights = !groupData && req.user ? getVisitHighlights(req.user.id) : [];
   const personalizationText = groupData
     ? groupPersonalizationInstruction(groupData.members)
-    : personalizationInstruction(preferences, req.user ? getVisitHighlights(req.user.id) : []);
+    : personalizationInstruction(preferences, visitHighlights);
 
   const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
   const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
@@ -1263,9 +1313,25 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   // rating here would throw that relevance away and let an unrelated but
   // highly-rated restaurant crowd out actually-relevant ones. Only randomize
   // and re-rank by rating for the generic (no-craving, "Surprise Me") case.
-  const pool = dishCraving
-    ? budgetPool.slice(0, poolSize)
-    : pickRandomTopPool(budgetPool, poolSize);
+  //
+  // Plain Surprise Me (no craving, no dietary restriction) takes the instant
+  // path: the restaurant is chosen server-side right away and Claude only
+  // writes the dish and reason for that one place, from its reviews alone
+  // (1 review fetch and a much shorter prompt instead of 8). A craving or a
+  // restriction still lets Claude compare every candidate's reviews, since
+  // picking the right place there depends on what the reviews say.
+  const instant = !dishCraving && !hasDietaryRestriction;
+  let pool;
+  if (instant) {
+    const members = groupData ? groupData.members : [{ preferences, visitHighlights }];
+    pool = [chooseInstantPick(
+      budgetPool,
+      [...new Set(members.flatMap(m => (m.preferences ? m.preferences.favoriteCuisines : [])))],
+      members.flatMap(m => (m.visitHighlights || []).map(v => v.restaurant_name))
+    )];
+  } else {
+    pool = dishCraving ? budgetPool.slice(0, poolSize) : pickRandomTopPool(budgetPool, poolSize);
+  }
 
   // Streaming mode (Accept: text/event-stream): same pipeline, but sends the
   // chosen restaurant the moment Claude has emitted its place_id, then the
@@ -1324,6 +1390,11 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   } : null;
 
   const t = timer();
+  if (wantsStream && instant) {
+    sentPickId = pool[0].id;
+    t.mark('first-pick');
+    send('pick', { restaurant: pool[0] });
+  }
   try {
     let reviewsCached = 0, reviewsFetched = 0;
     const withReviews = await Promise.all(pool.map(async r => {
@@ -1362,7 +1433,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
       dish: { name: stripDashesText(dish_suggestion), flavorTags: flavor_tags, sharedItems: sharedItems.map(stripDashesText) },
       reason: stripDashesText(fullReason)
     };
-    t.log('recommend', { reviewsCached, reviewsFetched, claudeCalls: perfCounters.claudeCalls, poolSize: pool.length, stream: wantsStream });
+    t.log('recommend', { reviewsCached, reviewsFetched, claudeCalls: perfCounters.claudeCalls, poolSize: pool.length, stream: wantsStream, instant });
     if (wantsStream) {
       send('result', payload);
       res.end();

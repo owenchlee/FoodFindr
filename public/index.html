@@ -26,8 +26,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <!-- Web fonts load without blocking first paint (display=swap already
-     falls back to the system stack until they arrive). -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+     falls back to the system stack until they arrive). A script-inserted
+     stylesheet doesn't block rendering. Not an onload="" attribute: the CSP
+     (script-src-attr 'none') blocks those, so the fonts never applied. -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<script>
+  (function () {
+    var fonts = document.createElement('link');
+    fonts.rel = 'stylesheet';
+    fonts.href = 'https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap';
+    document.head.appendChild(fonts);
+  })();
+</script>
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" /></noscript>
 <link rel="stylesheet" href="/css/style.css" />
 <!-- The server swaps this tag for the same config inlined, plus a preload
