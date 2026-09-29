@@ -20,7 +20,11 @@ function initMap(center, mapId) {
     mapId: mapId || undefined,
     colorScheme: google.maps.ColorScheme.DARK,
     mapTypeControl: false,
-    fullscreenControl: false
+    fullscreenControl: false,
+    // Phones pinch to zoom; the +/- and Street View buttons just crowd the
+    // screen there, like they would in a native maps app.
+    zoomControl: !window.matchMedia('(max-width: 720px)').matches,
+    streetViewControl: !window.matchMedia('(max-width: 720px)').matches
   });
 
   map.addListener('click', (event) => {

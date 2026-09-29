@@ -117,7 +117,7 @@
       </button>
     </div>
     <span class="search-refining-pill" id="search-refining-pill" hidden aria-live="polite">Updating results…</span>
-    <button type="button" class="cta" id="recommend-btn">Surprise Me</button>
+    <button type="button" class="cta" id="recommend-btn"><svg class="cta-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9Z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" /></svg><span class="cta-label">Surprise Me</span></button>
   </div>
 
   <div class="left-column" id="left-column">
@@ -136,8 +136,8 @@
       <ul class="ticket-shared-list" id="ticket-shared-items"></ul>
       <div class="chip-group ticket-flavors" id="ticket-flavors"></div>
       <p class="ticket-reason" id="ticket-reason"></p>
-      <a class="ticket-map-link" id="ticket-map-link" href="#" target="_blank" rel="noopener">View on Google Maps →</a>
-      <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit →</button>
+      <a class="ticket-map-link" id="ticket-map-link" href="#" target="_blank" rel="noopener">Open in Maps ↗</a>
+      <button type="button" class="ticket-log-btn" id="ticket-log-btn">Log this visit ＋</button>
     </div>
   </div>
 
@@ -155,8 +155,11 @@
     <button type="button" id="active-group-banner-dismiss" aria-label="Stop searching as this group">×</button>
   </p>
 
+  <div class="sheet-backdrop" id="sheet-backdrop" aria-hidden="true"></div>
+
   <div class="tab-drawer" id="tab-drawer" hidden>
     <div class="drawer-header">
+      <span class="sheet-grabber" aria-hidden="true"></span>
       <span class="drawer-title" id="drawer-title"></span>
       <button type="button" class="drawer-close" id="drawer-close-btn" aria-label="Close panel">×</button>
     </div>
@@ -242,7 +245,12 @@
       <div class="recent-visits-block">
         <span class="filter-label">Recent Visits</span>
         <ul class="visit-list" id="visit-list"></ul>
-        <p class="visit-empty" id="visit-empty" hidden>No visits logged yet.</p>
+        <div class="empty-state visit-empty" id="visit-empty" hidden>
+          <div class="empty-state-icon" aria-hidden="true">🍜</div>
+          <p class="empty-state-title">Your food diary starts here</p>
+          <p class="empty-state-hint">Log the places you eat and FoodFindr learns your taste: better picks, streaks and badges.</p>
+          <button type="button" class="cta empty-state-cta" data-open-tab="log-review">Log your first visit</button>
+        </div>
       </div>
     </div>
 
@@ -315,6 +323,34 @@
       <p class="visit-status" id="group-status" hidden></p>
     </div>
 
+    <div class="tab-drawer-panel" id="tab-panel-more" hidden>
+      <div class="more-account">
+        <div class="more-avatar" aria-hidden="true"><img src="/images/logo.png" alt="" /></div>
+        <div class="more-account-text">
+          <p class="more-account-name" id="more-account-name">Browsing as guest</p>
+          <p class="more-account-sub" id="more-account-sub">Sign up to save visits and your taste</p>
+        </div>
+      </div>
+      <ul class="inset-list">
+        <li><button type="button" class="inset-row" data-open-tab="group">
+          <span class="inset-row-icon inset-row-icon--olive"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M2.5 20c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" /><path d="M14.5 14.5c2.4.3 4 2.3 4 5.5" /></svg></span>
+          <span class="inset-row-label">Friend Group</span><span class="inset-row-chevron" aria-hidden="true">›</span>
+        </button></li>
+        <li><button type="button" class="inset-row" data-action="taste-profile">
+          <span class="inset-row-icon inset-row-icon--turmeric"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11Z" /></svg></span>
+          <span class="inset-row-label">My Taste Profile</span><span class="inset-row-chevron" aria-hidden="true">›</span>
+        </button></li>
+        <li><button type="button" class="inset-row" data-open-tab="faq">
+          <span class="inset-row-icon inset-row-icon--blue"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.3.9-1.3 1.9" /><line x1="12" y1="17" x2="12" y2="17.1" /></svg></span>
+          <span class="inset-row-label">How It Works &amp; FAQ</span><span class="inset-row-chevron" aria-hidden="true">›</span>
+        </button></li>
+      </ul>
+      <ul class="inset-list">
+        <li><button type="button" class="inset-row inset-row--center" id="more-signup-btn">Sign Up or Log In</button></li>
+        <li hidden><button type="button" class="inset-row inset-row--center inset-row--danger" id="more-logout-btn">Log Out</button></li>
+      </ul>
+    </div>
+
     <div class="tab-drawer-panel" id="tab-panel-faq" hidden>
       <div class="how-it-works">
         <span class="filter-label">How it works</span>
@@ -365,6 +401,29 @@
       </div>
     </div>
   </div>
+
+  <nav class="tab-bar" id="tab-bar" aria-label="Main">
+    <button type="button" class="tab-bar-btn" data-action="explore" aria-label="Explore">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6" /><line x1="9" y1="3" x2="9" y2="18" /><line x1="15" y1="6" x2="15" y2="21" /></svg>
+      <span>Explore</span>
+    </button>
+    <button type="button" class="tab-bar-btn" data-tab="past-reviews" aria-label="Visits">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4Z" /><line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="14" y2="13" /></svg>
+      <span>Visits</span>
+    </button>
+    <button type="button" class="tab-bar-btn tab-bar-btn--log" data-tab="log-review" aria-label="Log a visit">
+      <span class="tab-bar-plus"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg></span>
+      <span>Log</span>
+    </button>
+    <button type="button" class="tab-bar-btn" data-tab="progress" aria-label="Progress">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v5a5 5 0 0 1-10 0Z" /><path d="M17 5h3v2a3 3 0 0 1-3 3" /><path d="M7 5H4v2a3 3 0 0 0 3 3" /></svg>
+      <span>Progress</span>
+    </button>
+    <button type="button" class="tab-bar-btn" data-tab="more" aria-label="You">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+      <span>You</span>
+    </button>
+  </nav>
 
 </div>
 

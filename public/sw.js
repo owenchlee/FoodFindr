@@ -15,7 +15,7 @@
 //
 // Never touched: /api/* (live data, auth), non-GET requests, and anything
 // cross-origin (Google Maps/Fonts manage their own caching and terms).
-const SHELL_VERSION = 'v1';
+const SHELL_VERSION = 'v2';
 const CACHE = `ff-shell-${SHELL_VERSION}`;
 const SHELL = ['/', '/css/style.css', '/js/app.js', '/js/map.js', '/images/logo.png', '/images/favicon.png'];
 

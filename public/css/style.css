@@ -30,7 +30,14 @@
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
 
-  --top-bar-height: 68px;
+  /* Notch/Dynamic Island and home-indicator insets. Everything positioned
+     under the top bar or above the bottom edge goes through these, so the
+     top bar height below already includes the notch. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --top-bar-height: calc(68px + var(--safe-top));
+
+  --icon-search: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E");
 
   /* iOS-like motion: UIKit's sheet/drawer curve (fast start, long settle) and
      a gentle overshoot for small pop-ins. Durations stay in the 200-350ms
@@ -127,6 +134,7 @@ body {
 .shell {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -171,6 +179,7 @@ body {
   z-index: 9;
   width: 56px;
   height: 100vh;
+  height: 100dvh;
   background: var(--color-char);
   border-right: 1px solid var(--color-hairline);
   display: flex;
@@ -200,7 +209,7 @@ body {
   left: calc(56px + var(--space-4));
   z-index: 5;
   width: 300px;
-  max-height: calc(100vh - var(--top-bar-height) - var(--space-4) * 2);
+  max-height: calc(100dvh - var(--top-bar-height) - var(--space-4) * 2);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -677,7 +686,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   z-index: 8;
   width: 360px;
   max-width: calc(100vw - 56px);
-  height: calc(100vh - var(--top-bar-height));
+  height: calc(100dvh - var(--top-bar-height));
   overflow-y: auto;
   background: var(--color-char-2);
   color: var(--color-paper);
@@ -739,11 +748,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 .tab-drawer-panel[hidden] { display: none; }
 
 .log-visit-block { padding-top: 0; }
-.recent-visits-block {
-  padding-top: var(--space-4);
-  margin-top: var(--space-4);
-  border-top: 1px solid var(--color-hairline);
-}
+.recent-visits-block { padding-top: 0; }
 .progress-block[hidden] { display: none; }
 .progress-empty {
   font-size: 0.82rem;
@@ -947,6 +952,7 @@ select.visit-input option {
 }
 
 .restaurant-autocomplete { position: relative; }
+.visit-form .visit-input { width: 100%; }
 .restaurant-suggestions {
   position: absolute;
   top: calc(100% + var(--space-1));
@@ -1015,8 +1021,6 @@ select.visit-input option {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-height: 200px;
-  overflow-y: auto;
 }
 .visit-item {
   display: flex;
@@ -1049,7 +1053,148 @@ select.visit-input option {
   color: var(--color-paper-dim);
 }
 
-.visit-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin: var(--space-3) 0 0; }
+/* ---------- Empty states ---------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-5) var(--space-3);
+}
+.empty-state[hidden] { display: none; }
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: var(--space-3);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(217, 166, 26, 0.28), rgba(217, 166, 26, 0.08));
+  font-size: 2.2rem;
+}
+.empty-state-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-paper);
+  margin: 0 0 var(--space-2);
+}
+.empty-state-hint {
+  max-width: 280px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-paper-dim);
+  margin: 0 0 var(--space-4);
+}
+.empty-state-cta { margin: 0; border-radius: 999px; padding: var(--space-3) var(--space-5); }
+
+/* ---------- "You" panel (phone) ---------- */
+.more-account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: var(--space-2) 0 var(--space-4);
+}
+.more-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(217, 166, 26, 0.35), rgba(200, 57, 30, 0.2));
+}
+.more-avatar img { width: 44px; height: 44px; object-fit: contain; }
+.more-account-text { min-width: 0; }
+.more-account-name {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.more-account-sub {
+  font-size: 0.85rem;
+  color: var(--color-paper-dim);
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inset-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border-radius: 16px;
+  background: rgba(242, 234, 225, 0.06);
+  overflow: hidden;
+}
+.inset-list li[hidden] { display: none; }
+/* iOS-style separator: a hairline that starts after the row's icon. */
+.inset-list li + li { position: relative; }
+.inset-list li + li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 60px;
+  right: 0;
+  border-top: 0.5px solid rgba(242, 234, 225, 0.12);
+}
+.inset-list li[hidden] + li::before { display: none; }
+.inset-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  color: var(--color-paper);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.inset-row:active:not(:disabled) { scale: 1; background: rgba(242, 234, 225, 0.08); }
+.inset-row-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--color-ink);
+}
+.inset-row-icon--olive { background: var(--color-olive); }
+.inset-row-icon--turmeric { background: var(--color-turmeric); }
+.inset-row-icon--blue { background: #6f9be8; }
+.inset-row-label { flex: 1; }
+.inset-row-chevron { color: var(--color-paper-dim); font-size: 1.4rem; line-height: 1; }
+.inset-row--center { justify-content: center; font-weight: 600; color: var(--color-turmeric); }
+.inset-row--danger { color: #e2573a; }
+
+/* Phone-only chrome; the phone block turns these on. */
+.tab-bar,
+.sheet-backdrop,
+.sheet-grabber { display: none; }
+
+#recommend-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+#recommend-btn.is-thinking .cta-icon { animation: sparkle-spin 1.1s var(--ease-ios) infinite; }
+@keyframes sparkle-spin {
+  50% { rotate: 180deg; scale: 0.8; }
+  to { rotate: 360deg; }
+}
 
 .ticket-map-link,
 .ticket-log-btn {
@@ -1505,32 +1650,30 @@ select.visit-input option {
   display: none;
 }
 
+/* ---------- Phone layout (native-app shell) ----------
+   On phones the app is laid out like a native maps app instead of a shrunken
+   desktop page: a floating glass search pill up top, the Surprise Me button
+   in thumb reach above a bottom tab bar, and every panel as a bottom sheet
+   (grabber, dimmed map behind, swipe down / tap outside / x to close). */
 @media (max-width: 720px) {
-  /* Floating rounded search pill + a floating CTA pill below it, instead of
-     a solid edge-to-edge bar. Closer to how native map apps (Google Maps,
-     etc.) float their search UI over the map on small screens. */
-  :root { --top-bar-height: 108px; }
-  .side-rail { width: 48px; }
-  .side-rail.expanded { width: 190px; }
-  .tabs-toggle {
-    width: 34px;
-    height: 32px;
-    margin-left: 4px;
+  :root {
+    --top-bar-height: calc(var(--safe-top) + 62px);
+    --tab-bar-height: calc(58px + var(--safe-bottom));
+    --sheet-radius: 22px;
+    --gutter: 12px;
   }
-  .tabs-toggle::before { inset: -6px -5px; }
-  .rail-btn {
-    height: 36px;
-    margin: 0 4px;
-    font-size: 0.78rem;
-  }
-  .rail-btn::before { inset: -4px 0; }
-  .rail-btn svg, .tabs-toggle svg { width: 16px; height: 16px; }
-  .tabs-toggle span { width: 16px; }
 
+  /* Map ends at the tab bar so Google's logo/attribution stays visible. */
+  .map-wrap { bottom: var(--tab-bar-height); }
+  .no-location-state { left: 50%; }
+
+  .side-rail { display: none; }
+
+  /* ----- Top: floating glass search pill ----- */
   .top-bar {
-    left: calc(48px + var(--space-2));
-    right: calc(var(--space-2) + env(safe-area-inset-right));
-    top: calc(var(--space-2) + env(safe-area-inset-top));
+    left: var(--gutter);
+    right: calc(var(--gutter) + env(safe-area-inset-right));
+    top: calc(var(--safe-top) + 8px);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -1540,76 +1683,391 @@ select.visit-input option {
     background: none;
     border: none;
     box-shadow: none;
+    pointer-events: none;
   }
+  .top-bar > * { pointer-events: auto; }
   .top-bar .wordmark { display: none; }
+  .top-bar .search-refining-pill { align-self: center; box-shadow: var(--shadow-sm); }
 
   .top-bar .search-row {
-    /* Reset the desktop rule's `flex: 1 1 320px`. In that horizontal row
-       320px is a sane width basis, but .top-bar is column-direction here,
-       so the same shorthand would set a 320px *height* basis instead and
-       balloon this into a giant blob rather than a slim pill. */
+    /* Column-direction parent: a flex-basis here would size the height. */
     flex: 0 0 auto;
-    gap: var(--space-1);
-    background: var(--color-char-2);
-    border: 1px solid var(--color-hairline);
+    align-items: center;
+    gap: 6px;
+    height: 50px;
+    padding: 0 5px 0 16px;
+    background: rgba(36, 28, 24, 0.86);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(242, 234, 225, 0.1);
     border-radius: 999px;
-    box-shadow: var(--shadow-md);
-    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  .top-bar .search-row .dish-search-wrap::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    transform: translateY(-50%);
+    background: var(--color-paper-dim);
+    -webkit-mask: var(--icon-search) center / contain no-repeat;
+    mask: var(--icon-search) center / contain no-repeat;
+    pointer-events: none;
   }
   .top-bar .search-row .visit-input {
     background: none;
     border: none;
-    padding: var(--space-2) 0;
-    font-size: 0.85rem;
+    padding: 0 28px 0 28px;
+    height: 48px;
+    font-size: 16px;
   }
   .top-bar .location-picker #pick-location-btn,
   .top-bar #filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0 12px;
     border-radius: 999px;
-    padding: var(--space-1) var(--space-2);
-    font-size: 0.72rem;
+    border: none;
+    background: rgba(242, 234, 225, 0.08);
+    color: var(--color-paper);
+    font-size: 0.8rem;
+  }
+  .top-bar .location-picker #pick-location-btn { padding: 0; }
+  .top-bar #filters-toggle.active,
+  .top-bar #pick-location-btn[aria-expanded="true"] {
+    background: var(--color-turmeric);
+    color: var(--color-ink);
   }
   .top-bar #filters-toggle svg,
-  .top-bar .location-picker svg {
-    width: 14px;
-    height: 14px;
+  .top-bar .location-picker svg { width: 17px; height: 17px; }
+  .location-picker-popover {
+    left: auto;
+    right: 0;
+    top: calc(100% + 12px);
+    width: min(300px, calc(100vw - 2 * var(--gutter)));
+    border-radius: 16px;
+    padding: 12px;
   }
+  .location-picker-popover .visit-input { width: 100%; }
 
-  .top-bar .cta {
+  /* ----- Surprise Me: floating pill in thumb reach ----- */
+  .top-bar #recommend-btn {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--tab-bar-height) + 14px);
+    transform: translateX(-50%);
+    z-index: 4;
+    height: 54px;
     margin: 0;
-    padding: var(--space-2) var(--space-3);
-    font-size: 0.85rem;
+    padding: 0 28px 0 24px;
     border-radius: 999px;
-    box-shadow: var(--shadow-md);
+    font-size: 1.02rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    background: linear-gradient(180deg, #d9482b 0%, var(--color-chili) 55%, #b3321a 100%);
+    box-shadow: 0 10px 28px rgba(200, 57, 30, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
+  .top-bar #recommend-btn:disabled { opacity: 0.85; }
+  .top-bar #recommend-btn .cta-icon { width: 20px; height: 20px; }
 
-  .no-location-state { left: calc(50% + 24px); }
-
+  /* ----- Recommendation card rises from the bottom, above the button ----- */
   .left-column {
-    left: calc(48px + var(--space-3));
-    right: var(--space-3);
-    top: calc(var(--top-bar-height) + var(--space-3));
+    top: auto;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: calc(var(--tab-bar-height) + 14px + 54px + 12px);
     width: auto;
-    /* Capped well under full height so the recommendation card can never
-       cover the whole screen: the map is the actual tool being used here,
-       and a card that fills the viewport hides it entirely. */
-    max-height: min(46vh, calc(100vh - var(--top-bar-height) - var(--space-3) * 2));
-  }
-  .side-rail.expanded ~ .left-column {
-    left: calc(190px + var(--space-3));
+    /* Capped so the map (the actual tool) is never fully hidden. */
+    max-height: min(56dvh, calc(100dvh - var(--top-bar-height) - var(--tab-bar-height) - 110px));
   }
   .ticket {
-    padding: var(--space-3) var(--space-3) var(--space-2);
+    border-radius: 20px;
+    padding: 18px 18px 14px;
+    background: rgba(36, 28, 24, 0.94);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border-color: rgba(242, 234, 225, 0.1);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   }
-  .ticket-name { font-size: 1.1rem; }
-  .ticket-eyebrow { margin-bottom: var(--space-1); }
-  .ticket-meta { margin-bottom: var(--space-2); }
-  .ticket-reason { font-size: 0.8rem; }
-  .how-it-works { display: none; }
+  .ticket.visible { animation-name: ticket-rise; }
+  @keyframes ticket-rise {
+    from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  }
+  .ticket-name { font-size: 1.4rem; line-height: 1.15; }
+  .ticket-meta { flex-wrap: wrap; row-gap: 2px; font-size: 0.82rem; }
+  .ticket-dish { font-size: 1rem; }
+  .ticket-reason { font-size: 0.9rem; line-height: 1.5; }
+  .ticket-divider { margin-left: -18px; margin-right: -18px; }
+  .ticket-close-btn {
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(242, 234, 225, 0.1);
+    font-size: 1.1rem;
+  }
+  .ticket-flavors .chip { min-height: 28px; padding: 0 10px; font-size: 0.78rem; }
+  .ticket-map-link,
+  .ticket-log-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(50% - 8px);
+    min-height: 44px;
+    margin: 12px 0 0;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+  }
+  .ticket-map-link { margin-right: 8px; }
+  .ticket-map-link { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
+  .ticket-log-btn { background: var(--color-turmeric); color: var(--color-ink); }
+  .ticket-map-link:hover { color: var(--color-paper); }
+  .ticket-log-btn:hover { color: var(--color-ink); }
+
+  .offline-banner,
+  .location-banner,
+  .active-group-banner {
+    max-width: calc(100vw - 2 * var(--gutter));
+    border-radius: 14px;
+    font-size: 0.85rem;
+  }
+
+  /* ----- Bottom tab bar ----- */
+  .tab-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 13;
+    display: flex;
+    align-items: stretch;
+    height: var(--tab-bar-height);
+    padding: 0 max(6px, env(safe-area-inset-right)) var(--safe-bottom) max(6px, env(safe-area-inset-left));
+    background: rgba(24, 18, 15, 0.9);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border-top: 0.5px solid rgba(242, 234, 225, 0.12);
+  }
+  .tab-bar-btn {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    padding: 0 0 6px;
+    background: none;
+    border: none;
+    color: rgba(242, 234, 225, 0.5);
+    font-family: var(--font-body);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+  }
+  .tab-bar-btn svg { width: 25px; height: 25px; transition: scale 200ms var(--ease-spring); }
+  .tab-bar-btn.active,
+  .shell:not(:has(#tab-drawer.open)) .tab-bar-btn[data-action="explore"] { color: var(--color-turmeric); }
+  .tab-bar-btn.active svg { scale: 1.08; }
+  .tab-bar-btn:active { scale: 0.9; }
+
+
+  .tab-bar-plus {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    margin-top: -22px;
+    margin-bottom: 1px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #e2b534, var(--color-turmeric) 60%, #b98b12);
+    box-shadow: 0 6px 18px rgba(217, 166, 26, 0.35), 0 0 0 4px rgba(24, 18, 15, 0.9);
+    transition: rotate 260ms var(--ease-spring);
+  }
+  .tab-bar-plus svg { width: 24px; height: 24px; color: var(--color-ink); stroke-width: 2.6; }
+  .tab-bar-btn--log.active .tab-bar-plus { rotate: 45deg; }
+  .tab-bar-btn--log.active { color: var(--color-turmeric); }
+
+  /* ----- Panels become a bottom sheet ----- */
+  .sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 11;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-med) var(--ease-ios);
+  }
+  .shell:has(#tab-drawer.open) .sheet-backdrop { opacity: 1; pointer-events: auto; }
+
   .tab-drawer {
-    left: 48px;
-    width: calc(100vw - 48px);
+    top: calc(var(--safe-top) + 10px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 12;
+    width: auto;
     max-width: none;
+    height: auto;
+    border: none;
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+    background: var(--color-char-2);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+    transform: translateY(105%);
+    transition: transform 380ms var(--ease-ios);
   }
+  .tab-drawer.open { transform: translateY(0); }
+  /* The sheet's own large title replaces these while it's up. */
+  .top-bar { transition: opacity var(--dur-med) var(--ease-ios); }
+  .shell:has(#tab-drawer.open) .top-bar { opacity: 0; pointer-events: none; }
+  .shell:has(#tab-drawer.open) .top-bar > * { pointer-events: none; }
+  #tab-panel-past-reviews .recent-visits-block > .filter-label,
+  #tab-panel-log-review .log-visit-block > .filter-label { display: none; }
+  .visit-form { margin-top: 0; }
+
+  .sheet-grabber {
+    display: block;
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    width: 38px;
+    height: 5px;
+    margin-left: -19px;
+    border-radius: 3px;
+    background: rgba(242, 234, 225, 0.28);
+  }
+  .drawer-header {
+    padding: 26px 20px 12px;
+    border-bottom: none;
+    background: var(--color-char-2);
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+    touch-action: none;
+    cursor: grab;
+  }
+  .drawer-title {
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+  }
+  .drawer-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(242, 234, 225, 0.1);
+    color: var(--color-paper);
+    font-size: 1.15rem;
+  }
+  .tab-drawer-panel {
+    padding: 4px 20px calc(var(--tab-bar-height) + 28px);
+  }
+
+  /* ----- Readable, touch-sized content inside sheets ----- */
+  .filter-label { font-size: 0.74rem; letter-spacing: 0.08em; }
+  .visit-input,
+  select.cuisine-select {
+    font-size: 16px;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 12px;
+    background: rgba(242, 234, 225, 0.07);
+    border-color: rgba(242, 234, 225, 0.1);
+  }
+  .price-toggle button { min-height: 46px; border-radius: 12px; font-size: 0.95rem; }
+  .cta--secondary { min-height: 48px; border-radius: 12px; font-size: 1rem; padding: 0 18px; }
+  .star-rating { gap: 6px; }
+  .star-rating button { font-size: 2.1rem; padding: 2px 4px; }
+  .visit-form { gap: 14px; }
+  .visit-status { font-size: 0.9rem; }
+
+  .visit-list { gap: 10px; }
+  .visit-item { padding: 14px 16px; gap: 4px; border-radius: 16px; border: none; background: rgba(242, 234, 225, 0.06); }
+  .visit-item-name { font-size: 1.02rem; }
+  .visit-item-rating { font-size: 0.9rem; letter-spacing: 1px; }
+  .visit-item-dish { font-size: 0.9rem; }
+  .visit-item-date { font-size: 0.76rem; }
+
+  .progress-empty, .streak-empty, .leaderboard-empty, .group-empty { font-size: 0.92rem; line-height: 1.45; }
+  .progress-city { font-size: 1.05rem; }
+  .progress-bar-track { height: 10px; }
+  .streak-stats { gap: 28px; }
+  .streak-stat-value { font-size: 2.4rem; }
+  .streak-stat-label { font-size: 0.82rem; }
+  .streak-hint { font-size: 0.9rem; }
+  .badge-grid { gap: 10px; }
+  .badge-card { padding: 12px 14px; border-radius: 14px; gap: 4px; }
+  .badge-name { font-size: 0.92rem; }
+  .badge-description { font-size: 0.8rem; }
+  .leaderboard-row { padding: 12px 14px; border-radius: 12px; font-size: 0.92rem; }
+  .group-hint { font-size: 0.9rem; }
+  .group-item { border-radius: 14px; padding: 14px; }
+  .group-item-name { font-size: 1rem; }
+  .group-item-actions button { min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 0.82rem; }
+  .faq-question { font-size: 0.98rem; }
+  .faq-answer { font-size: 0.9rem; line-height: 1.5; }
+  .how-it-works { display: block; padding-top: 0; border-top: none; }
+  .how-it-works li { font-size: 0.95rem; }
+  .price-hint { font-size: 0.78rem; }
+  .group-size-row button { width: 44px; height: 44px; border-radius: 12px; font-size: 1.2rem; }
+  .group-size-value { font-size: 1.15rem; }
+  #sharing-toggle button { font-size: 0.85rem; }
+  .distance-value { font-size: 0.95rem; }
+
+  /* ----- Taste profile: a bottom sheet too, with its actions pinned ----- */
+  .prefs-dialog {
+    margin: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - var(--safe-top) - 10px);
+    border: none;
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+    padding: 28px 20px 0;
+  }
+  .prefs-dialog[open] { animation: sheet-up 380ms var(--ease-ios); }
+  .prefs-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+  }
+  .prefs-title { font-size: 1.85rem; }
+  .prefs-disclaimer { font-size: 0.8rem; }
+  .prefs-actions {
+    position: sticky;
+    bottom: 0;
+    margin: 0 -20px;
+    padding: 12px 20px calc(12px + var(--safe-bottom));
+    background: var(--color-char-2);
+    border-top: 0.5px solid rgba(242, 234, 225, 0.12);
+  }
+  .prefs-skip { font-size: 0.95rem; text-decoration: none; color: var(--color-paper-dim); min-height: 44px; }
+  .prefs-actions .cta { min-height: 50px; border-radius: 14px; padding: 0 22px; font-size: 1rem; }
+
+  /* ----- Sign in ----- */
+  .auth-gate { align-items: flex-end; background: rgba(20, 15, 13, 0.94); }
+  .auth-card {
+    width: 100%;
+    border-radius: 28px 28px 0 0;
+    border: none;
+    padding: 36px 24px calc(28px + var(--safe-bottom));
+    gap: 14px;
+    animation: sheet-up 420ms var(--ease-ios);
+  }
+  .auth-card .wordmark { font-size: 2.1rem; }
+  .auth-subtitle { font-size: 0.95rem; }
+  .auth-card .cta { min-height: 52px; border-radius: 14px; font-size: 1.02rem; }
+  .auth-toggle-mode { font-size: 0.92rem; min-height: 36px; }
 }
 
 /* Non-blocking refinement indicator (item 9): shown instead of the full
