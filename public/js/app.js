@@ -1404,10 +1404,10 @@ async function getRecommendation() {
   showTicketSkeleton();
   const t0 = performance.now();
 
-  if (pendingRestPromise) {
-    // A phase-2 background fetch (pages 2-3) is still in flight; wait for it
-    // so the candidate pool is the full ~57 results instead of just phase 1's
-    // first 20 (see the risk note on item 3 in the search-latency plan).
+  if (pendingRestPromise && lastFilteredRestaurants.length === 0) {
+    // Only wait for the phase-2 background fetch (pages 2-3) when phase 1
+    // found nothing. Otherwise phase 1's top 20 is plenty to pick from, and
+    // waiting cost seconds (Google makes the next page wait ~2s to exist).
     await pendingRestPromise;
   }
 

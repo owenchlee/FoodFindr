@@ -7,22 +7,26 @@
 // Without that, navigator.serviceWorker is undefined there and app.js skips
 // registration, so this file is simply never used. See docs/glowup/REPORT.md.
 //
-// Strategy: stale-while-revalidate for the shell. The cached copy answers
+// Strategy: stale-while-revalidate for the HTML. The cached copy answers
 // immediately and a fresh copy is fetched in the background for next time,
-// so a deploy reaches a user on their second launch after it. Bump
-// SHELL_VERSION to drop every cached copy at once (e.g. a breaking change
-// that can't tolerate one launch of old HTML with old JS).
+// so a deploy reaches a user on their second launch after it. The HTML links
+// its CSS/JS by content hash (?v=, added by the server), so whichever HTML
+// is served always gets the exact CSS/JS it was built with: those versioned
+// URLs are cache-first and never revalidated. Bump SHELL_VERSION to drop
+// every cached copy at once.
 //
 // Never touched: /api/* (live data, auth), non-GET requests, and anything
 // cross-origin (Google Maps/Fonts manage their own caching and terms).
-const SHELL_VERSION = 'v2';
+const SHELL_VERSION = 'v3';
 const CACHE = `ff-shell-${SHELL_VERSION}`;
-const SHELL = ['/', '/css/style.css', '/js/app.js', '/js/map.js', '/images/logo.png', '/images/favicon.png'];
+const SHELL = ['/', '/images/logo.png', '/images/favicon.png'];
+const ASSET_REF = /"(\/(?:css|js)\/[^"?]+\?v=[^"]+)"/g;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE)
-      .then(cache => cache.addAll(SHELL))
+      // cache: 'reload' skips the HTTP cache, which may still hold old copies.
+      .then(cache => cache.addAll(SHELL.map(url => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -44,16 +48,51 @@ self.addEventListener('fetch', (event) => {
 
   // All navigations share one cache entry: this is a single-page app, and
   // query strings (?perf=1) don't change the document.
-  const cacheKey = request.mode === 'navigate' ? '/' : request;
-  event.respondWith(staleWhileRevalidate(event, cacheKey, request));
+  if (request.mode === 'navigate') {
+    event.respondWith(staleWhileRevalidate(event, '/', request, precacheAssetsOf));
+  } else if (url.searchParams.has('v')) {
+    event.respondWith(cacheFirst(request));
+  } else {
+    event.respondWith(staleWhileRevalidate(event, request, request));
+  }
 });
 
-async function staleWhileRevalidate(event, cacheKey, request) {
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok && response.type === 'basic') cache.put(request, response.clone());
+  return response;
+}
+
+// After a fresh HTML copy is stored: fetch the CSS/JS it links, so the next
+// launch (which serves this HTML from cache) has them offline too, and drop
+// versioned files no longer referenced so the cache doesn't grow per deploy.
+async function precacheAssetsOf(cache, response) {
+  const html = await response.text();
+  const wanted = new Set([...html.matchAll(ASSET_REF)].map(m => new URL(m[1], self.location.origin).href));
+  await Promise.all([...wanted].map(async href => {
+    if (!(await cache.match(href))) {
+      const r = await fetch(href);
+      if (r.ok) await cache.put(href, r);
+    }
+  }));
+  const keys = await cache.keys();
+  await Promise.all(keys
+    .filter(req => new URL(req.url).searchParams.has('v') && !wanted.has(req.url))
+    .map(req => cache.delete(req)));
+}
+
+async function staleWhileRevalidate(event, cacheKey, request, afterStore) {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(cacheKey, { ignoreSearch: request.mode === 'navigate' });
   const network = fetch(request)
-    .then(response => {
-      if (response.ok && response.type === 'basic') cache.put(cacheKey, response.clone());
+    .then(async response => {
+      if (response.ok && response.type === 'basic') {
+        await cache.put(cacheKey, response.clone());
+        if (afterStore) await afterStore(cache, response.clone()).catch(() => {});
+      }
       return response;
     });
   if (cached) {
