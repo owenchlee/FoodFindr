@@ -1919,86 +1919,28 @@ function setupNativeShell() {
   // capacitor.config.json; repeated here for shells built before that.
   safely(() => plugins.SystemBars.setStyle({ style: 'DARK' }));
 
-  // Keyboard (resize: native shrinks the web view): keep the focused field
-  // visible, e.g. the Log a Visit / group inputs lower in the drawer.
+  // Keyboard. The plugin's "native" resize mode shrinks the web view's frame
+  // and, on iOS 18 with contentInset "never", never gives the safe-area
+  // height back: after the keyboard opens once the page draws 47px lower
+  // than where WebKit hit-tests taps, so everything in the top bar goes dead.
+  // Turn resizing off (capacitor.config.json says the same for new builds;
+  // this covers shells already installed) and leave room for the keyboard
+  // in CSS instead, via --kb-height.
+  safely(() => plugins.Keyboard.setResizeMode({ mode: 'none' }));
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  safely(() => plugins.Keyboard.addListener('keyboardWillShow', () => {
+  safely(() => plugins.Keyboard.addListener('keyboardWillShow', (info) => {
+    document.documentElement.style.setProperty('--kb-height', `${Math.round(info?.keyboardHeight || 0)}px`);
     document.body.classList.add('keyboard-open');
+    // Keep a field lower in the sheet (Log a Visit, groups) above the keyboard.
     const el = document.activeElement;
-    if (el && el.matches('input, textarea, select')) {
+    if (el && el.matches('input, textarea, select') && el.closest('#tab-drawer')) {
       setTimeout(() => el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' }), 50);
     }
   }));
   safely(() => plugins.Keyboard.addListener('keyboardWillHide', () => {
+    document.documentElement.style.setProperty('--kb-height', '0px');
     document.body.classList.remove('keyboard-open');
   }));
-
-  startTapDiagnostics();
-}
-
-// TEMPORARY (Sept 2026): top-bar taps do nothing inside the iOS shell only,
-// and it doesn't reproduce in desktop Chrome or WebKit. Reports what each tap
-// actually hit, whether a click followed, and the viewport geometry, to
-// /api/debug/taps (see server.js). Remove once diagnosed.
-function startTapDiagnostics() {
-  const describe = (el) => {
-    const parts = [];
-    for (let n = el, i = 0; n && n.nodeType === 1 && i < 4; n = n.parentElement, i++) {
-      parts.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') +
-        (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/\s+/).slice(0, 2).join('.') : ''));
-    }
-    return parts.join(' < ');
-  };
-  const rect = (sel) => {
-    const el = document.querySelector(sel);
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return [Math.round(r.top), Math.round(r.bottom), Math.round(r.left), Math.round(r.right)];
-  };
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
-  document.body.appendChild(probe);
-  const geometry = () => {
-    const vv = window.visualViewport;
-    const cs = getComputedStyle(probe);
-    return {
-      inner: [window.innerWidth, window.innerHeight],
-      vv: vv ? [Math.round(vv.offsetTop), Math.round(vv.pageTop), Math.round(vv.height), vv.scale] : null,
-      scroll: [window.scrollY, document.documentElement.scrollTop, document.body.scrollTop],
-      envSafe: [cs.paddingTop, cs.paddingBottom],
-      safeTopVar: getComputedStyle(document.documentElement).getPropertyValue('--safe-top').trim(),
-      topBar: rect('.top-bar'), searchRow: rect('.search-row'), filters: rect('#filters-toggle'), tabBar: rect('#tab-bar'),
-      drawerOpen: document.getElementById('tab-drawer')?.classList.contains('open')
-    };
-  };
-  let queue = [];
-  let flushTimer = null;
-  const push = (entry) => {
-    queue.push(entry);
-    clearTimeout(flushTimer);
-    flushTimer = setTimeout(() => {
-      const entries = queue;
-      queue = [];
-      fetch('/api/debug/taps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries }), keepalive: true }).catch(() => {});
-    }, 800);
-  };
-  push({ kind: 'boot', ua: navigator.userAgent, dpr: window.devicePixelRatio, geometry: geometry() });
-  let lastClick = null;
-  document.addEventListener('click', (e) => { lastClick = { t: performance.now(), target: describe(e.target) }; }, true);
-  document.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    if (!touch) return;
-    const start = performance.now();
-    const x = Math.round(touch.clientX);
-    const y = Math.round(touch.clientY);
-    const entry = { kind: 'tap', x, y, target: describe(e.target), atPoint: describe(document.elementFromPoint(x, y)) };
-    setTimeout(() => {
-      entry.clicked = lastClick && lastClick.t >= start ? lastClick.target : null;
-      entry.focused = describe(document.activeElement);
-      entry.geometry = geometry();
-      push(entry);
-    }, 700);
-  }, { capture: true, passive: true });
 }
 
 setupNativeShell();
