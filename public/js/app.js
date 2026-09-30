@@ -36,6 +36,8 @@ let searchAbort = null;
 // finishes - awaited by getRecommendation so a Surprise Me click doesn't
 // sample from only the first 20 results (see loadRestaurants/getRecommendation).
 let pendingRestPromise = null;
+let searchStartedAt = 0;
+const SEARCH_TIMEOUT_MS = 15000;
 
 function scheduleSearch({ immediate = false } = {}) {
   clearTimeout(searchTimer);
@@ -47,6 +49,16 @@ function scheduleSearch({ immediate = false } = {}) {
   if (immediate) { runSearch(); return; }
   searchTimer = setTimeout(runSearch, 300);
 }
+
+// Coming back to the app with a search still "in flight": iOS suspends the
+// web view in the background and the request may never settle, so start it
+// over rather than wait out the deadline.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && restaurantsLoading && searchTimer === null &&
+      Date.now() - searchStartedAt > 3000) {
+    runSearch();
+  }
+});
 
 function runSearch() {
   clearTimeout(searchTimer);
@@ -251,21 +263,28 @@ function init() {
     scheduleSearch({ immediate: true });
     dishInput.focus();
   });
-  dishInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      // blur() synchronously fires 'change' above, which updates
-      // currentFilters.dish. The explicit scheduleSearch({immediate:true})
-      // below - not the debounced one 'change' would otherwise trigger - sets
-      // restaurantsLoading = true synchronously and skips the 300ms debounce
-      // window entirely, so getRecommendation() correctly queues itself via
-      // the existing pendingRecommendation mechanism instead of racing the
-      // previous search's results. Debouncing this path would silently break
-      // that invariant, so don't replace this with a plain scheduleSearch().
-      dishInput.blur();
-      scheduleSearch({ immediate: true });
-      getRecommendation();
-    }
+  // A real form submit, not a keydown listener: it's what the iOS keyboard's
+  // Search key (enterkeyhint="search") reliably fires, including when
+  // autocorrect is mid-word, which a keydown 'Enter' check can miss.
+  document.getElementById('dish-search-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    // Read the value here rather than relying on 'change': blur() only fires
+    // 'change' if the value differs from the last committed one. The explicit
+    // scheduleSearch({immediate:true}) - not the debounced one 'change' would
+    // otherwise trigger - sets restaurantsLoading = true synchronously and
+    // skips the 300ms debounce window, so getRecommendation() queues itself
+    // via pendingRecommendation instead of racing the previous search's
+    // results. Don't replace this with a plain scheduleSearch().
+    currentFilters.dish = dishInput.value.trim();
+    dishInput.blur();
+    scheduleSearch({ immediate: true });
+    getRecommendation();
+  });
+  // The whole search pill focuses the field, not just the text itself: on a
+  // phone the pill's padding and the magnifier icon are where thumbs land.
+  document.querySelector('.search-row').addEventListener('click', (event) => {
+    if (event.target.closest('button, input, .location-picker, .filters-toggle, a')) return;
+    dishInput.focus();
   });
 
   const distanceInput = document.getElementById('distance-range');
@@ -1257,6 +1276,7 @@ async function loadRestaurants(seq, signal) {
   if (!userLocation) {
     showNoLocationState();
     restaurantsLoading = false;
+    cancelPendingRecommendation('Set a location first: allow location access or tap the pin to choose a spot.');
     return;
   }
   hideNoLocationState();
@@ -1290,9 +1310,18 @@ async function loadRestaurants(seq, signal) {
   if (isInitialLoad) showLoading('Scanning nearby spots…');
   else showRefining();
   pendingRestPromise = null;
+  searchStartedAt = Date.now();
+
+  // Deadline for this request. iOS can freeze a fetch forever when the app is
+  // backgrounded mid-request; without this, restaurantsLoading would stay
+  // true and every Surprise Me after it would queue behind a search that
+  // never finishes.
+  const deadline = new AbortController();
+  const deadlineTimer = setTimeout(() => deadline.abort(), SEARCH_TIMEOUT_MS);
+  const fetchSignal = typeof AbortSignal.any === 'function' ? AbortSignal.any([signal, deadline.signal]) : signal;
 
   try {
-    const response = await fetch(`/api/restaurants?${params.toString()}`, { signal });
+    const response = await fetch(`/api/restaurants?${params.toString()}`, { signal: fetchSignal });
     const data = await response.json();
     if (seq !== searchSeq) return; // superseded by a newer search while this was in flight
 
@@ -1303,7 +1332,7 @@ async function loadRestaurants(seq, signal) {
     allRestaurants = data.restaurants || [];
     if (response.ok) writeSearchCache(cacheKey, allRestaurants);
     applyLocalFilters();
-    hideTicket();
+    if (!pendingRecommendation) hideTicket(); // a queued Surprise Me keeps its skeleton card
     loadProgress();
     perfLog('search phase1', t0);
 
@@ -1339,12 +1368,20 @@ async function loadRestaurants(seq, signal) {
         .finally(() => { pendingRestPromise = null; });
     }
   } catch (err) {
-    if (err.name === 'AbortError') return; // superseded; the new search owns loading state now
+    // Superseded by a newer search, which owns the loading state now. A
+    // deadline abort is a real failure and falls through.
+    if (err.name === 'AbortError' && !deadline.signal.aborted) return;
     if (seq === searchSeq) {
-      showLocationBanner("Couldn't reach the server. Check your connection and try again.");
+      const message = deadline.signal.aborted
+        ? 'Finding restaurants took too long. Try again in a moment.'
+        : "Couldn't reach the server. Check your connection and try again.";
+      showLocationBanner(message);
       restaurantsLoading = false;
+      cancelPendingRecommendation(message);
       if (isInitialLoad) hideLoading(); else hideRefining();
     }
+  } finally {
+    clearTimeout(deadlineTimer);
   }
 }
 
@@ -1384,45 +1421,70 @@ function renderRestaurantSuggestions(query) {
   list.hidden = matches.length === 0;
 }
 
+function setRecommendButtonThinking(thinking) {
+  const button = document.getElementById('recommend-btn');
+  // Only the text span changes, so the sparkle icon stays (and spins).
+  const label = button.querySelector('.cta-label') || button;
+  if (!label.dataset.idleLabel) label.dataset.idleLabel = label.textContent;
+  button.disabled = thinking;
+  label.textContent = thinking ? 'Thinking…' : label.dataset.idleLabel;
+  button.classList.toggle('is-thinking', thinking);
+}
+
+// A Surprise Me that was queued behind a search (pendingRecommendation) when
+// that search then failed: say so instead of leaving the button spinning.
+function cancelPendingRecommendation(message) {
+  if (!pendingRecommendation) return;
+  pendingRecommendation = false;
+  setRecommendButtonThinking(false);
+  showTicketError(message);
+}
+
+const RECOMMEND_TIMEOUT_MS = 30000;
+
 async function getRecommendation() {
+  // Skeleton card instead of the old full-screen overlay: the map stays
+  // visible and pannable, and the card appears exactly where the answer will
+  // land, so the streamed restaurant/dish fill in place instead of popping in.
+  // Shown right away even when queued behind a search, so a tap always
+  // visibly does something.
+  ticketDismissed = false;
+  setRecommendButtonThinking(true);
+  showTicketSkeleton();
+
   if (restaurantsLoading) {
     pendingRecommendation = true;
     return;
   }
 
-  const button = document.getElementById('recommend-btn');
-  button.disabled = true;
-  // Only the text span changes, so the sparkle icon stays (and spins).
-  const label = button.querySelector('.cta-label') || button;
-  const originalLabel = label.textContent;
-  label.textContent = 'Thinking…';
-  button.classList.add('is-thinking');
-  // Skeleton card instead of the old full-screen overlay: the map stays
-  // visible and pannable, and the card appears exactly where the answer will
-  // land, so the streamed restaurant/dish fill in place instead of popping in.
-  ticketDismissed = false;
-  showTicketSkeleton();
   const t0 = performance.now();
+  const finish = () => {
+    setRecommendButtonThinking(false);
+    hideLoading();
+  };
 
   if (pendingRestPromise && lastFilteredRestaurants.length === 0) {
     // Only wait for the phase-2 background fetch (pages 2-3) when phase 1
     // found nothing. Otherwise phase 1's top 20 is plenty to pick from, and
     // waiting cost seconds (Google makes the next page wait ~2s to exist).
-    await pendingRestPromise;
+    // Capped: a request stalled by iOS suspending the app must not hang this.
+    await Promise.race([pendingRestPromise, new Promise(r => setTimeout(r, 6000))]);
   }
 
   if (lastFilteredRestaurants.length === 0) {
     showTicketError('No restaurants match your filters. Try widening your distance or price range.');
-    button.disabled = false;
-    label.textContent = originalLabel;
-    button.classList.remove('is-thinking');
-    hideLoading();
+    finish();
     return;
   }
 
+  // Without a deadline, a stream that iOS froze (app backgrounded mid-answer)
+  // would leave the button stuck on "Thinking…" for good.
+  const timeout = new AbortController();
+  const timeoutTimer = setTimeout(() => timeout.abort(), RECOMMEND_TIMEOUT_MS);
   try {
     const response = await fetch('/api/recommend', {
       method: 'POST',
+      signal: timeout.signal,
       // Asks for the streamed variant (see /api/recommend): the restaurant
       // shows up as soon as Claude has picked it, and the dish/reason fill in
       // as they're written. A server that doesn't stream (or an error before
@@ -1473,12 +1535,12 @@ async function getRecommendation() {
     });
     if (!finished) showTicketError("The recommendation got cut off. Try again in a moment.");
   } catch (err) {
-    showTicketError("Couldn't reach the server. Check your connection and try again.");
+    showTicketError(timeout.signal.aborted
+      ? 'That took too long. Tap Surprise Me to try again.'
+      : "Couldn't reach the server. Check your connection and try again.");
   } finally {
-    button.disabled = false;
-    label.textContent = originalLabel;
-    button.classList.remove('is-thinking');
-    hideLoading();
+    clearTimeout(timeoutTimer);
+    finish();
   }
 }
 
