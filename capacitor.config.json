@@ -20,7 +20,7 @@
       "style": "DARK"
     },
     "Keyboard": {
-      "resize": "native",
+      "resize": "none",
       "style": "DARK"
     }
   }

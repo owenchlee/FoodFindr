@@ -1975,6 +1975,11 @@ select.visit-input option {
   .tab-drawer-panel {
     padding: 4px 20px calc(var(--tab-bar-height) + 28px);
   }
+  /* iOS app: the keyboard overlays the page (no resize), so give the sheet
+     enough scroll room to lift the focused field above it. */
+  .keyboard-open .tab-drawer-panel {
+    padding-bottom: calc(max(var(--kb-height, 0px), var(--tab-bar-height)) + 28px);
+  }
 
   /* ----- Readable, touch-sized content inside sheets ----- */
   .filter-label { font-size: 0.74rem; letter-spacing: 0.08em; }
