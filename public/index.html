@@ -522,13 +522,16 @@
 //
 // This inline script itself can't carry `defer` (the attribute has no effect
 // without a `src`), so it still runs synchronously at its position during
-// parsing - BEFORE map.js/app.js, which are now deferred. The setTimeout
-// below pushes bootstrapMap's own execution to right after parsing finishes
-// (and deferred scripts have run), so its 'maps-loaded' dispatch can't fire
-// into the void before app.js has registered the listener for it - the one
-// path here (a missing Maps key) that dispatches synchronously rather than
-// from a later network callback.
-setTimeout(bootstrapMap, 0);
+// parsing - BEFORE map.js/app.js, which are deferred. bootstrapMap waits for
+// DOMContentLoaded, which fires only after every deferred script has run:
+// otherwise the Maps callback can win the race against a map.js that isn't
+// downloaded yet (a cold cache right after a deploy) and throw "initMap is
+// not defined", leaving the app without a map or search. A setTimeout(0)
+// here used to look like it did the same, but it doesn't wait for deferred
+// scripts. The Maps download itself still starts early via the preload in
+// <head>, so this costs nothing.
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootstrapMap);
+else bootstrapMap();
 function bootstrapMap() {
   const config = window.__FF_CONFIG || {};
   const defaultCenter = { lat: 40.7300, lng: -73.9950 };
