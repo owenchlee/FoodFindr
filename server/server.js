@@ -1458,6 +1458,20 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 // the fan-out in /api/recommend above can hit a warm cache. Deliberately NOT
 // called automatically after every search - Place Details is billed per call,
 // and most searches never lead to a Surprise Me click.
+// TEMPORARY (Oct 2026): tap/keyboard diagnostics from the iOS app (see
+// startTapDiagnostics in app.js). Last 400 entries, in memory only; element
+// names and geometry, nothing personal. Remove once diagnosed.
+const tapLog = [];
+app.post('/api/debug/taps', apiLimiter, (req, res) => {
+  const entries = Array.isArray(req.body.entries) ? req.body.entries.slice(0, 60) : [];
+  for (const e of entries) {
+    if (JSON.stringify(e).length <= 4000) tapLog.push({ at: new Date().toISOString(), ...e });
+  }
+  tapLog.splice(0, Math.max(0, tapLog.length - 400));
+  res.status(204).end();
+});
+app.get('/api/debug/taps', (req, res) => res.json(tapLog));
+
 app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
   const placeIds = Array.isArray(req.body.placeIds)
     ? req.body.placeIds.filter(id => typeof id === 'string').slice(0, 15)
