@@ -47,6 +47,9 @@
   --dur-fast: 200ms;
   --dur-med: 300ms;
 }
+/* iOS has already inset the web view below the status bar (old app builds,
+   see syncNativeInset in app.js), so don't pad for it a second time. */
+html.native-top-inset { --safe-top: 0px; }
 
 /* ---------- Native-feel baseline (WKWebView) ----------
    Removes the tells that make a web view read as a web page: the grey tap
