@@ -263,17 +263,7 @@ function init() {
     scheduleSearch({ immediate: true });
     focusWithoutScroll(dishInput);
   });
-  // iOS: a plain tap on a field lets WebKit scroll the page to "reveal" it
-  // above the keyboard. The top bar is always on screen, but in the app that
-  // reveal pushed the whole page down under the status bar and left taps
-  // landing 47px off. Take the focus ourselves, without the scroll.
-  [dishInput, document.getElementById('location-search-input')].forEach((field) => {
-    field.addEventListener('touchend', (event) => {
-      if (document.activeElement === field || event.touches.length) return;
-      event.preventDefault();
-      focusWithoutScroll(field);
-    });
-  });
+
   // A real form submit, not a keydown listener: it's what the iOS keyboard's
   // Search key (enterkeyhint="search") reliably fires, including when
   // autocorrect is mid-word, which a keydown 'Enter' check can miss.
@@ -2032,6 +2022,29 @@ function setupNativeShell() {
     if (!document.body.classList.contains('keyboard-open')) resetPageScroll();
   });
 
+  // App builds from before Sept 27 2026 have contentInset "always" (and no
+  // Keyboard plugin). Once the keyboard has opened, iOS insets the web view
+  // by the safe areas itself and never takes it back, so the page's own
+  // safe-area padding doubles up: a black band under the status bar and the
+  // whole UI pushed down. Spot that state (the viewport is short by exactly
+  // the safe areas) and drop our top padding while it lasts.
+  const insetProbe = document.createElement('div');
+  insetProbe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.appendChild(insetProbe);
+  const syncNativeInset = () => {
+    const cs = getComputedStyle(insetProbe);
+    const safeTop = parseFloat(cs.paddingTop) || 0;
+    const safeBottom = parseFloat(cs.paddingBottom) || 0;
+    const portrait = window.innerHeight > window.innerWidth;
+    const missing = Math.max(screen.width, screen.height) - window.innerHeight;
+    const insetByIOS = portrait && safeTop > 0 && Math.abs(missing - (safeTop + safeBottom)) <= 4;
+    document.documentElement.classList.toggle('native-top-inset', insetByIOS);
+  };
+  syncNativeInset();
+  window.addEventListener('resize', syncNativeInset);
+  window.visualViewport?.addEventListener('resize', syncNativeInset);
+  document.addEventListener('focusout', () => setTimeout(syncNativeInset, 600));
+
   startTapDiagnostics(plugins, safely);
 }
 
@@ -2063,7 +2076,9 @@ function startTapDiagnostics(plugins, safely) {
       vv: vv ? [Math.round(vv.offsetTop), Math.round(vv.pageTop), Math.round(vv.height), vv.scale] : null,
       scroll: [window.scrollY, document.documentElement.scrollTop, document.body.scrollTop],
       html: rect('html'), searchRow: rect('.search-row'), filters: rect('#filters-toggle'), tabBar: rect('#tab-bar'),
-      kb: document.body.classList.contains('keyboard-open')
+      kb: document.body.classList.contains('keyboard-open'),
+      nativeInset: document.documentElement.classList.contains('native-top-inset'),
+      kbPlugin: !!plugins.Keyboard
     };
   };
   let queue = [];
