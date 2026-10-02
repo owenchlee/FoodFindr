@@ -261,7 +261,18 @@ function init() {
     currentFilters.dish = '';
     updateDishClearBtn();
     scheduleSearch({ immediate: true });
-    dishInput.focus();
+    focusWithoutScroll(dishInput);
+  });
+  // iOS: a plain tap on a field lets WebKit scroll the page to "reveal" it
+  // above the keyboard. The top bar is always on screen, but in the app that
+  // reveal pushed the whole page down under the status bar and left taps
+  // landing 47px off. Take the focus ourselves, without the scroll.
+  [dishInput, document.getElementById('location-search-input')].forEach((field) => {
+    field.addEventListener('touchend', (event) => {
+      if (document.activeElement === field || event.touches.length) return;
+      event.preventDefault();
+      focusWithoutScroll(field);
+    });
   });
   // A real form submit, not a keydown listener: it's what the iOS keyboard's
   // Search key (enterkeyhint="search") reliably fires, including when
@@ -284,7 +295,7 @@ function init() {
   // phone the pill's padding and the magnifier icon are where thumbs land.
   document.querySelector('.search-row').addEventListener('click', (event) => {
     if (event.target.closest('button, input, .location-picker, .filters-toggle, a')) return;
-    dishInput.focus();
+    focusWithoutScroll(dishInput);
   });
 
   const distanceInput = document.getElementById('distance-range');
@@ -699,7 +710,7 @@ function closeDrawer() {
     drawer.removeEventListener('transitionend', onClosed);
     if (!drawer.classList.contains('open')) {
       drawer.hidden = true;
-      if (drawerTriggerEl && document.body.contains(drawerTriggerEl)) drawerTriggerEl.focus();
+      if (drawerTriggerEl && document.body.contains(drawerTriggerEl)) focusWithoutScroll(drawerTriggerEl);
       drawerTriggerEl = null;
     }
   };
@@ -1169,7 +1180,7 @@ function openLocationPicker() {
   document.getElementById('pick-location-btn').classList.add('active');
   document.getElementById('pick-location-btn').setAttribute('aria-expanded', 'true');
   document.getElementById('location-picker-popover').hidden = false;
-  document.getElementById('location-search-input').focus();
+  focusWithoutScroll(document.getElementById('location-search-input'));
   showLocationBanner('Search a location, or click anywhere on the map.');
 }
 
@@ -1960,6 +1971,18 @@ window.addEventListener('maps-loaded', () => {
 // holding the splash until Maps loaded just hid a usable UI for no reason.
 // Every plugin call is feature-detected and its rejection swallowed, since
 // Capacitor.Plugins hands back a stub for plugins the build doesn't include.
+// The page never scrolls (html/body are fixed), so any scroll position iOS
+// leaves behind is an offset between where things draw and where taps land.
+function focusWithoutScroll(el) {
+  el.focus({ preventScroll: true });
+}
+
+function resetPageScroll() {
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+}
+
 function setupNativeShell() {
   if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
   const plugins = window.Capacitor.Plugins;
@@ -2002,7 +2025,83 @@ function setupNativeShell() {
   safely(() => plugins.Keyboard.addListener('keyboardWillHide', () => {
     document.documentElement.style.setProperty('--kb-height', '0px');
     document.body.classList.remove('keyboard-open');
+    resetPageScroll();
   }));
+  safely(() => plugins.Keyboard.addListener('keyboardDidHide', resetPageScroll));
+  window.visualViewport?.addEventListener('resize', () => {
+    if (!document.body.classList.contains('keyboard-open')) resetPageScroll();
+  });
+
+  startTapDiagnostics(plugins, safely);
+}
+
+// TEMPORARY (Oct 2026): in the iOS app, focusing the craving field shifts the
+// page down under the status bar and Filters/location stop responding; none
+// of it reproduces outside the app. Reports taps, keyboard events and the
+// viewport geometry to /api/debug/taps (server.js). Remove once diagnosed.
+function startTapDiagnostics(plugins, safely) {
+  const describe = (el) => {
+    const parts = [];
+    for (let n = el, i = 0; n && n.nodeType === 1 && i < 3; n = n.parentElement, i++) {
+      parts.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') +
+        (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/s+/)[0] : ''));
+    }
+    return parts.join(' < ');
+  };
+  const rect = (sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return [Math.round(r.top), Math.round(r.bottom), Math.round(r.left), Math.round(r.right)];
+  };
+  const geometry = () => {
+    const vv = window.visualViewport;
+    return {
+      screen: [screen.width, screen.height],
+      inner: [window.innerWidth, window.innerHeight],
+      client: document.documentElement.clientHeight,
+      vv: vv ? [Math.round(vv.offsetTop), Math.round(vv.pageTop), Math.round(vv.height), vv.scale] : null,
+      scroll: [window.scrollY, document.documentElement.scrollTop, document.body.scrollTop],
+      html: rect('html'), searchRow: rect('.search-row'), filters: rect('#filters-toggle'), tabBar: rect('#tab-bar'),
+      kb: document.body.classList.contains('keyboard-open')
+    };
+  };
+  let queue = [];
+  let flushTimer = null;
+  const push = (entry) => {
+    queue.push({ t: Math.round(performance.now()), ...entry });
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => {
+      const entries = queue;
+      queue = [];
+      fetch('/api/debug/taps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries }), keepalive: true }).catch(() => {});
+    }, 800);
+  };
+  const event = (kind, extra) => {
+    push({ kind, ...extra, geometry: geometry() });
+    setTimeout(() => push({ kind: kind + '+500', geometry: geometry() }), 500);
+  };
+  push({ kind: 'boot', ua: navigator.userAgent, geometry: geometry() });
+  ['keyboardWillShow', 'keyboardDidShow', 'keyboardWillHide', 'keyboardDidHide'].forEach((name) => {
+    safely(() => plugins.Keyboard.addListener(name, (info) => event(name, { kbh: info?.keyboardHeight })));
+  });
+  document.addEventListener('focusin', (e) => event('focusin', { target: describe(e.target) }));
+  let lastClick = null;
+  document.addEventListener('click', (e) => { lastClick = { t: performance.now(), target: describe(e.target) }; }, true);
+  document.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const start = performance.now();
+    const x = Math.round(touch.clientX);
+    const y = Math.round(touch.clientY);
+    const entry = { kind: 'tap', x, y, sy: Math.round(touch.screenY), target: describe(e.target) };
+    setTimeout(() => {
+      entry.clicked = lastClick && lastClick.t >= start ? lastClick.target : null;
+      entry.focused = describe(document.activeElement);
+      entry.geometry = geometry();
+      push(entry);
+    }, 600);
+  }, { capture: true, passive: true });
 }
 
 setupNativeShell();
