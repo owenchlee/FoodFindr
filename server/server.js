@@ -330,6 +330,18 @@ function makeTtlCache({ ttlMs, maxEntries }) {
 // cost versus a single page.
 const MAX_PLACES_PAGES = 3;
 
+// Google reports an exhausted daily quota as OVER_QUERY_LIMIT or
+// RESOURCE_EXHAUSTED in the JSON body, or as a bare HTTP 429 whose body may
+// not be JSON. readGoogleJson folds the 429 into the same status field so
+// callers only check one place.
+const GOOGLE_QUOTA_STATUSES = new Set(['OVER_QUERY_LIMIT', 'RESOURCE_EXHAUSTED']);
+const GOOGLE_QUOTA_ERROR = { code: 'GOOGLE_QUOTA', error: 'FoodFindr hit its daily search limit. Try again tomorrow.' };
+
+async function readGoogleJson(response) {
+  if (response.status === 429) return { status: 'OVER_QUERY_LIMIT' };
+  return response.json();
+}
+
 async function fetchPlacesPage(endpoint, params, pageToken) {
   const url = new URL(endpoint);
   if (pageToken) {
@@ -344,7 +356,7 @@ async function fetchPlacesPage(endpoint, params, pageToken) {
   // Node's fetch has no default timeout, so a hung socket would otherwise
   // hold the request open indefinitely.
   const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  return response.json();
+  return readGoogleJson(response);
 }
 
 function buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
@@ -376,7 +388,9 @@ async function fetchPlacesFirstPage(endpoint, params) {
   let data = await fetchPlacesPage(endpoint, params, null);
   if (data.status === 'ZERO_RESULTS') return { results: [], nextPageToken: null };
   if (data.status !== 'OK') {
-    throw new Error(`Places API error: ${data.status}${data.error_message ? ': ' + data.error_message : ''}`);
+    const err = new Error(`Places API error: ${data.status}${data.error_message ? ': ' + data.error_message : ''}`);
+    if (GOOGLE_QUOTA_STATUSES.has(data.status)) err.code = GOOGLE_QUOTA_ERROR.code;
+    throw err;
   }
   return { results: data.results || [], nextPageToken: data.next_page_token || null };
 }
@@ -386,9 +400,10 @@ async function fetchPlacesFirstPage(endpoint, params) {
 // valid, which is the one delay in this whole path that can't be optimized
 // away - so instead of making the user wait on it, we let it run after the
 // response for page 1 has already been sent.
-async function continuePlacesFetch(entry, endpoint, params, firstPageToken) {
+async function continuePlacesFetch(entry, key, endpoint, params, firstPageToken) {
   const allResults = entry.places.slice();
   let pageToken = firstPageToken;
+  let failed = false;
   try {
     for (let page = 1; page < MAX_PLACES_PAGES && pageToken; page++) {
       await delay(2000); // Google requires a short delay before a page token becomes valid
@@ -401,7 +416,7 @@ async function continuePlacesFetch(entry, endpoint, params, firstPageToken) {
       }
 
       if (data.status === 'ZERO_RESULTS') break;
-      if (data.status !== 'OK') break; // keep whatever earlier pages already returned
+      if (data.status !== 'OK') { failed = true; break; } // keep whatever earlier pages already returned
 
       allResults.push(...(data.results || []));
       entry.pagesFetched++;
@@ -409,11 +424,15 @@ async function continuePlacesFetch(entry, endpoint, params, firstPageToken) {
     }
   } catch (err) {
     console.error('Background Places pagination failed:', err);
+    failed = true;
     // fall through and resolve with whatever pages did complete
   }
   entry.places = allResults;
   entry.complete = true;
   entry.resolveDone(allResults);
+  // This search still gets its partial results, but don't cache them as
+  // complete for 10 minutes: the next identical search fetches again.
+  if (failed && placesCache.get(key) === entry) placesCache.delete(key);
 }
 
 // Places search-result cache, keyed tightly enough (~110m/500m buckets) that
@@ -522,8 +541,11 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
 
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    const data = await response.json();
+    const data = await readGoogleJson(response);
 
+    if (GOOGLE_QUOTA_STATUSES.has(data.status)) {
+      return res.status(503).json(GOOGLE_QUOTA_ERROR);
+    }
     if (data.status !== 'OK' || !data.results[0]) {
       return res.status(404).json({ error: `Couldn't find "${address}".` });
     }
@@ -607,7 +629,16 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
       // stored reference before mutating it below.
       entry = placesCache.get(key);
 
-      const { results: firstPageResults, nextPageToken } = await entry.inflight;
+      let firstPage;
+      try {
+        firstPage = await entry.inflight;
+      } catch (err) {
+        // Never leave a failed Google response cached, or the next identical
+        // search would replay this error for 10 minutes without retrying.
+        placesCache.delete(key);
+        throw err;
+      }
+      const { results: firstPageResults, nextPageToken } = firstPage;
       entry.places = firstPageResults;
       entry.inflight = null;
       entry.pagesFetched = 1;
@@ -615,7 +646,7 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
       if (nextPageToken && activeBackgroundFills < MAX_CONCURRENT_BACKGROUND_FILLS) {
         activeBackgroundFills++;
         const { endpoint: bgEndpoint, params: bgParams } = buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
-        continuePlacesFetch(entry, bgEndpoint, bgParams, nextPageToken)
+        continuePlacesFetch(entry, key, bgEndpoint, bgParams, nextPageToken)
           .finally(() => { activeBackgroundFills--; });
       } else {
         entry.complete = true;
@@ -639,6 +670,9 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Places API request failed:', err);
+    if (err.code === GOOGLE_QUOTA_ERROR.code) {
+      return res.status(503).json({ ...GOOGLE_QUOTA_ERROR, restaurants: [] });
+    }
     res.status(502).json({ error: 'Could not reach Google Places right now. Try again in a moment.', restaurants: [] });
   }
 });
@@ -725,21 +759,36 @@ async function fetchPlaceReviews(placeId) {
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
   let reviews = [];
+  let cacheable = false;
+  let quotaHit = false;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
-    const data = await response.json();
+    const data = await readGoogleJson(response);
 
-    if (data.status !== 'OK') {
-      console.error('Place Details error:', data.status, data.error_message || '');
-    } else {
+    if (data.status === 'OK') {
       reviews = (data.result.reviews || []).map(r => r.text).filter(Boolean);
+      cacheable = true;
+    } else if (data.status === 'ZERO_RESULTS' || data.status === 'NOT_FOUND') {
+      // NOT_FOUND (a closed or removed place) is a definite answer, not a
+      // failure, so it's cached like an empty result.
+      cacheable = true;
+    } else {
+      console.error('Place Details error:', data.status, data.error_message || '');
+      if (GOOGLE_QUOTA_STATUSES.has(data.status)) quotaHit = true;
     }
   } catch (err) {
     console.error('Place Details request failed:', err);
   }
 
-  // Cache the [] outcome too, or a dud place gets re-fetched on every click.
-  reviewsCache.set(placeId, { reviews });
+  // A successful [] (a place with no reviews) is cached too, or a dud place
+  // gets re-fetched on every click. A failed response (quota, timeout) is
+  // not, so reviews come back as soon as Google does.
+  if (cacheable) reviewsCache.set(placeId, { reviews });
+  if (quotaHit) {
+    const err = new Error('Place Details quota exhausted');
+    err.code = GOOGLE_QUOTA_ERROR.code;
+    throw err;
+  }
   return reviews;
 }
 
@@ -1396,13 +1445,26 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     send('pick', { restaurant: pool[0] });
   }
   try {
-    let reviewsCached = 0, reviewsFetched = 0;
+    let reviewsCached = 0, reviewsFetched = 0, quotaHit = false;
     const withReviews = await Promise.all(pool.map(async r => {
       const wasCached = Boolean(reviewsCache.get(r.id));
-      const reviews = await fetchPlaceReviews(r.id);
+      let reviews = [];
+      try {
+        reviews = await fetchPlaceReviews(r.id);
+      } catch (err) {
+        if (err.code !== GOOGLE_QUOTA_ERROR.code) throw err;
+        quotaHit = true;
+      }
       if (wasCached) reviewsCached++; else reviewsFetched++;
       return { place_id: r.id, name: r.name, cuisine: r.cuisine, price: r.price, rating: r.rating, reviews };
     }));
+    // Out of quota with no cached reviews to fall back on: say so, rather
+    // than letting Claude make a generic pick with nothing to go on.
+    if (quotaHit && withReviews.every(r => r.reviews.length === 0)) {
+      const err = new Error('Place Details quota exhausted for the whole pool');
+      err.code = GOOGLE_QUOTA_ERROR.code;
+      throw err;
+    }
     t.mark('reviews');
 
     const perfCounters = { claudeCalls: 0 };
@@ -1443,12 +1505,13 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('Recommendation failed:', err);
-    const error = "Couldn't generate a recommendation right now. Try again in a moment.";
+    const quota = err.code === GOOGLE_QUOTA_ERROR.code;
+    const body = quota ? GOOGLE_QUOTA_ERROR : { error: "Couldn't generate a recommendation right now. Try again in a moment." };
     if (wantsStream) {
-      send('error', { error });
+      send('error', body);
       res.end();
     } else {
-      res.status(502).json({ error });
+      res.status(quota ? 503 : 502).json(body);
     }
   }
 });
