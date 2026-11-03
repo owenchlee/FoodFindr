@@ -4,7 +4,8 @@
   "description": "Restaurant recommendation app",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@capacitor/browser": "^8.0.4",

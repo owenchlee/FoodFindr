@@ -1521,19 +1521,6 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 // the fan-out in /api/recommend above can hit a warm cache. Deliberately NOT
 // called automatically after every search - Place Details is billed per call,
 // and most searches never lead to a Surprise Me click.
-// TEMPORARY (Oct 2026): tap/keyboard diagnostics from the iOS app (see
-// startTapDiagnostics in app.js). Last 400 entries, in memory only; element
-// names and geometry, nothing personal. Remove once diagnosed.
-const tapLog = [];
-app.post('/api/debug/taps', apiLimiter, (req, res) => {
-  const entries = Array.isArray(req.body.entries) ? req.body.entries.slice(0, 60) : [];
-  for (const e of entries) {
-    if (JSON.stringify(e).length <= 4000) tapLog.push({ at: new Date().toISOString(), ...e });
-  }
-  tapLog.splice(0, Math.max(0, tapLog.length - 400));
-  res.status(204).end();
-});
-app.get('/api/debug/taps', (req, res) => res.json(tapLog));
 
 app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
   const placeIds = Array.isArray(req.body.placeIds)
@@ -1616,8 +1603,8 @@ app.get('/api/badges', requireAuth, (req, res) => {
   }
 });
 
-// No display_name field exists. Friends in this small, known group don't
-// need identity obscured, so this derives a readable name from the email
+// No display_name field exists. Leaderboard rows are limited to people who
+// joined a group with you, so this derives a readable name from the email
 // local-part instead of adding a profile field nobody would maintain.
 function deriveDisplayName(email) {
   const localPart = email.split('@')[0];
@@ -1628,7 +1615,7 @@ function deriveDisplayName(email) {
 
 app.get('/api/leaderboard', requireAuth, (req, res) => {
   try {
-    const stats = getLeaderboardStats();
+    const stats = getLeaderboardStats(req.user.id);
     const leaderboard = stats.map((row, i) => ({
       rank: i + 1,
       displayName: deriveDisplayName(row.email),

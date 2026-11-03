@@ -22,7 +22,7 @@ Solo project, built in about two weeks.
 - Personalized taste profiles: favorite cuisines, dietary restrictions, spice/price tolerance
 - Group sharing mode: several dishes sized to a computed total budget
 - Visit logging with 1-5 star ratings
-- Exploration progress, visit streaks, achievement badges, and a friends leaderboard
+- Exploration progress, visit streaks, achievement badges, and a leaderboard shared with the friends in your groups (join by code)
 - Guest mode: search and get a recommendation with no account
 
 Full route list and file-by-file breakdown: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

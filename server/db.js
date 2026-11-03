@@ -340,11 +340,19 @@ function getBadges(userId) {
   return evaluateBadges(computeStats(rows, getStreaks(userId)));
 }
 
-// All registered users, even ones with zero visits. For a small friend
-// group, seeing "you're at 0, a friend's at 12" is itself a nudge, and
-// hiding inactive accounts would just look like the leaderboard is broken.
-function getLeaderboardStats() {
-  const users = db.prepare('SELECT id, email FROM users ORDER BY id ASC').all();
+// You plus everyone who shares a group with you (joining by code is the
+// consent), even members with zero visits: "you're at 0, a friend's at 12"
+// is itself a nudge. Never other accounts: that would leak strangers' names.
+function getLeaderboardStats(userId) {
+  const users = db.prepare(`
+    SELECT id, email FROM users
+    WHERE id = ? OR id IN (
+      SELECT gm2.user_id FROM group_members gm1
+      JOIN group_members gm2 ON gm2.group_id = gm1.group_id
+      WHERE gm1.user_id = ?
+    )
+    ORDER BY id ASC
+  `).all(userId, userId);
   const visitCountRows = db.prepare(
     'SELECT user_id, COUNT(*) AS count FROM visits WHERE user_id IS NOT NULL GROUP BY user_id'
   ).all();

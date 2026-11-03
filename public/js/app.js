@@ -968,7 +968,9 @@ async function loadLeaderboard() {
 
     list.replaceChildren();
     leaderboard.forEach(row => list.appendChild(leaderboardRowElement(row)));
-    empty.hidden = leaderboard.some(row => row.visitCount > 0);
+    const alone = leaderboard.length <= 1;
+    document.getElementById('leaderboard-invite').hidden = !alone;
+    empty.hidden = alone || leaderboard.some(row => row.visitCount > 0);
   } catch (err) {
     // Leave whatever leaderboard is already rendered from the last successful load.
   }
@@ -2045,78 +2047,6 @@ function setupNativeShell() {
   window.visualViewport?.addEventListener('resize', syncNativeInset);
   document.addEventListener('focusout', () => setTimeout(syncNativeInset, 600));
 
-  startTapDiagnostics(plugins, safely);
-}
-
-// TEMPORARY (Oct 2026): in the iOS app, focusing the craving field shifts the
-// page down under the status bar and Filters/location stop responding; none
-// of it reproduces outside the app. Reports taps, keyboard events and the
-// viewport geometry to /api/debug/taps (server.js). Remove once diagnosed.
-function startTapDiagnostics(plugins, safely) {
-  const describe = (el) => {
-    const parts = [];
-    for (let n = el, i = 0; n && n.nodeType === 1 && i < 3; n = n.parentElement, i++) {
-      parts.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') +
-        (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/s+/)[0] : ''));
-    }
-    return parts.join(' < ');
-  };
-  const rect = (sel) => {
-    const el = document.querySelector(sel);
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return [Math.round(r.top), Math.round(r.bottom), Math.round(r.left), Math.round(r.right)];
-  };
-  const geometry = () => {
-    const vv = window.visualViewport;
-    return {
-      screen: [screen.width, screen.height],
-      inner: [window.innerWidth, window.innerHeight],
-      client: document.documentElement.clientHeight,
-      vv: vv ? [Math.round(vv.offsetTop), Math.round(vv.pageTop), Math.round(vv.height), vv.scale] : null,
-      scroll: [window.scrollY, document.documentElement.scrollTop, document.body.scrollTop],
-      html: rect('html'), searchRow: rect('.search-row'), filters: rect('#filters-toggle'), tabBar: rect('#tab-bar'),
-      kb: document.body.classList.contains('keyboard-open'),
-      nativeInset: document.documentElement.classList.contains('native-top-inset'),
-      kbPlugin: !!plugins.Keyboard
-    };
-  };
-  let queue = [];
-  let flushTimer = null;
-  const push = (entry) => {
-    queue.push({ t: Math.round(performance.now()), ...entry });
-    clearTimeout(flushTimer);
-    flushTimer = setTimeout(() => {
-      const entries = queue;
-      queue = [];
-      fetch('/api/debug/taps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries }), keepalive: true }).catch(() => {});
-    }, 800);
-  };
-  const event = (kind, extra) => {
-    push({ kind, ...extra, geometry: geometry() });
-    setTimeout(() => push({ kind: kind + '+500', geometry: geometry() }), 500);
-  };
-  push({ kind: 'boot', ua: navigator.userAgent, geometry: geometry() });
-  ['keyboardWillShow', 'keyboardDidShow', 'keyboardWillHide', 'keyboardDidHide'].forEach((name) => {
-    safely(() => plugins.Keyboard.addListener(name, (info) => event(name, { kbh: info?.keyboardHeight })));
-  });
-  document.addEventListener('focusin', (e) => event('focusin', { target: describe(e.target) }));
-  let lastClick = null;
-  document.addEventListener('click', (e) => { lastClick = { t: performance.now(), target: describe(e.target) }; }, true);
-  document.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    if (!touch) return;
-    const start = performance.now();
-    const x = Math.round(touch.clientX);
-    const y = Math.round(touch.clientY);
-    const entry = { kind: 'tap', x, y, sy: Math.round(touch.screenY), target: describe(e.target) };
-    setTimeout(() => {
-      entry.clicked = lastClick && lastClick.t >= start ? lastClick.target : null;
-      entry.focused = describe(document.activeElement);
-      entry.geometry = geometry();
-      push(entry);
-    }, 600);
-  }, { capture: true, passive: true });
 }
 
 setupNativeShell();
