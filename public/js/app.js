@@ -1010,6 +1010,20 @@ function groupItemElement(group) {
   searchBtn.addEventListener('click', () => setActiveGroup(isActive ? null : group.id));
   actions.appendChild(searchBtn);
 
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.textContent = 'Copy code';
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(group.code);
+      copyBtn.textContent = 'Copied!';
+    } catch (err) {
+      copyBtn.textContent = group.code; // Clipboard blocked: show the code to copy by hand.
+    }
+    setTimeout(() => { copyBtn.textContent = 'Copy code'; }, 1800);
+  });
+  actions.appendChild(copyBtn);
+
   const leaveBtn = document.createElement('button');
   leaveBtn.type = 'button';
   leaveBtn.textContent = 'Leave';
