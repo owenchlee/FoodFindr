@@ -1,3 +1,5 @@
+const { shrunkRating } = require('./rating');
+
 // "Surprise Me" should actually surprise: asking Claude to pick the single
 // "best" restaurant from the same top-8-by-rating list every time reliably
 // returns the same winner call after call, since nothing about the prompt or
@@ -8,7 +10,7 @@
 function pickRandomTopPool(restaurants, poolSize) {
   const topN = restaurants
     .slice()
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    .sort((a, b) => shrunkRating(b) - shrunkRating(a))
     .slice(0, Math.max(poolSize * 2, 15));
 
   for (let i = topN.length - 1; i > 0; i--) {
@@ -31,10 +33,10 @@ function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCached
   const recent = new Set(recentNames.map(n => n.toLowerCase()));
   const top = restaurants
     .slice()
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    .sort((a, b) => shrunkRating(b) - shrunkRating(a))
     .slice(0, 15);
   const weights = top.map(r => {
-    let w = Math.max(0.3, (r.rating || 3.5) - 3.3) ** 2;
+    let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.3) ** 2;
     const cuisine = (r.cuisine || '').toLowerCase();
     if (favorites.some(f => cuisine.includes(f) || f.includes(cuisine))) w *= 2.5;
     if (recent.has((r.name || '').toLowerCase())) w *= 0.15;

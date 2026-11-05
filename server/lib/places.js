@@ -28,6 +28,7 @@ function placeToRestaurant(place, cuisineHint) {
     cuisine: cuisineHint ? titleCase(cuisineHint) : (specificType ? titleCase(specificType) : 'Restaurant'),
     price: place.price_level != null ? place.price_level : null,
     rating: place.rating != null ? place.rating : null,
+    ratingCount: place.user_ratings_total != null ? place.user_ratings_total : null,
     lat: place.geometry.location.lat,
     lng: place.geometry.location.lng
   };
