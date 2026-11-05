@@ -25,6 +25,7 @@ const {
 const { FLAVOR_TAGS, isValidRecommendation } = require('./lib/validate');
 const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = require('./lib/budget');
 const { shapeAndFilter } = require('./lib/places');
+const { sanitizeText, makeKnownPlaces, cleanCandidates, cleanPlaceIds } = require('./lib/trust');
 const { pickRandomTopPool, chooseInstantPick: pickInstant } = require('./lib/pick');
 const chooseInstantPick = (restaurants, favs, recent) => pickInstant(restaurants, favs, recent, id => reviewsCache.get(id));
 
@@ -400,6 +401,10 @@ async function continuePlacesFetch(entry, key, endpoint, params, firstPageToken)
 // without the cache bucketing leaking into displayed distances.
 const placesCache = makeTtlCache({ ttlMs: 10 * 60 * 1000, maxEntries: 200 });
 
+// Place ids we've returned from our own searches; /api/recommend and
+// /api/prewarm refuse anything else so clients can't spend Place Details quota.
+const knownPlaces = makeKnownPlaces();
+
 // Deliberately excludes `price` (filtered client-side now, see shapeAndFilter)
 // and `groupId` (only affects the derived dietaryHint, already captured below).
 function placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
@@ -590,6 +595,7 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
     t.mark('places');
 
     const results = shapeAndFilter(entry.places, lat, lng, cuisine, maxDistance);
+    knownPlaces.add(results);
     const city = await geocodeCity(lat, lng);
     t.mark('geocode');
 
@@ -638,6 +644,7 @@ app.get('/api/restaurants/rest', optionalAuth, async (req, res) => {
     t.mark('places');
 
     const results = shapeAndFilter(places, lat, lng, cuisine, maxDistance);
+    knownPlaces.add(results);
     const city = await geocodeCity(lat, lng);
     t.mark('geocode');
     recordDiscoveredAsync(req.user && req.user.id, results, city);
@@ -1139,10 +1146,11 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY. Add it to .env.' });
   }
 
-  const { restaurants: candidates, price, groupSize, sharing, dish, groupId } = req.body;
+  const { price, groupSize, sharing, dish, groupId } = req.body;
+  const candidates = cleanCandidates(req.body.restaurants, knownPlaces);
 
-  if (!candidates || candidates.length === 0) {
-    return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters.' });
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters or searching again.' });
   }
 
   let groupData = null;
@@ -1155,7 +1163,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   }
 
   const isSharing = sharing === true;
-  const dishCraving = typeof dish === 'string' ? dish.trim().slice(0, 60) : '';
+  const dishCraving = sanitizeText(dish, 60);
   const preferences = req.user ? getPreferences(req.user.id) : null;
 
   // A group's "size" is however many people are actually in it, not
@@ -1171,7 +1179,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     ? groupPersonalizationInstruction(groupData.members)
     : personalizationInstruction(preferences, visitHighlights);
 
-  const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
+  const targetPrice = [1, 2, 3, 4].includes(Number(price)) ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
   const budgetPool = pickBudgetPool(candidates, targetPrice);
 
   // A dietary restriction (solo, or pooled across a group) means only some
@@ -1347,9 +1355,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 // and most searches never lead to a Surprise Me click.
 
 app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
-  const placeIds = Array.isArray(req.body.placeIds)
-    ? req.body.placeIds.filter(id => typeof id === 'string').slice(0, 15)
-    : [];
+  const placeIds = cleanPlaceIds(req.body.placeIds, knownPlaces);
   Promise.allSettled(placeIds.map(id => fetchPlaceReviews(id))).catch(() => {});
   res.status(202).json({ warming: placeIds.length });
 });
