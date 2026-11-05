@@ -1121,7 +1121,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationText || ''}` +
     `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
-    JSON.stringify(candidates, null, 2);
+    JSON.stringify(candidates);
 
   const requireDietaryNote = Boolean(dietaryRestrictions && dietaryRestrictions.length > 0);
   const tool = recommendationToolDef(requireDietaryNote);
