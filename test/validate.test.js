@@ -45,3 +45,28 @@ test('meat words match on word boundaries', () => {
   assert.strictEqual(isValidRecommendation(withNote({ dish_suggestion: 'Hamachi-free salad' }), candidates, ['vegan']), null);
   assert.strictEqual(isValidRecommendation(withNote({ dish_suggestion: 'Shamrock salad' }), candidates, ['vegan']), null);
 });
+
+const dish = (name, diet) => isValidRecommendation(withNote({ dish_suggestion: name }), candidates, [diet]);
+
+test('extended blocklist catches cured meat, shellfish and other animal products', () => {
+  for (const name of ['Pepperoni pizza', 'Salami sandwich', 'Prosciutto flatbread', 'Anchovies toast', 'Fried oysters',
+    'Mussels marinara', 'Clam chowder', 'Seared scallops', 'Unagi eel bowl', 'Smoked brisket', 'BBQ ribs', 'Gelatin dessert']) {
+    assert.ok(dish(name, 'vegetarian'), `vegetarian should reject ${name}`);
+    assert.ok(dish(name, 'vegan'), `vegan should reject ${name}`);
+  }
+});
+
+test('dairy, egg and honey are blocked for vegan only', () => {
+  for (const name of ['Cheese pizza', 'Fried eggs', 'Butter naan', 'Honey glazed carrots', 'Dairy bowl', 'Mac and cheese']) {
+    assert.ok(dish(name, 'vegan'), `vegan should reject ${name}`);
+  }
+  assert.strictEqual(dish('Cheese pizza', 'vegetarian'), null);
+  assert.strictEqual(dish('Fried eggs', 'Vegetarian'), null);
+});
+
+test('no false positives on lookalike or plant-based dishes', () => {
+  for (const name of ['Eggplant parmesan-style bake', 'Peanut butter noodles', 'Butternut squash soup', 'Buffalo cauliflower',
+    'Coconut milk curry', 'Oyster mushroom tacos', 'Wheel of falafel', 'Honeydew salad', 'Almond milk latte', 'Gluten-free pasta', 'Vegan cheese pizza']) {
+    assert.strictEqual(dish(name, 'vegan'), null, `vegan should allow ${name}`);
+  }
+});

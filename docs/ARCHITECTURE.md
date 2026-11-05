@@ -24,13 +24,28 @@ Claude APIs.
   verified bill.
 - Dietary restrictions are enforced two ways: an instruction to Claude asking it to
   only name a dish a review explicitly supports as compliant, plus a hard,
-  code-level backstop (`isValidRecommendation` in `server/server.js`) that regex-checks
-  the dish name against a meat/seafood keyword blocklist whenever the restriction is
-  vegan or vegetarian. A match is rejected and the request retried once rather than
-  reaching the user. The instruction alone wasn't reliable: it turned up real cases
-  of Claude naming a dish it had itself identified as seafood, or accepting a
-  "vegetarian" review as proof of "vegan." Still not a true ingredient filter, since
-  Places has no ingredient/allergen data to check candidates against upfront.
+  code-level backstop (`isValidRecommendation` in `server/lib/validate.js`). A match
+  is rejected and the request retried once rather than reaching the user. The
+  instruction alone wasn't reliable: it turned up real cases of Claude naming a dish
+  it had itself identified as seafood, or accepting a "vegetarian" review as proof
+  of "vegan."
+  - **Enforced in code:** for vegan or vegetarian, the dish name and shared items
+    are checked against a meat/seafood blocklist (chicken, pepperoni, salami,
+    prosciutto, anchovy, oyster, mussel, clam, scallop, eel, brisket, ribs,
+    gelatin, and more). For vegan only, also egg, cheese, butter, honey, dairy, milk
+    and similar. Matching is whole-word with an optional plural, so "eggplant",
+    "butternut squash" and "buffalo cauliflower" pass. Known safe phrases ("peanut
+    butter", "coconut milk", "oyster mushroom", "vegan cheese", "dairy-free") are
+    removed before matching. A diet label in the dish name ("Vegan tacos") must
+    appear in one of that restaurant's reviews, and `dietary_note` must be present
+    for any restriction.
+  - **Not enforced in code:** every other restriction (gluten-free, nut allergy,
+    halal, kosher, dairy-free, and so on) relies on Claude's instruction and the
+    `dietary_note` field only. The check reads the dish name and shared items, not
+    the `reason` text or the actual menu, and the word list is finite, so an
+    unlisted animal ingredient or a hidden one (fish sauce, lard, stock) can pass.
+    Places has no ingredient or allergen data to check candidates against upfront,
+    so this is a backstop and not a guarantee for allergies.
 - The exploration progress bar's denominator is **restaurants FoodFindr has shown
   you**, not every restaurant in the city: Google Places returns at most 20 results
   per search call (no pagination), so it grows as you search rather than starting at

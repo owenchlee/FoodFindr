@@ -3,6 +3,26 @@
 // synonyms like "tangy" vs "zesty" vs "sour".
 const FLAVOR_TAGS = ['Spicy', 'Tangy', 'Sweet', 'Savory', 'Umami', 'Sour', 'Smoky', 'Creamy', 'Fresh', 'Rich', 'Herby', 'Crispy'];
 
+const MEAT_WORDS = ['chicken', 'beef', 'pork', 'bacon', 'ham', 'turkey', 'lamb', 'steak',
+  'sausage', 'meat', 'fish', 'shrimp', 'prawn', 'calamari', 'squid', 'crab', 'lobster',
+  'salmon', 'tuna', 'duck', 'veal', 'goat', 'mutton', 'pepperoni', 'salami', 'prosciutto',
+  'pancetta', 'chorizo', 'pastrami', 'anchovy', 'anchovies', 'oyster', 'mussel', 'clam',
+  'scallop', 'eel', 'octopus', 'brisket', 'rib', 'ribs', 'gelatin', 'venison'];
+const VEGAN_ONLY_WORDS = ['egg', 'cheese', 'cheesecake', 'butter', 'honey', 'dairy', 'milk',
+  'yogurt', 'yoghurt', 'ghee', 'paneer'];
+
+// Phrases that contain a blocked word but are not the animal ingredient. Removed
+// before matching so "peanut butter" or "oyster mushroom" don't trip the check.
+const SAFE_PHRASES = /\b(?:(?:peanut|almond|cashew|nut|apple|sunflower|seed|cocoa|shea)\s+butter|(?:coconut|almond|oat|soy|soya|cashew|rice|plant|nut)\s+milk|oyster\s+mushrooms?|(?:vegan|plant-based|non-dairy)\s+(?:egg|cheese|butter|milk|yogurt)s?|\w+-free)\b/g;
+
+// Whole-word match with an optional plural suffix; "eggplant", "butternut" and
+// "wheel" do not match "egg", "butter" or "eel".
+function findBlockedWord(text, isVegan) {
+  const cleaned = text.replace(SAFE_PHRASES, ' ');
+  const words = isVegan ? [...MEAT_WORDS, ...VEGAN_ONLY_WORDS] : MEAT_WORDS;
+  return words.find(word => new RegExp(`\\b${word}(?:e?s)?\\b`, 'i').test(cleaned));
+}
+
 // Returns null when valid, or a short human-readable reason string when not -
 // the reason doubles as the corrective text sent back to Claude on retry (see
 // askClaudeForRecommendation), so keep each one specific enough to act on.
@@ -49,12 +69,10 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
     // since the dish name is what someone skimming will actually trust.
     const needsMeatCheck = dietaryRestrictions.some(r => /vegan|vegetarian/i.test(r));
     if (needsMeatCheck) {
-      const meatWords = ['chicken', 'beef', 'pork', 'bacon', 'ham', 'turkey', 'lamb', 'steak',
-        'sausage', 'meat', 'fish', 'shrimp', 'prawn', 'calamari', 'squid', 'crab', 'lobster',
-        'salmon', 'tuna', 'duck', 'veal', 'goat', 'mutton'];
-      const foundMeatWord = meatWords.find(word => new RegExp(`\\b${word}\\b`, 'i').test(dishText));
-      if (foundMeatWord) {
-        return `the dish name/shared items mention "${foundMeatWord}", which conflicts with a vegan/vegetarian restriction; pick a candidate whose reviews support a compliant dish instead`;
+      const isVegan = dietaryRestrictions.some(r => /vegan/i.test(r));
+      const found = findBlockedWord(dishText, isVegan);
+      if (found) {
+        return `the dish name/shared items mention "${found}", which conflicts with a vegan/vegetarian restriction; pick a candidate whose reviews support a compliant dish instead`;
       }
     }
   }
