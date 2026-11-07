@@ -306,15 +306,6 @@ html, body {
   position: absolute;
   inset: -12px;
 }
-/* Invisible hit-area expansion to a 44x44pt minimum tap target (Apple HIG)
-   without changing the button's visible 20x20 glyph size or the surrounding
-   layout - these are absolutely positioned, so the expanded pseudo doesn't
-   push anything else around. */
-.dish-clear-btn::before {
-  content: '';
-  position: absolute;
-  inset: -12px;
-}
 .dish-clear-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
 .dish-clear-btn[hidden] { display: none; }
 .filters-toggle {
