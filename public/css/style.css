@@ -102,16 +102,11 @@ button:active:not(:disabled), .cta:active:not(:disabled), .chip:active, a.ticket
    native text-selection/callout ("Copy", "Look Up", etc.) menu, which reads
    as a bug on non-text controls. Scoped to interactive chrome and the map,
    not to actual text content (inputs, ticket copy, reviews), which should
-   stay selectable/copyable as normal. */
+   stay selectable/copyable as normal. Other chrome inherits this from body;
+   these can sit inside the selectable text above, so they reset it. */
 button,
 svg,
-.chip,
-.side-rail,
-.top-bar .wordmark,
-#map,
-.badge-card,
-.leaderboard-row,
-.star-rating {
+.chip {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
