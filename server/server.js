@@ -1124,8 +1124,8 @@ function formatCandidatesForPrompt(candidates) {
   const field = (v) => (v === undefined || v === null || v === '') ? '?' : String(v).replace(/\s+/g, ' ').trim();
   return candidates.map(c =>
     `"place_id":${JSON.stringify(String(c.place_id))} | ${field(c.name)} | ${field(c.cuisine)} | ${field(c.price)} | ${field(c.rating)}` +
-    c.reviews.map(r => `\n- ${field(r)}`).join('')
-  ).join('\n\n');
+    c.reviews.map(r => `\n${field(r)}`).join('')
+  ).join('\n');
 }
 
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
@@ -1134,7 +1134,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   // One candidate = the instant path in /api/recommend already chose it.
   const system = `The user's message gives a budget ceiling and a list of candidate restaurants with their reviews. ` +
     `Each candidate starts with a line "place_id":"<id>" | name | cuisine | price level (0-4) | rating (out of 5), ` +
-    `followed by its reviews, one per line starting with "- ". ` +
+    `followed by its reviews, one per line (each review is collapsed onto a single line). ` +
     `If the list holds exactly one restaurant, it has already been chosen: return its place_id exactly as given. ` +
     `Otherwise pick exactly one restaurant from the list. ` +
     `Unless the user's message says it's for a group, this is for one person: suggest a single dish for them to order. ` +
