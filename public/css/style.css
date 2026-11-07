@@ -1669,7 +1669,6 @@ select.visit-input option {
     left: var(--gutter);
     right: calc(var(--gutter) + env(safe-area-inset-right));
     top: calc(var(--safe-top) + 8px);
-    display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-2);
@@ -1919,7 +1918,6 @@ select.visit-input option {
     height: auto;
     border: none;
     border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
-    background: var(--color-char-2);
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
     transform: translateY(105%);
     transition: transform 380ms var(--ease-ios);
@@ -1945,7 +1943,6 @@ select.visit-input option {
   .drawer-header {
     padding: 26px 20px 12px;
     border-bottom: none;
-    background: var(--color-char-2);
     border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
     touch-action: none;
     cursor: grab;
@@ -1953,7 +1950,6 @@ select.visit-input option {
   .drawer-title {
     font-family: var(--font-display);
     font-size: 1.85rem;
-    font-weight: 600;
     letter-spacing: -0.015em;
     line-height: 1.1;
   }
@@ -2050,7 +2046,7 @@ select.visit-input option {
     background: var(--color-char-2);
     border-top: 0.5px solid rgba(242, 234, 225, 0.12);
   }
-  .prefs-skip { font-size: 0.95rem; text-decoration: none; color: var(--color-paper-dim); min-height: 44px; }
+  .prefs-skip { font-size: 0.95rem; text-decoration: none; min-height: 44px; }
   .prefs-actions .cta { min-height: 50px; border-radius: 14px; padding: 0 22px; font-size: 1rem; }
 
   /* ----- Sign in ----- */
