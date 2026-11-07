@@ -1998,7 +1998,7 @@ select.visit-input option {
   .group-item-actions button { min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 0.82rem; }
   .faq-question { font-size: 0.98rem; }
   .faq-answer { font-size: 0.9rem; line-height: 1.5; }
-  .how-it-works { display: block; padding-top: 0; border-top: none; }
+  .how-it-works { padding-top: 0; border-top: none; }
   .how-it-works li { font-size: 0.95rem; }
   .price-hint { font-size: 0.78rem; }
   .group-size-row button { width: 44px; height: 44px; border-radius: 12px; font-size: 1.2rem; }
