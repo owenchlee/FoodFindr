@@ -1120,14 +1120,16 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   const opener = candidates.length === 1
     ? 'This restaurant has already been chosen (return its place_id exactly as given) '
     : 'Pick exactly one restaurant from this list ';
-  const prompt = `${opener}for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
-    `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
+  // Static instructions live in the system prompt so the per-request user
+  // turn only carries what varies, and tools + system form a stable prefix.
+  const system = `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
-    `Only populate the shared_items field if the instructions below say this is a sharing group, otherwise omit it entirely. ` +
+    `Only populate the shared_items field if the user's instructions say this is a sharing group, otherwise omit it entirely. ` +
     `In your reason, never use em dashes (—) or en dashes (–); use a period or comma instead. ` +
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
-    `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}. ` +
+    `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}.`;
+  const prompt = `${opener}for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationText || ''}` +
     `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
@@ -1143,6 +1145,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
       max_tokens: 1024,
       tools: [tool],
       tool_choice: { type: 'tool', name: 'recommend_restaurant' },
+      system,
       messages: [{ role: 'user', content: prompt }, ...(extraMessages || [])]
     };
     // Only the first call streams: a repair retry replaces whatever was
