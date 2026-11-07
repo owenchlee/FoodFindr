@@ -299,8 +299,12 @@ function recordDiscovered(userId, restaurants, city) {
 // Streaks are computed from UTC calendar days (not per-user local time),
 // a deliberate simplification. Two visits logged the same UTC day only
 // count once, so back-to-back logging in one sitting can't inflate a streak.
+// Prepared once; arrays instead of row objects since the leaderboard calls this per member.
+const streakDaysStmt = db.prepare('SELECT logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
+streakDaysStmt.setReturnArrays(true);
+
 function getStreaks(userId) {
-  const rows = db.prepare('SELECT logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC').all(userId);
+  const rows = streakDaysStmt.all(userId);
   if (rows.length === 0) {
     return { currentStreak: 0, longestStreak: 0, lastVisitDate: null };
   }
@@ -308,7 +312,7 @@ function getStreaks(userId) {
   const dayStrings = [];
   const seenDays = new Set();
   for (const row of rows) {
-    const day = row.logged_at.slice(0, 10);
+    const day = row[0].slice(0, 10);
     if (!seenDays.has(day)) {
       seenDays.add(day);
       dayStrings.push(day);
