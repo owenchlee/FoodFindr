@@ -63,6 +63,9 @@ html {
   text-size-adjust: 100%;
 }
 body {
+  background: var(--color-char);
+  color: var(--color-paper);
+  font-family: var(--font-body);
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -126,12 +129,6 @@ html, body {
   width: 100%;
   overscroll-behavior: none;
   touch-action: pan-x pan-y;
-}
-
-body {
-  background: var(--color-char);
-  color: var(--color-paper);
-  font-family: var(--font-body);
 }
 
 .shell {
