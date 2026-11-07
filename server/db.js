@@ -125,6 +125,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_discovered_user_city ON discovered_restaurants(user_id, city);
   -- Expression must match getProgress's EXISTS exactly so it becomes an index seek.
   CREATE INDEX IF NOT EXISTS idx_visits_user_name_norm ON visits(user_id, LOWER(TRIM(restaurant_name)));
+  -- PK is (group_id, user_id); "which groups is this user in" (leaderboard, listUserGroups) needs user_id first.
+  CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id, group_id);
 `);
 
 function countUsers() {
@@ -402,16 +404,18 @@ function getBadges(userId) {
 // You plus everyone who shares a group with you (joining by code is the
 // consent), even members with zero visits: "you're at 0, a friend's at 12"
 // is itself a nudge. Never other accounts: that would leak strangers' names.
+const leaderboardUsersStmt = db.prepare(`
+  SELECT id, email FROM users
+  WHERE id = ? OR id IN (
+    SELECT gm2.user_id FROM group_members gm1
+    JOIN group_members gm2 ON gm2.group_id = gm1.group_id
+    WHERE gm1.user_id = ?
+  )
+  ORDER BY id ASC
+`);
+
 function getLeaderboardStats(userId) {
-  const users = db.prepare(`
-    SELECT id, email FROM users
-    WHERE id = ? OR id IN (
-      SELECT gm2.user_id FROM group_members gm1
-      JOIN group_members gm2 ON gm2.group_id = gm1.group_id
-      WHERE gm1.user_id = ?
-    )
-    ORDER BY id ASC
-  `).all(userId, userId);
+  const users = leaderboardUsersStmt.all(userId, userId);
 
   const cache = validStreakCache();
   return users
