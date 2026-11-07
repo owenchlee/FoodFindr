@@ -304,8 +304,33 @@ function recordDiscovered(userId, restaurants, city) {
 const streakDaysStmt = db.prepare('SELECT substr(logged_at, 1, 10) FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
 streakDaysStmt.setReturnArrays(true);
 
+// Per-user { visitCount, streaks } cache. Valid while no connection has written (total_changes covers
+// this connection, data_version covers others) and the UTC day is unchanged (currentStreak depends on today).
+const dbVersionStmt = db.prepare('SELECT total_changes() AS t, data_version AS d FROM pragma_data_version()');
+const streakCache = new Map();
+let streakCacheKey = '';
+function validStreakCache() {
+  const v = dbVersionStmt.get();
+  const key = `${v.t}:${v.d}:${new Date().toISOString().slice(0, 10)}`;
+  if (key !== streakCacheKey) {
+    streakCache.clear();
+    streakCacheKey = key;
+  }
+  return streakCache;
+}
+
+function streakStats(cache, userId) {
+  let entry = cache.get(userId);
+  if (!entry) {
+    const rows = streakDaysStmt.all(userId);
+    entry = { visitCount: rows.length, streaks: streaksFromRows(rows) };
+    cache.set(userId, entry);
+  }
+  return entry;
+}
+
 function getStreaks(userId) {
-  return streaksFromRows(streakDaysStmt.all(userId));
+  return { ...streakStats(validStreakCache(), userId).streaks };
 }
 
 // Date.parse dominated leaderboard time; memoize it. Grows by one entry per distinct calendar day ever logged.
@@ -384,15 +409,14 @@ function getLeaderboardStats(userId) {
     ORDER BY id ASC
   `).all(userId, userId);
 
+  const cache = validStreakCache();
   return users
     .map(u => {
-      // One indexed read per member gives both the visit count and the streak days.
-      const rows = streakDaysStmt.all(u.id);
-      const streaks = streaksFromRows(rows);
+      const { visitCount, streaks } = streakStats(cache, u.id);
       return {
         userId: u.id,
         email: u.email,
-        visitCount: rows.length,
+        visitCount,
         currentStreak: streaks.currentStreak,
         longestStreak: streaks.longestStreak
       };
