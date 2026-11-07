@@ -793,9 +793,8 @@ async function fetchPlaceReviews(placeId) {
 }
 
 function groupInstruction(groupSize, sharing, targetPrice) {
-  if (groupSize <= 1) {
-    return 'This is for one person. Suggest a single dish for them to order.';
-  }
+  // The one-person default is stated once in the system prompt (askClaudeForRecommendation).
+  if (groupSize <= 1) return '';
   if (sharing) {
     const totalBudget = totalGroupBudget(groupSize, targetPrice);
     const perPerson = PRICE_TIER_MAX_USD[targetPrice] || PRICE_TIER_MAX_USD[2];
@@ -1119,20 +1118,21 @@ async function streamClaudeToolCall(requestBody, onPartial) {
 }
 
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
-  // One candidate = the instant path in /api/recommend already chose it.
-  const opener = candidates.length === 1
-    ? 'This restaurant has already been chosen (return its place_id exactly as given) '
-    : 'Pick exactly one restaurant from this list ';
   // Static instructions live in the system prompt so the per-request user
   // turn only carries what varies, and tools + system form a stable prefix.
-  const system = `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
+  // One candidate = the instant path in /api/recommend already chose it.
+  const system = `The user's message gives a budget ceiling and a JSON list of candidate restaurants with their reviews. ` +
+    `If the list holds exactly one restaurant, it has already been chosen: return its place_id exactly as given. ` +
+    `Otherwise pick exactly one restaurant from the list. ` +
+    `Unless the user's message says it's for a group, this is for one person: suggest a single dish for them to order. ` +
+    `Suggest one specific dish (or, for a sharing group, a short shareable order) to order, based only on what's ` +
     `actually mentioned in the reviews provided. Don't invent a dish that isn't referenced. ` +
     `If no review mentions a specific dish, suggest something generic like "their most popular item" instead of making one up. ` +
     `Only populate the shared_items field if the user's instructions say this is a sharing group, otherwise omit it entirely. ` +
     `In your reason, never use em dashes (—) or en dashes (–); use a period or comma instead. ` +
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
     `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}.` + CRAVING_RULES;
-  const prompt = `${opener}for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
+  const prompt = `Budget ceiling: ${'$'.repeat(targetPrice)}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationText || ''}` +
     `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
