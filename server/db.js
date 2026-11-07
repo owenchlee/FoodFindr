@@ -123,6 +123,8 @@ db.exec(`
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_visits_user_logged ON visits(user_id, logged_at);
   CREATE INDEX IF NOT EXISTS idx_discovered_user_city ON discovered_restaurants(user_id, city);
+  -- Expression must match getProgress's EXISTS exactly so it becomes an index seek.
+  CREATE INDEX IF NOT EXISTS idx_visits_user_name_norm ON visits(user_id, LOWER(TRIM(restaurant_name)));
 `);
 
 function countUsers() {
