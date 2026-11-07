@@ -508,20 +508,19 @@ function leaveGroup(groupId, userId) {
   }
 }
 
-function getProgress(userId, city) {
-  const discovered = db.prepare(
-    'SELECT COUNT(*) AS count FROM discovered_restaurants WHERE user_id = ? AND city = ?'
-  ).get(userId, city).count;
-
-  const visited = db.prepare(`
-    SELECT COUNT(*) AS count FROM discovered_restaurants d
-    WHERE d.user_id = ? AND d.city = ?
-    AND EXISTS (
+// One pass over the user's city rows; COUNT(CASE ...) stays 0 (not NULL) when there are none.
+const progressStmt = db.prepare(`
+  SELECT COUNT(*) AS discovered,
+    COUNT(CASE WHEN EXISTS (
       SELECT 1 FROM visits v
       WHERE v.user_id = d.user_id AND LOWER(TRIM(v.restaurant_name)) = LOWER(TRIM(d.name))
-    )
-  `).get(userId, city).count;
+    ) THEN 1 END) AS visited
+  FROM discovered_restaurants d
+  WHERE d.user_id = ? AND d.city = ?
+`);
 
+function getProgress(userId, city) {
+  const { discovered, visited } = progressStmt.get(userId, city);
   return { city, discovered, visited };
 }
 
