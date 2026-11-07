@@ -379,7 +379,8 @@ html, body {
    below stacking under .location-banner. */
 #offline-banner:not([hidden]) ~ .location-banner { top: calc(var(--top-bar-height) + var(--space-3) + 44px); }
 #offline-banner:not([hidden]) ~ .active-group-banner { top: calc(var(--top-bar-height) + var(--space-3) + 88px); }
-.location-banner button {
+.location-banner button,
+.active-group-banner button {
   flex-shrink: 0;
   background: none;
   border: none;
@@ -415,16 +416,6 @@ html, body {
 }
 .active-group-banner[hidden] { display: none; }
 .active-group-banner.hidden-by-drawer { opacity: 0; pointer-events: none; }
-.active-group-banner button {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: inherit;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 var(--space-1);
-}
 .active-group-banner button:focus-visible {
   outline: 2px solid var(--color-turmeric);
   outline-offset: 2px;
