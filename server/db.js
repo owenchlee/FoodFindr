@@ -361,10 +361,8 @@ function getLeaderboardStats(userId) {
     )
     ORDER BY id ASC
   `).all(userId, userId);
-  const visitCountRows = db.prepare(
-    'SELECT user_id, COUNT(*) AS count FROM visits WHERE user_id IS NOT NULL GROUP BY user_id'
-  ).all();
-  const visitCounts = new Map(visitCountRows.map(r => [r.user_id, r.count]));
+  // Count only the listed users via the visits(user_id, ...) index, not a full-table GROUP BY.
+  const countVisits = db.prepare('SELECT COUNT(*) AS count FROM visits WHERE user_id = ?');
 
   return users
     .map(u => {
@@ -372,7 +370,7 @@ function getLeaderboardStats(userId) {
       return {
         userId: u.id,
         email: u.email,
-        visitCount: visitCounts.get(u.id) || 0,
+        visitCount: countVisits.get(u.id).count,
         currentStreak: streaks.currentStreak,
         longestStreak: streaks.longestStreak
       };
