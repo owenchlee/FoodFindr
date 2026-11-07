@@ -388,11 +388,15 @@ function streaksFromRows(rows) {
   return { currentStreak, longestStreak, lastVisitDate: dayStrings[dayStrings.length - 1] };
 }
 
+const badgeRowsStmt = db.prepare(
+  'SELECT rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC'
+);
+
+// Badge stats share the streak cache entry, so they clear on the same writes / day change.
 function getBadges(userId) {
-  const rows = db.prepare(
-    'SELECT rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC'
-  ).all(userId);
-  return evaluateBadges(computeStats(rows, getStreaks(userId)));
+  const entry = streakStats(validStreakCache(), userId);
+  if (!entry.badgeStats) entry.badgeStats = computeStats(badgeRowsStmt.all(userId), entry.streaks);
+  return evaluateBadges(entry.badgeStats);
 }
 
 // You plus everyone who shares a group with you (joining by code is the
