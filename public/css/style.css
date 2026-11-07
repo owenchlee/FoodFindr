@@ -1823,8 +1823,7 @@ select.visit-input option {
     border-radius: 999px;
     font-size: 0.9rem;
   }
-  .ticket-map-link { margin-right: 8px; }
-  .ticket-map-link { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
+  .ticket-map-link { margin-right: 8px; background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
   .ticket-log-btn { background: var(--color-turmeric); color: var(--color-ink); }
   .ticket-map-link:hover { color: var(--color-paper); }
   .ticket-log-btn:hover { color: var(--color-ink); }
