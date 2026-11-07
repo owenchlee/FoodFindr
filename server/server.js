@@ -1117,11 +1117,24 @@ async function streamClaudeToolCall(requestBody, onPartial) {
   return { input, toolUseId };
 }
 
+// Compact line format instead of JSON.stringify: same fields, about 70 fewer
+// prompt characters per candidate (no repeated keys or per-review quoting).
+// The place_id stays JSON-quoted so it can be returned exactly as given.
+function formatCandidatesForPrompt(candidates) {
+  const field = (v) => (v === undefined || v === null || v === '') ? '?' : String(v).replace(/\s+/g, ' ').trim();
+  return candidates.map(c =>
+    `"place_id":${JSON.stringify(String(c.place_id))} | ${field(c.name)} | ${field(c.cuisine)} | ${field(c.price)} | ${field(c.rating)}` +
+    c.reviews.map(r => `\n- ${field(r)}`).join('')
+  ).join('\n\n');
+}
+
 async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
   // Static instructions live in the system prompt so the per-request user
   // turn only carries what varies, and tools + system form a stable prefix.
   // One candidate = the instant path in /api/recommend already chose it.
-  const system = `The user's message gives a budget ceiling and a JSON list of candidate restaurants with their reviews. ` +
+  const system = `The user's message gives a budget ceiling and a list of candidate restaurants with their reviews. ` +
+    `Each candidate starts with a line "place_id":"<id>" | name | cuisine | price level (0-4) | rating (out of 5), ` +
+    `followed by its reviews, one per line starting with "- ". ` +
     `If the list holds exactly one restaurant, it has already been chosen: return its place_id exactly as given. ` +
     `Otherwise pick exactly one restaurant from the list. ` +
     `Unless the user's message says it's for a group, this is for one person: suggest a single dish for them to order. ` +
@@ -1136,7 +1149,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationText || ''}` +
     `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
-    JSON.stringify(candidates);
+    formatCandidatesForPrompt(candidates);
 
   const requireDietaryNote = Boolean(dietaryRestrictions && dietaryRestrictions.length > 0);
   const tool = recommendationToolDef(requireDietaryNote);
