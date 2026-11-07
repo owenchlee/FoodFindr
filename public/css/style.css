@@ -105,11 +105,7 @@ button:active:not(:disabled), .cta:active:not(:disabled), .chip:active, a.ticket
    stay selectable/copyable as normal. */
 button,
 svg,
-.cta,
 .chip,
-.rail-btn,
-.tabs-toggle,
-.filters-toggle,
 .side-rail,
 .top-bar .wordmark,
 #map,
