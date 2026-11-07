@@ -1679,6 +1679,7 @@ select.visit-input option {
     border: none;
     box-shadow: none;
     pointer-events: none;
+    transition: opacity var(--dur-med) var(--ease-ios);
   }
   .top-bar > * { pointer-events: auto; }
   .top-bar .wordmark { display: none; }
@@ -1925,12 +1926,10 @@ select.visit-input option {
   }
   .tab-drawer.open { transform: translateY(0); }
   /* The sheet's own large title replaces these while it's up. */
-  .top-bar { transition: opacity var(--dur-med) var(--ease-ios); }
   .shell:has(#tab-drawer.open) .top-bar { opacity: 0; pointer-events: none; }
   .shell:has(#tab-drawer.open) .top-bar > * { pointer-events: none; }
   #tab-panel-past-reviews .recent-visits-block > .filter-label,
   #tab-panel-log-review .log-visit-block > .filter-label { display: none; }
-  .visit-form { margin-top: 0; }
 
   .sheet-grabber {
     display: block;
@@ -1990,7 +1989,7 @@ select.visit-input option {
   .cta--secondary { min-height: 48px; border-radius: 12px; font-size: 1rem; padding: 0 18px; }
   .star-rating { gap: 6px; }
   .star-rating button { font-size: 2.1rem; padding: 2px 4px; }
-  .visit-form { gap: 14px; }
+  .visit-form { margin-top: 0; gap: 14px; }
   .visit-status { font-size: 0.9rem; }
 
   .visit-list { gap: 10px; }
