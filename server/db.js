@@ -300,7 +300,8 @@ function recordDiscovered(userId, restaurants, city) {
 // a deliberate simplification. Two visits logged the same UTC day only
 // count once, so back-to-back logging in one sitting can't inflate a streak.
 // Prepared once; arrays instead of row objects since the leaderboard calls this per member.
-const streakDaysStmt = db.prepare('SELECT logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
+// substr in SQL: only the 10-char UTC day crosses into JS, not the full timestamp.
+const streakDaysStmt = db.prepare('SELECT substr(logged_at, 1, 10) FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
 streakDaysStmt.setReturnArrays(true);
 
 function getStreaks(userId) {
@@ -318,7 +319,7 @@ function parseDay(d) {
   return ms;
 }
 
-// rows: [[logged_at], ...] sorted ascending, as returned by streakDaysStmt.
+// rows: [[YYYY-MM-DD], ...] sorted ascending, as returned by streakDaysStmt.
 function streaksFromRows(rows) {
   if (rows.length === 0) {
     return { currentStreak: 0, longestStreak: 0, lastVisitDate: null };
@@ -328,7 +329,7 @@ function streaksFromRows(rows) {
   const dayStrings = [];
   let prevDay;
   for (const row of rows) {
-    const day = row[0].slice(0, 10);
+    const day = row[0];
     if (day !== prevDay) {
       prevDay = day;
       dayStrings.push(day);
