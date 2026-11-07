@@ -86,7 +86,7 @@ button, a, input, select, label, [role="button"] { touch-action: manipulation; }
    Uses the individual `scale` property so it composes with any transform a
    control already has (e.g. translateX(-50%) centring) instead of replacing
    it. */
-button, .cta, .chip, a.ticket-map-link {
+button, a.ticket-map-link {
   transition-property: scale, background, color, border-color, opacity, box-shadow;
   transition-duration: 160ms;
   transition-timing-function: var(--ease-ios);
