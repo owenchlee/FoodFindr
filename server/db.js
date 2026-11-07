@@ -307,6 +307,17 @@ function getStreaks(userId) {
   return streaksFromRows(streakDaysStmt.all(userId));
 }
 
+// Date.parse dominated leaderboard time; memoize it. Grows by one entry per distinct calendar day ever logged.
+const dayMsCache = new Map();
+function parseDay(d) {
+  let ms = dayMsCache.get(d);
+  if (ms === undefined) {
+    ms = Date.parse(d);
+    dayMsCache.set(d, ms);
+  }
+  return ms;
+}
+
 // rows: [[logged_at], ...] sorted ascending, as returned by streakDaysStmt.
 function streaksFromRows(rows) {
   if (rows.length === 0) {
@@ -325,7 +336,7 @@ function streaksFromRows(rows) {
   }
 
   // A date-only ISO string parses as UTC midnight (ECMAScript spec), same as appending T00:00:00Z.
-  const days = dayStrings.map(d => Date.parse(d));
+  const days = dayStrings.map(parseDay);
 
   let longestStreak = 1;
   let run = 1;
