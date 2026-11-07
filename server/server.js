@@ -909,13 +909,16 @@ function dishCravingInstruction(dish, dietaryRestrictions) {
       `"vegetarian" in the dish name itself unless a review for that exact restaurant used that word; the name ` +
       `is what someone reading quickly will trust most, so it can't claim something the reason then hedges on.`
     : '';
-  return ` The user is specifically craving "${dish}" today. Only pick a restaurant whose reviews actually support ` +
-    `serving something like that, and suggest that as the dish. If NONE of the candidates' reviews support "${dish}" ` +
-    `at all, do not pick one and pretend it's a fallback for it. Instead pick the best-reviewed candidate on its own ` +
-    `merits, suggest a dish its reviews actually back up, and say plainly in your reason that you couldn't find ` +
-    `"${dish}" nearby so you're suggesting this instead. Never describe an unrelated dish as similar to or a ` +
-    `substitute for "${dish}"; that's more misleading than just admitting the craving wasn't found.${restrictionClause}`;
+  // The craving rules themselves are static and live in CRAVING_RULES (system prompt).
+  return ` The user is specifically craving "${dish}" today.${restrictionClause}`;
 }
+
+const CRAVING_RULES = ` If the user says they are craving a specific dish, only pick a restaurant whose reviews actually ` +
+  `support serving something like that, and suggest that as the dish. If NONE of the candidates' reviews support the ` +
+  `craved dish at all, do not pick one and pretend it's a fallback for it. Instead pick the best-reviewed candidate on ` +
+  `its own merits, suggest a dish its reviews actually back up, and say plainly in your reason that you couldn't find ` +
+  `the craved dish (by name) nearby so you're suggesting this instead. Never describe an unrelated dish as similar to ` +
+  `or a substitute for the craved dish; that's more misleading than just admitting the craving wasn't found.`;
 
 // The prompt tells Claude to avoid em/en dashes, but that's not guaranteed;
 // strip any that slip through rather than showing them in user-facing text.
@@ -1128,7 +1131,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `Only populate the shared_items field if the user's instructions say this is a sharing group, otherwise omit it entirely. ` +
     `In your reason, never use em dashes (—) or en dashes (–); use a period or comma instead. ` +
     `Also tag the dish with exactly 3 flavor descriptors from this fixed list, picking whichever 3 best describe it ` +
-    `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}.`;
+    `based on the reviews/cuisine: ${FLAVOR_TAGS.join(', ')}.` + CRAVING_RULES;
   const prompt = `${opener}for someone with a budget ceiling of ${'$'.repeat(targetPrice)}. ` +
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationText || ''}` +
