@@ -119,6 +119,12 @@ db.exec(`
   )
 `);
 
+// Additive, safe on existing DBs. (user_id, logged_at) serves every per-user visit read and its ORDER BY.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_visits_user_logged ON visits(user_id, logged_at);
+  CREATE INDEX IF NOT EXISTS idx_discovered_user_city ON discovered_restaurants(user_id, city);
+`);
+
 function countUsers() {
   return db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
 }
@@ -203,8 +209,8 @@ function insertVisit({ userId, restaurantName, dish, rating, flavorTags }) {
 
 function getTopFlavors(userId, limit = 3) {
   const rows = db.prepare(
-    "SELECT flavor_tags FROM visits WHERE user_id = ? AND rating >= 4 AND flavor_tags IS NOT NULL AND flavor_tags != '[]'"
-  ).all(userId);
+    "SELECT flavor_tags FROM visits WHERE user_id = ? AND rating >= 4 AND flavor_tags IS NOT NULL AND flavor_tags != '[]' ORDER BY id"
+  ).all(userId); // ORDER BY id: tie-breaks on count follow first-seen tag order, so row order must be stable
 
   const counts = new Map();
   for (const row of rows) {
