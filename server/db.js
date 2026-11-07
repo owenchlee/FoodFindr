@@ -304,22 +304,28 @@ const streakDaysStmt = db.prepare('SELECT logged_at FROM visits WHERE user_id = 
 streakDaysStmt.setReturnArrays(true);
 
 function getStreaks(userId) {
-  const rows = streakDaysStmt.all(userId);
+  return streaksFromRows(streakDaysStmt.all(userId));
+}
+
+// rows: [[logged_at], ...] sorted ascending, as returned by streakDaysStmt.
+function streaksFromRows(rows) {
   if (rows.length === 0) {
     return { currentStreak: 0, longestStreak: 0, lastVisitDate: null };
   }
 
+  // Rows are sorted, so equal day prefixes are adjacent: comparing to the previous day dedupes.
   const dayStrings = [];
-  const seenDays = new Set();
+  let prevDay;
   for (const row of rows) {
     const day = row[0].slice(0, 10);
-    if (!seenDays.has(day)) {
-      seenDays.add(day);
+    if (day !== prevDay) {
+      prevDay = day;
       dayStrings.push(day);
     }
   }
 
-  const days = dayStrings.map(d => Date.parse(`${d}T00:00:00Z`));
+  // A date-only ISO string parses as UTC midnight (ECMAScript spec), same as appending T00:00:00Z.
+  const days = dayStrings.map(d => Date.parse(d));
 
   let longestStreak = 1;
   let run = 1;
@@ -365,16 +371,16 @@ function getLeaderboardStats(userId) {
     )
     ORDER BY id ASC
   `).all(userId, userId);
-  // Count only the listed users via the visits(user_id, ...) index, not a full-table GROUP BY.
-  const countVisits = db.prepare('SELECT COUNT(*) AS count FROM visits WHERE user_id = ?');
 
   return users
     .map(u => {
-      const streaks = getStreaks(u.id);
+      // One indexed read per member gives both the visit count and the streak days.
+      const rows = streakDaysStmt.all(u.id);
+      const streaks = streaksFromRows(rows);
       return {
         userId: u.id,
         email: u.email,
-        visitCount: countVisits.get(u.id).count,
+        visitCount: rows.length,
         currentStreak: streaks.currentStreak,
         longestStreak: streaks.longestStreak
       };
