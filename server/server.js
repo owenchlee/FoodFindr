@@ -1069,7 +1069,8 @@ async function streamClaudeToolCall(requestBody, onPartial) {
   let json = '';
   let toolUseId = null;
   let stopReason = null;
-  for (;;) {
+  let complete = null;
+  while (!complete) {
     const { value, done } = await reader.read();
     if (done) break;
     buffered += decoder.decode(value, { stream: true });
@@ -1090,10 +1091,19 @@ async function streamClaudeToolCall(requestBody, onPartial) {
       } else if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
         json += event.delta.partial_json;
         if (onPartial) onPartial(parsePartialToolInput(json));
+        // A fully closed top-level object can't be extended or truncated, so
+        // stop here instead of waiting for the trailing stop events.
+        if (toolUseId && json.trimEnd().endsWith('}')) {
+          try { complete = JSON.parse(json); break; } catch { /* not finished yet */ }
+        }
       }
     }
   }
 
+  if (complete) {
+    reader.cancel().catch(() => {});
+    return { input: complete, toolUseId };
+  }
   if (!toolUseId) throw new Error('Claude did not return a structured recommendation.');
   // Unvalidated eager input can be invalid JSON, or cut off by max_tokens.
   // Either way hand back an empty object: isValidRecommendation rejects it
