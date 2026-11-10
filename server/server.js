@@ -154,6 +154,11 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+// Private per-user JSON must never sit in a shared/browser cache.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api/restaurants', apiLimiter);
 app.use('/api/recommend', apiLimiter);
 
