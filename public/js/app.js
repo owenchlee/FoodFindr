@@ -1799,6 +1799,9 @@ function prefillVisitForm(data) {
   input.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+let visitSaving = false;
+let visitAttempt = null;
+
 async function submitVisit() {
   const status = document.getElementById('visit-status');
   const restaurantName = document.getElementById('visit-restaurant').value.trim();
@@ -1815,11 +1818,24 @@ async function submitVisit() {
   const matchesRecommendation = lastRecommendation && restaurantName === lastRecommendation.restaurant.name;
   const flavorTags = matchesRecommendation ? lastRecommendation.dish.flavorTags : [];
 
+  if (visitSaving) return;
+  visitSaving = true;
+  const saveButton = document.querySelector('#visit-form button[type="submit"]');
+  saveButton.disabled = true;
+  saveButton.setAttribute('aria-busy', 'true');
+
+  // Same key until the save succeeds or the form content changes, so a retry after a lost response is deduped by the server.
+  const signature = JSON.stringify([restaurantName, dish, rating]);
+  if (!visitAttempt || visitAttempt.signature !== signature) {
+    const key = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    visitAttempt = { signature, key };
+  }
+
   try {
     const response = await fetch('/api/visits', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantName, dish, rating, flavorTags })
+      body: JSON.stringify({ restaurantName, dish, rating, flavorTags, idempotencyKey: visitAttempt.key })
     });
 
     const data = await response.json();
@@ -1831,6 +1847,7 @@ async function submitVisit() {
       return;
     }
 
+    visitAttempt = null;
     recentVisits.unshift(data.visit);
     renderVisitList();
     resetVisitForm();
@@ -1846,6 +1863,10 @@ async function submitVisit() {
     status.textContent = "Couldn't reach the server. Check your connection and try again.";
     status.className = 'visit-status visit-status--error';
     status.hidden = false;
+  } finally {
+    visitSaving = false;
+    saveButton.disabled = false;
+    saveButton.removeAttribute('aria-busy');
   }
 }
 
