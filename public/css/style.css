@@ -2193,3 +2193,11 @@ select.visit-input option {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Phone ergonomics: 12px minimum text, 44px star and slider targets */
+@media (max-width: 720px) {
+  .tab-bar-btn { font-size: 0.75rem; }
+  .ticket-eyebrow, .badge-progress, .filter-label { font-size: 0.75rem; }
+  .star-rating button { min-width: 44px; min-height: 44px; }
+  #distance-range { min-height: 44px; }
+}
