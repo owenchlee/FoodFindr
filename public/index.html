@@ -47,7 +47,7 @@
 </head>
 <body>
 
-<div class="shell">
+<main class="shell">
   <div class="map-wrap">
     <div id="map"></div>
     <div class="no-location-state" id="no-location-state" hidden>
@@ -187,7 +187,7 @@
         </div>
 
         <div class="filter-group">
-          <span class="filter-label">Cuisine</span>
+          <label class="filter-label" for="cuisine-select">Cuisine</label>
           <select id="cuisine-select" class="cuisine-select">
             <option value="">All cuisines</option>
             <option value="Thai">Thai</option>
@@ -205,7 +205,7 @@
         <div class="filter-group">
           <span class="filter-label">Distance</span>
           <div class="distance-row">
-            <input type="range" id="distance-range" min="0.5" max="10" step="0.5" value="3" />
+            <input type="range" id="distance-range" aria-label="Distance in miles" min="0.5" max="10" step="0.5" value="3" />
             <span class="distance-value" id="distance-value">3 mi</span>
           </div>
         </div>
@@ -441,9 +441,9 @@
     </button>
   </nav>
 
-</div>
+</main>
 
-<div class="auth-gate" id="auth-gate" hidden>
+<div class="auth-gate" id="auth-gate" role="region" aria-label="Sign in" hidden>
   <form class="auth-card" id="auth-form">
     <div class="wordmark auth-wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
     <p class="auth-subtitle">Sign in to get recommendations, log visits, and track your taste profile.</p>
@@ -462,7 +462,7 @@
   </form>
 </div>
 
-<dialog class="prefs-dialog" id="prefs-dialog">
+<dialog class="prefs-dialog" id="prefs-dialog" aria-label="My Taste Profile">
   <form id="prefs-form" class="prefs-form">
     <p class="ticket-eyebrow">Your taste, saved</p>
     <h2 class="prefs-title">My Taste Profile</h2>
