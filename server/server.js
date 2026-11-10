@@ -172,6 +172,14 @@ const authLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Group codes are 6 chars, so cap join attempts to make guessing impractical.
+const joinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Hands the browser-restricted Maps key + Map ID to the frontend, so the
 // key never has to be hardcoded into a static HTML file.
 app.get('/api/config', (req, res) => {
@@ -1689,7 +1697,7 @@ app.post('/api/groups', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/groups/join', requireAuth, (req, res) => {
+app.post('/api/groups/join', joinLimiter, requireAuth, (req, res) => {
   const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
   if (!code) {
     return res.status(400).json({ error: 'A group code is required.' });
