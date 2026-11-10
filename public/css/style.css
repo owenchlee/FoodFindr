@@ -1286,8 +1286,8 @@ select.visit-input option {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -1736,8 +1736,8 @@ select.visit-input option {
     align-items: center;
     justify-content: center;
     gap: 5px;
-    height: 40px;
-    min-width: 40px;
+    height: 44px;
+    min-width: 44px;
     padding: 0 12px;
     border-radius: 999px;
     border: none;
@@ -1815,8 +1815,8 @@ select.visit-input option {
   .ticket-close-btn {
     top: 12px;
     right: 12px;
-    width: 30px;
-    height: 30px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     border-radius: 50%;
     background: rgba(242, 234, 225, 0.1);
@@ -1972,8 +1972,8 @@ select.visit-input option {
     line-height: 1.1;
   }
   .drawer-close {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: rgba(242, 234, 225, 0.1);
     color: var(--color-paper);
@@ -2080,7 +2080,7 @@ select.visit-input option {
   .auth-card .wordmark { font-size: 2.1rem; }
   .auth-subtitle { font-size: 0.95rem; }
   .auth-card .cta { min-height: 52px; border-radius: 14px; font-size: 1.02rem; }
-  .auth-toggle-mode { font-size: 0.92rem; min-height: 36px; }
+  .auth-toggle-mode { font-size: 0.92rem; min-height: 44px; }
 }
 
 /* Non-blocking refinement indicator (item 9): shown instead of the full
