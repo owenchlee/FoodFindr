@@ -139,6 +139,8 @@ function getUserByEmail(email) {
 const hashToken = (t) => require('crypto').createHash('sha256').update(String(t)).digest('hex');
 
 function createSession({ token, userId, expiresAt }) {
+  // Purge expired rows on every new session so the table can't grow forever.
+  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(new Date().toISOString());
   db.prepare(`
     INSERT INTO sessions (token, user_id, created_at, expires_at)
     VALUES (?, ?, ?, ?)
