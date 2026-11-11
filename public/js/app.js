@@ -502,7 +502,9 @@ function startAppData() {
 }
 
 function tryStartApp() {
-  if ((currentUser || isGuest) && mapsReady && !appStarted) {
+  // Not gated on Maps: location + search run while the Maps script downloads;
+  // map.js helpers no-op until the map exists and the maps-loaded handler paints.
+  if ((currentUser || isGuest) && !appStarted) {
     appStarted = true;
     startAppData();
   }
@@ -1969,6 +1971,12 @@ window.addEventListener('maps-loaded', () => {
   mapsReady = true;
   init();
   tryStartApp();
+  // Results/location may have arrived before the map existed; paint them now.
+  if (userLocation) {
+    setOriginMarker(userLocation.lat, userLocation.lng);
+    recenterMap(userLocation.lat, userLocation.lng);
+  }
+  renderMarkers(lastFilteredRestaurants);
 });
 
 // Native shell setup (iOS/Capacitor only; a no-op in a browser). Runs as
