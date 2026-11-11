@@ -174,6 +174,7 @@ function useLastLocationOrShowEmptyState(reason) {
     scheduleSearch({ immediate: true });
   } else {
     showNoLocationState();
+    cancelPendingRecommendation('Set a location first: allow location access or tap the pin to choose a spot.');
   }
 }
 
@@ -1469,7 +1470,8 @@ async function getRecommendation() {
   setRecommendButtonThinking(true);
   showTicketSkeleton();
 
-  if (restaurantsLoading) {
+  // !appStarted: Maps (and so the first search) hasn't loaded yet; replay once it has.
+  if (restaurantsLoading || !appStarted) {
     pendingRecommendation = true;
     return;
   }
