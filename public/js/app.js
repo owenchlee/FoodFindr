@@ -551,6 +551,7 @@ function showAuthGate() {
   // up (e.g. covering the Log a Visit star rating).
   setRailExpanded(false);
   document.getElementById('auth-gate').hidden = false;
+  focusWithoutScroll(document.getElementById('auth-email'));
 }
 
 function continueAsGuest() {
@@ -677,6 +678,28 @@ function openDrawer(tab) {
   drawer.setAttribute('aria-modal', String(phoneLayout.matches));
   focusWithoutScroll(document.getElementById('drawer-close-btn'));
 }
+
+// Sign-in gate is modal: keep Tab inside it. Escape closes the picker / side rail.
+document.addEventListener('keydown', (event) => {
+  const gate = document.getElementById('auth-gate');
+  if (!gate.hidden) {
+    if (event.key !== 'Tab') return;
+    const items = [...gate.querySelectorAll('button, input')].filter(el => !el.disabled && el.offsetParent !== null);
+    const first = items[0], last = items[items.length - 1];
+    if (!gate.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    return;
+  }
+  if (event.key !== 'Escape') return;
+  if (!document.getElementById('location-picker-popover').hidden) {
+    closeLocationPicker();
+    focusWithoutScroll(document.getElementById('pick-location-btn'));
+  } else if (document.getElementById('side-rail').classList.contains('expanded') &&
+             !document.getElementById('tab-drawer').classList.contains('open')) {
+    setRailExpanded(false);
+    focusWithoutScroll(document.getElementById('tabs-toggle'));
+  }
+});
 
 document.addEventListener('keydown', (event) => {
   const drawer = document.getElementById('tab-drawer');
@@ -1742,7 +1765,10 @@ function showTicketSkeleton() {
 }
 
 function hideTicket() {
-  document.getElementById('ticket').classList.remove('visible');
+  const ticket = document.getElementById('ticket');
+  const hadFocus = ticket.contains(document.activeElement);
+  ticket.classList.remove('visible');
+  if (hadFocus) focusWithoutScroll(document.getElementById('recommend-btn'));
 }
 
 async function loadRecentVisits() {
