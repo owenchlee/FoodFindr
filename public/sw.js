@@ -27,6 +27,13 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE)
       // cache: 'reload' skips the HTTP cache, which may still hold old copies.
       .then(cache => cache.addAll(SHELL.map(url => new Request(url, { cache: 'reload' }))))
+      // Also fetch the CSS/JS the installed HTML links, so a first-visit
+      // offline relaunch is not unstyled. Best effort: never fail the install.
+      .then(async () => {
+        const cache = await caches.open(CACHE);
+        const home = await cache.match('/');
+        if (home) await precacheAssetsOf(cache, home.clone()).catch(() => {});
+      })
       .then(() => self.skipWaiting())
   );
 });
