@@ -513,12 +513,18 @@ async function checkAuth() {
     const response = await fetch('/api/auth/me');
     if (response.ok) {
       const data = await response.json();
+      localStorage.setItem('ff-last-user', JSON.stringify(data.user));
       onAuthenticated(data.user);
     } else {
+      localStorage.removeItem('ff-last-user');
       showAuthGate();
     }
   } catch (err) {
-    showAuthGate();
+    // Network failure is not a sign-out: keep the shell for the last known user.
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem('ff-last-user')); } catch (e) { /* ignore */ }
+    if (last && last.email) onAuthenticated(last);
+    else showAuthGate();
   }
 }
 
@@ -615,6 +621,7 @@ async function logout() {
   try {
     await fetch('/api/auth/logout', { method: 'POST' });
   } finally {
+    localStorage.removeItem('ff-last-user');
     location.reload();
   }
 }
