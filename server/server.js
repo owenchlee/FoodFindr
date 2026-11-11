@@ -920,7 +920,12 @@ function dishCravingInstruction(dish, dietaryRestrictions) {
 // The prompt tells Claude to avoid em/en dashes, but that's not guaranteed;
 // strip any that slip through rather than showing them in user-facing text.
 function stripDashesText(str) {
-  return typeof str === 'string' ? str.replace(/[—–]/g, ', ').replace(/,\s*,/g, ',') : str;
+  // A dash between numbers is a range ("20-30"); elsewhere it becomes a comma. (?=\d|$) keeps a
+  // streamed "$12–" prefix-stable with the final "$12-15".
+  return typeof str === 'string'
+    ? str.replace(/(\d)\s*[—–]\s*(?=\d|$)/g, '$1-').replace(/\s*[—–]\s*/g, ', ')
+      .replace(/,\s*,/g, ',').replace(/,(\s*[.!?])/g, '$1')
+    : str;
 }
 
 // The unsuffixed ID is the documented current one; the old date-suffixed
@@ -1412,7 +1417,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   // on those fields are non-empty/no-markup, so streaming them is safe; stray
   // markup is stripped from partial text below as well.
   const streamText = !hasDietaryRestriction;
-  const stripMarkup = (s) => typeof s === 'string' ? s.replace(/<\/?\w*[^>]*>?/g, '') : s;
+  const stripMarkup = (s) => typeof s === 'string' ? s.replace(/<\/?[a-zA-Z][^>]*>/g, '') : s;
   let sentPickId = null;
   let lastPartialJson = '';
   const onPartial = wantsStream ? ({ values, partial }) => {
