@@ -672,7 +672,27 @@ function openDrawer(tab) {
   document.getElementById('left-column').classList.add('hidden-by-drawer');
   document.getElementById('location-banner').classList.add('hidden-by-drawer');
   document.getElementById('active-group-banner').classList.add('hidden-by-drawer');
+
+  // The phone sheet covers the page, so it is modal there; the desktop panel is not.
+  drawer.setAttribute('aria-modal', String(phoneLayout.matches));
+  focusWithoutScroll(document.getElementById('drawer-close-btn'));
 }
+
+document.addEventListener('keydown', (event) => {
+  const drawer = document.getElementById('tab-drawer');
+  if (!drawer || !drawer.classList.contains('open')) return;
+  if (event.key === 'Escape') {
+    closeDrawer();
+  } else if (event.key === 'Tab' && phoneLayout.matches) {
+    const items = [...drawer.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')]
+      .filter(el => !el.disabled && el.tabIndex >= 0 && el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    const outside = !drawer.contains(document.activeElement);
+    if (outside || (event.shiftKey && document.activeElement === first)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+});
 
 function closeDrawer() {
   const drawer = document.getElementById('tab-drawer');
