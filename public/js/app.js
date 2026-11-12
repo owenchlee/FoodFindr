@@ -1143,6 +1143,7 @@ async function submitJoinGroup() {
 }
 
 async function leaveGroupClick(groupId) {
+  if (!confirm('Leave this group? If you are the last member, the group is deleted.')) return;
   try {
     await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
     if (activeGroupId === groupId) setActiveGroup(null);
