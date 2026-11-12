@@ -92,12 +92,17 @@ data-deletion process before publishing — see "Your choices" below.]
   any of the account-only data described above.
 - You can deny location access; the app will ask you to search for a city
   or address manually instead.
-- [DRAFT NOTE: add a concrete account-deletion / data-export mechanism and
-  describe it here before publishing — the current codebase does not yet
-  have a self-serve "delete my account and data" flow. This needs either a
-  product decision (build one) or, at minimum, a documented manual request
-  process (e.g., an email address) before this policy can accurately tell
-  users how to exercise that choice.]
+- You can download a copy of your data at any time: when signed in, open the
+  You panel and tap "Download My Data". You get a JSON file with your account
+  email, all your visits, preferences, groups (names and codes), and
+  discovered restaurants. It never includes your password hash or session
+  tokens, or other people's data.
+- [DRAFT NOTE: add a concrete account-deletion mechanism and describe it
+  here before publishing — the current codebase does not yet have a
+  self-serve "delete my account and data" flow. This needs either a product
+  decision (build one) or, at minimum, a documented manual request process
+  (e.g., an email address) before this policy can accurately tell users how
+  to exercise that choice.]
 
 ## Children's privacy
 

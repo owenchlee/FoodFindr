@@ -568,6 +568,7 @@ function setMoreAccount(user) {
   document.getElementById('more-account-sub').textContent = user ? user.email : 'Sign up to save visits and your taste';
   document.getElementById('more-signup-btn').parentElement.hidden = Boolean(user);
   document.getElementById('more-logout-btn').parentElement.hidden = !user;
+  document.getElementById('more-export-row').hidden = !user;
 }
 
 function toggleAuthMode() {

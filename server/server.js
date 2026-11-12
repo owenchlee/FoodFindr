@@ -12,7 +12,7 @@ const {
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
-  getGroupMemberIds, getGroupMembers, leaveGroup
+  getGroupMemberIds, getGroupMembers, leaveGroup, exportUserData
 } = require('./db');
 const {
   SESSION_COOKIE_NAME,
@@ -231,6 +231,14 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+app.get('/api/account/export', requireAuth, (req, res) => {
+  res.set({
+    'Content-Disposition': 'attachment; filename="foodfindr-data.json"',
+    'Cache-Control': 'no-store'
+  });
+  res.type('application/json').send(JSON.stringify(exportUserData(req.user.id), null, 2));
 });
 
 function distanceInMiles(lat1, lng1, lat2, lng2) {
