@@ -83,8 +83,8 @@ you across other companies' apps or websites. We don't sell your data.
 
 Account, visit, preference, and group data is stored in our own database,
 hosted on Azure App Service. It's retained for as long as your account
-exists. [DRAFT NOTE: confirm actual backup/retention practices and add a
-data-deletion process before publishing — see "Your choices" below.]
+exists, or until you delete it in the app (see "Your choices" below).
+[DRAFT NOTE: confirm actual backup/retention practices before publishing.]
 
 ## Your choices
 
@@ -92,12 +92,13 @@ data-deletion process before publishing — see "Your choices" below.]
   any of the account-only data described above.
 - You can deny location access; the app will ask you to search for a city
   or address manually instead.
-- [DRAFT NOTE: add a concrete account-deletion / data-export mechanism and
-  describe it here before publishing — the current codebase does not yet
-  have a self-serve "delete my account and data" flow. This needs either a
-  product decision (build one) or, at minimum, a documented manual request
-  process (e.g., an email address) before this policy can accurately tell
-  users how to exercise that choice.]
+- You can delete your account yourself: open the "You" tab, tap "Delete my
+  account" and confirm with your password. This permanently erases your
+  visits, preferences, discovered restaurants, sessions and group
+  memberships. Groups you created stay with the remaining members; groups
+  with no one else in them are removed.
+- [DRAFT NOTE: a data-export mechanism does not exist yet; decide whether
+  to offer one before publishing.]
 
 ## Children's privacy
 

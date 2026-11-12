@@ -12,7 +12,7 @@ const {
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
-  getGroupMemberIds, getGroupMembers, leaveGroup
+  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser
 } = require('./db');
 const {
   SESSION_COOKIE_NAME,
@@ -227,6 +227,26 @@ app.post('/api/auth/logout', (req, res) => {
   endSession(req.cookies && req.cookies[SESSION_COOKIE_NAME]);
   clearSessionCookie(res);
   res.status(204).end();
+});
+
+app.delete('/api/account', authLimiter, requireAuth, async (req, res) => {
+  const password = req.body && req.body.password;
+  if (typeof password !== 'string') {
+    return res.status(400).json({ error: 'Enter your password to delete your account.' });
+  }
+
+  try {
+    const result = await login(req.user.email, password);
+    if (result.error) {
+      return res.status(403).json({ error: 'Incorrect password.' });
+    }
+    deleteUser(req.user.id);
+    clearSessionCookie(res);
+    res.status(204).end();
+  } catch (err) {
+    console.error('Account deletion failed:', err);
+    res.status(500).json({ error: 'Could not delete your account right now.' });
+  }
 });
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
