@@ -219,7 +219,14 @@ function getTopFlavors(userId, limit = 3) {
     .slice(0, limit);
 }
 
-function listVisits(userId) {
+// before = { loggedAt, id } returns the page strictly older than that visit.
+function listVisits(userId, before) {
+  if (before) {
+    return db.prepare(
+      `SELECT * FROM visits WHERE user_id = ? AND (logged_at < ? OR (logged_at = ? AND id < ?))
+       ORDER BY logged_at DESC, id DESC LIMIT 50`
+    ).all(userId, before.loggedAt, before.loggedAt, before.id);
+  }
   return db.prepare(
     'SELECT * FROM visits WHERE user_id = ? ORDER BY logged_at DESC, id DESC LIMIT 50'
   ).all(userId);
