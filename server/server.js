@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
-  insertVisit, listVisits, getVisitHighlights, getTopFlavors,
+  insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
@@ -1573,6 +1573,20 @@ app.get('/api/visits', requireAuth, (req, res) => {
   } catch (err) {
     console.error('Failed to load visits:', err);
     res.status(500).json({ error: 'Could not load past visits.', visits: [] });
+  }
+});
+
+app.delete('/api/visits/:id', requireAuth, (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Invalid visit id.' });
+  try {
+    // Someone else's visit looks the same as a missing one: 404.
+    if (!deleteVisit(req.user.id, Number(req.params.id))) {
+      return res.status(404).json({ error: 'Visit not found.' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to delete visit:', err);
+    res.status(500).json({ error: 'Could not delete that visit right now.' });
   }
 });
 

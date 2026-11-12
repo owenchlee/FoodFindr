@@ -1767,7 +1767,35 @@ function visitItemElement(visit) {
   date.textContent = new Date(visit.loggedAt).toLocaleDateString();
   li.appendChild(date);
 
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'visit-item-delete';
+  del.textContent = 'Delete';
+  del.setAttribute('aria-label', `Delete visit to ${visit.restaurantName}`);
+  del.addEventListener('click', () => deleteVisitAction(visit));
+  li.appendChild(del);
+
   return li;
+}
+
+async function deleteVisitAction(visit) {
+  if (!confirm(`Delete your visit to ${visit.restaurantName}?`)) return;
+  try {
+    const response = await fetch(`/api/visits/${visit.id}`, { method: 'DELETE' });
+    if (!response.ok && response.status !== 404) {
+      alert("Couldn't delete that visit. Try again.");
+      return;
+    }
+  } catch (err) {
+    alert("Couldn't reach the server. Check your connection and try again.");
+    return;
+  }
+  recentVisits = recentVisits.filter(v => v.id !== visit.id);
+  renderVisitList();
+  loadProgress({ force: true });
+  loadStreaks();
+  loadBadges();
+  loadLeaderboard();
 }
 
 function renderVisitList() {
