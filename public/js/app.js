@@ -444,6 +444,12 @@ function init() {
   });
   document.getElementById('more-signup-btn').addEventListener('click', showAuthGate);
   document.getElementById('more-logout-btn').addEventListener('click', logout);
+  document.getElementById('more-password-btn').addEventListener('click', event => {
+    const form = document.getElementById('change-password-form');
+    form.hidden = !form.hidden;
+    event.currentTarget.setAttribute('aria-expanded', String(!form.hidden));
+  });
+  document.getElementById('change-password-form').addEventListener('submit', submitChangePassword);
   document.getElementById('sheet-backdrop').addEventListener('click', closeDrawer);
   document.getElementById('filters-toggle').addEventListener('click', () => {
     setRailExpanded(false);
@@ -568,6 +574,43 @@ function setMoreAccount(user) {
   document.getElementById('more-account-sub').textContent = user ? user.email : 'Sign up to save visits and your taste';
   document.getElementById('more-signup-btn').parentElement.hidden = Boolean(user);
   document.getElementById('more-logout-btn').parentElement.hidden = !user;
+  document.getElementById('more-password-btn').parentElement.hidden = !user;
+  if (!user) document.getElementById('change-password-form').hidden = true;
+}
+
+async function submitChangePassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = document.getElementById('cp-status');
+  const button = document.getElementById('cp-submit-btn');
+
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentPassword: document.getElementById('cp-current').value,
+        newPassword: document.getElementById('cp-new').value
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      status.textContent = data.error || 'Could not change your password.';
+      status.className = 'visit-status visit-status--error';
+    } else {
+      form.reset();
+      status.textContent = 'Password updated. Your other devices were signed out.';
+      status.className = 'visit-status';
+    }
+  } catch {
+    status.textContent = 'Could not reach the server. Try again.';
+    status.className = 'visit-status visit-status--error';
+  } finally {
+    status.hidden = false;
+    button.disabled = false;
+  }
 }
 
 function toggleAuthMode() {

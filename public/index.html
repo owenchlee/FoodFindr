@@ -363,8 +363,15 @@
       </ul>
       <ul class="inset-list">
         <li><button type="button" class="inset-row inset-row--center" id="more-signup-btn">Sign Up or Log In</button></li>
+        <li hidden><button type="button" class="inset-row inset-row--center" id="more-password-btn" aria-expanded="false" aria-controls="change-password-form">Change password</button></li>
         <li hidden><button type="button" class="inset-row inset-row--center inset-row--danger" id="more-logout-btn">Log Out</button></li>
       </ul>
+      <form id="change-password-form" hidden>
+        <input type="password" id="cp-current" class="visit-input" placeholder="Current password" aria-label="Current password" autocomplete="current-password" required />
+        <input type="password" id="cp-new" class="visit-input" placeholder="New password (8+ characters)" aria-label="New password" autocomplete="new-password" required minlength="8" maxlength="128" />
+        <p class="visit-status" id="cp-status" role="status" hidden></p>
+        <button type="submit" class="cta" id="cp-submit-btn">Update password</button>
+      </form>
     </div>
 
     <div class="tab-drawer-panel" id="tab-panel-faq" hidden>

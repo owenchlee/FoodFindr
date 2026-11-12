@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 const {
   getUserByEmail, insertUser, countUsers, adoptLegacyData,
-  createSession, getSessionWithUser, deleteSession
+  createSession, getSessionWithUser, deleteSession,
+  getUserById, changePasswordKeepingSession
 } = require('./db');
 
 const SESSION_COOKIE_NAME = 'ff_session';
@@ -89,6 +90,15 @@ async function login(email, password) {
   return { user };
 }
 
+async function changePassword(userId, currentPassword, newPassword, keepToken) {
+  const user = getUserById(userId);
+  if (!user || !(await verifyPassword(currentPassword, user.password_hash))) {
+    return { error: 'Current password is incorrect.' };
+  }
+  changePasswordKeepingSession(userId, await hashPassword(newPassword), keepToken);
+  return {};
+}
+
 function startSession(userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
@@ -171,7 +181,7 @@ function optionalAuth(req, res, next) {
 module.exports = {
   SESSION_COOKIE_NAME,
   isValidEmail, isValidPassword,
-  signup, login,
+  signup, login, changePassword,
   startSession, setSessionCookie, clearSessionCookie, endSession,
   parseCookies, requireAuth, optionalAuth
 };
