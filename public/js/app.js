@@ -575,6 +575,7 @@ function toggleAuthMode() {
   document.getElementById('auth-submit-btn').textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
   document.getElementById('auth-toggle-mode').textContent =
     authMode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in';
+  document.getElementById('auth-password').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
   document.getElementById('auth-status').hidden = true;
 }
 
