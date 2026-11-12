@@ -224,12 +224,13 @@ function init() {
 
   document.getElementById('no-location-search-btn').addEventListener('click', openLocationPicker);
 
-  document.getElementById('location-search-input').addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
+  // Form submit (not keydown) so the iOS Search key works and an IME-confirming Enter does not search.
+  document.getElementById('location-search-form').addEventListener('submit', (event) => {
     event.preventDefault();
-    const query = event.target.value.trim();
+    const input = document.getElementById('location-search-input');
+    const query = input.value.trim();
     if (!query) return;
-    searchLocation(query, event.target);
+    searchLocation(query, input);
   });
 
   document.querySelectorAll('#price-filter-toggle button').forEach(btn => {
