@@ -1200,6 +1200,7 @@ function closeLocationPicker() {
 
 async function searchLocation(query, inputEl) {
   inputEl.disabled = true;
+  geocodePending = true;
   try {
     const response = await fetch(`/api/geocode?address=${encodeURIComponent(query)}`);
     const data = await response.json();
@@ -1212,15 +1213,29 @@ async function searchLocation(query, inputEl) {
     inputEl.value = '';
     setOriginMarker(data.lat, data.lng);
     recenterMap(data.lat, data.lng);
+    geocodePending = false;
     onLocationPicked(data.lat, data.lng, 'search');
   } catch (err) {
     showLocationBanner("Couldn't reach the server. Check your connection and try again.");
   } finally {
     inputEl.disabled = false;
+    if (geocodePending) {
+      geocodePending = false;
+      // Failed geocode: a tap queued behind it would otherwise spin forever.
+      if (pendingRecommendation && !restaurantsLoading) {
+        pendingRecommendation = false;
+        getRecommendation();
+      }
+    }
   }
 }
 
 function onLocationPicked(lat, lng, source) {
+  // A recommendation from the area being left must not land on the new one.
+  if (!pendingRecommendation) {
+    invalidateRecommendation();
+    setRecommendButtonThinking(false);
+  }
   userLocation = { lat, lng };
   usingCustomLocation = true;
   saveLastLocation(lat, lng);
@@ -1458,6 +1473,15 @@ function cancelPendingRecommendation(message) {
 }
 
 const RECOMMEND_TIMEOUT_MS = 30000;
+let recommendSeq = 0;
+let recommendAbort = null;
+let geocodePending = false; // a typed location is still being geocoded
+
+function invalidateRecommendation() {
+  recommendSeq++;
+  if (recommendAbort) recommendAbort.abort();
+  recommendAbort = null;
+}
 
 async function getRecommendation() {
   // Skeleton card instead of the old full-screen overlay: the map stays
@@ -1469,13 +1493,18 @@ async function getRecommendation() {
   setRecommendButtonThinking(true);
   showTicketSkeleton();
 
-  if (restaurantsLoading) {
+  // The newest request wins: drop whatever older one is still in flight.
+  invalidateRecommendation();
+  const seq = recommendSeq;
+
+  if (restaurantsLoading || geocodePending) {
     pendingRecommendation = true;
     return;
   }
 
   const t0 = performance.now();
   const finish = () => {
+    if (seq !== recommendSeq) return; // a newer request owns the button now
     setRecommendButtonThinking(false);
     hideLoading();
   };
@@ -1486,6 +1515,7 @@ async function getRecommendation() {
     // waiting cost seconds (Google makes the next page wait ~2s to exist).
     // Capped: a request stalled by iOS suspending the app must not hang this.
     await Promise.race([pendingRestPromise, new Promise(r => setTimeout(r, 6000))]);
+    if (seq !== recommendSeq) return;
   }
 
   if (lastFilteredRestaurants.length === 0) {
@@ -1497,6 +1527,7 @@ async function getRecommendation() {
   // Without a deadline, a stream that iOS froze (app backgrounded mid-answer)
   // would leave the button stuck on "Thinking…" for good.
   const timeout = new AbortController();
+  recommendAbort = timeout;
   const timeoutTimer = setTimeout(() => timeout.abort(), RECOMMEND_TIMEOUT_MS);
   try {
     const response = await fetch('/api/recommend', {
@@ -1520,6 +1551,7 @@ async function getRecommendation() {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/event-stream') || !response.body) {
       const data = await response.json();
+      if (seq !== recommendSeq) return;
       if (!response.ok) {
         showTicketError(data.error);
         return;
@@ -1531,7 +1563,7 @@ async function getRecommendation() {
 
     let finished = false;
     await readEventStream(response, (event, data) => {
-      if (ticketDismissed) return;
+      if (ticketDismissed || seq !== recommendSeq) return;
       if (event === 'pick') {
         hideLoading();
         showTicketStreaming(data.restaurant);
@@ -1550,8 +1582,9 @@ async function getRecommendation() {
         showTicketError(data.error);
       }
     });
-    if (!finished) showTicketError("The recommendation got cut off. Try again in a moment.");
+    if (!finished && seq === recommendSeq) showTicketError("The recommendation got cut off. Try again in a moment.");
   } catch (err) {
+    if (seq !== recommendSeq) return; // superseded (aborted), not a failure
     showTicketError(timeout.signal.aborted
       ? 'That took too long. Tap Surprise Me to try again.'
       : "Couldn't reach the server. Check your connection and try again.");
