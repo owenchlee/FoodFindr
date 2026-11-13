@@ -656,12 +656,6 @@ function openDrawer(tab) {
   document.getElementById('drawer-title').textContent = DRAWER_TAB_LABELS[tab] || '';
 
   drawer.hidden = false;
-  // Force a layout pass so the transform transition animates in from the
-  // off-screen starting position instead of jumping straight to open.
-  void drawer.offsetHeight;
-  drawer.classList.add('open');
-  drawer.closest('.shell').classList.add('drawer-open');
-
   document.querySelectorAll('[data-tab]').forEach(btn => {
     const isActiveTab = btn.dataset.tab === tab;
     btn.classList.toggle('active', isActiveTab);
@@ -673,6 +667,11 @@ function openDrawer(tab) {
   document.getElementById('left-column').classList.add('hidden-by-drawer');
   document.getElementById('location-banner').classList.add('hidden-by-drawer');
   document.getElementById('active-group-banner').classList.add('hidden-by-drawer');
+  drawer.closest('.shell').classList.add('drawer-open');
+  // Force one style/layout pass for all the writes above so the transform
+  // transition animates in from the off-screen start instead of jumping open.
+  void drawer.offsetHeight;
+  drawer.classList.add('open');
 }
 
 function closeDrawer() {
