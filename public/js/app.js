@@ -660,6 +660,7 @@ function openDrawer(tab) {
   // off-screen starting position instead of jumping straight to open.
   void drawer.offsetHeight;
   drawer.classList.add('open');
+  drawer.closest('.shell').classList.add('drawer-open');
 
   document.querySelectorAll('[data-tab]').forEach(btn => {
     const isActiveTab = btn.dataset.tab === tab;
@@ -677,6 +678,7 @@ function openDrawer(tab) {
 function closeDrawer() {
   const drawer = document.getElementById('tab-drawer');
   drawer.classList.remove('open');
+  drawer.closest('.shell').classList.remove('drawer-open');
   document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.classList.remove('active');
     btn.setAttribute('aria-expanded', 'false');
