@@ -2193,3 +2193,11 @@ select.visit-input option {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Reserve the finished card's space while streaming so text landing doesn't shift it. */
+.ticket-meta { min-height: 1.3em; }
+.ticket-flavors { min-height: 28px; }
+.ticket-dish { min-height: 1.3em; }
+.ticket-reason { min-height: 4.5em; }
+.skeleton-line { height: 1.3em; }
+.skeleton-block { height: 4.5em; }
