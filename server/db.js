@@ -119,6 +119,16 @@ db.exec(`
   )
 `);
 
+// Additive, safe on existing DBs. (user_id, logged_at) serves every per-user visit read and its ORDER BY.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_visits_user_logged ON visits(user_id, logged_at);
+  CREATE INDEX IF NOT EXISTS idx_discovered_user_city ON discovered_restaurants(user_id, city);
+  -- Expression must match getProgress's EXISTS exactly so it becomes an index seek.
+  CREATE INDEX IF NOT EXISTS idx_visits_user_name_norm ON visits(user_id, LOWER(TRIM(restaurant_name)));
+  -- PK is (group_id, user_id); "which groups is this user in" (leaderboard, listUserGroups) needs user_id first.
+  CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id, group_id);
+`);
+
 function countUsers() {
   return db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
 }
@@ -203,8 +213,8 @@ function insertVisit({ userId, restaurantName, dish, rating, flavorTags }) {
 
 function getTopFlavors(userId, limit = 3) {
   const rows = db.prepare(
-    "SELECT flavor_tags FROM visits WHERE user_id = ? AND rating >= 4 AND flavor_tags IS NOT NULL AND flavor_tags != '[]'"
-  ).all(userId);
+    "SELECT flavor_tags FROM visits WHERE user_id = ? AND rating >= 4 AND flavor_tags IS NOT NULL AND flavor_tags != '[]' ORDER BY id"
+  ).all(userId); // ORDER BY id: tie-breaks on count follow first-seen tag order, so row order must be stable
 
   const counts = new Map();
   for (const row of rows) {
@@ -291,23 +301,70 @@ function recordDiscovered(userId, restaurants, city) {
 // Streaks are computed from UTC calendar days (not per-user local time),
 // a deliberate simplification. Two visits logged the same UTC day only
 // count once, so back-to-back logging in one sitting can't inflate a streak.
+// Prepared once; arrays instead of row objects since the leaderboard calls this per member.
+// substr in SQL: only the 10-char UTC day crosses into JS, not the full timestamp.
+const streakDaysStmt = db.prepare('SELECT substr(logged_at, 1, 10) FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
+streakDaysStmt.setReturnArrays(true);
+
+// Per-user { visitCount, streaks } cache. Valid while no connection has written (total_changes covers
+// this connection, data_version covers others) and the UTC day is unchanged (currentStreak depends on today).
+const dbVersionStmt = db.prepare('SELECT total_changes() AS t, data_version AS d FROM pragma_data_version()');
+const streakCache = new Map();
+let streakCacheKey = '';
+function validStreakCache() {
+  const v = dbVersionStmt.get();
+  const key = `${v.t}:${v.d}:${new Date().toISOString().slice(0, 10)}`;
+  if (key !== streakCacheKey) {
+    streakCache.clear();
+    streakCacheKey = key;
+  }
+  return streakCache;
+}
+
+function streakStats(cache, userId) {
+  let entry = cache.get(userId);
+  if (!entry) {
+    const rows = streakDaysStmt.all(userId);
+    entry = { visitCount: rows.length, streaks: streaksFromRows(rows) };
+    cache.set(userId, entry);
+  }
+  return entry;
+}
+
 function getStreaks(userId) {
-  const rows = db.prepare('SELECT logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC').all(userId);
+  return { ...streakStats(validStreakCache(), userId).streaks };
+}
+
+// Date.parse dominated leaderboard time; memoize it. Grows by one entry per distinct calendar day ever logged.
+const dayMsCache = new Map();
+function parseDay(d) {
+  let ms = dayMsCache.get(d);
+  if (ms === undefined) {
+    ms = Date.parse(d);
+    dayMsCache.set(d, ms);
+  }
+  return ms;
+}
+
+// rows: [[YYYY-MM-DD], ...] sorted ascending, as returned by streakDaysStmt.
+function streaksFromRows(rows) {
   if (rows.length === 0) {
     return { currentStreak: 0, longestStreak: 0, lastVisitDate: null };
   }
 
+  // Rows are sorted, so equal day prefixes are adjacent: comparing to the previous day dedupes.
   const dayStrings = [];
-  const seenDays = new Set();
+  let prevDay;
   for (const row of rows) {
-    const day = row.logged_at.slice(0, 10);
-    if (!seenDays.has(day)) {
-      seenDays.add(day);
+    const day = row[0];
+    if (day !== prevDay) {
+      prevDay = day;
       dayStrings.push(day);
     }
   }
 
-  const days = dayStrings.map(d => Date.parse(`${d}T00:00:00Z`));
+  // A date-only ISO string parses as UTC midnight (ECMAScript spec), same as appending T00:00:00Z.
+  const days = dayStrings.map(parseDay);
 
   let longestStreak = 1;
   let run = 1;
@@ -333,38 +390,41 @@ function getStreaks(userId) {
   return { currentStreak, longestStreak, lastVisitDate: dayStrings[dayStrings.length - 1] };
 }
 
+const badgeRowsStmt = db.prepare(
+  'SELECT rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC'
+);
+
+// Badge stats share the streak cache entry, so they clear on the same writes / day change.
 function getBadges(userId) {
-  const rows = db.prepare(
-    'SELECT rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC'
-  ).all(userId);
-  return evaluateBadges(computeStats(rows, getStreaks(userId)));
+  const entry = streakStats(validStreakCache(), userId);
+  if (!entry.badgeStats) entry.badgeStats = computeStats(badgeRowsStmt.all(userId), entry.streaks);
+  return evaluateBadges(entry.badgeStats);
 }
 
 // You plus everyone who shares a group with you (joining by code is the
 // consent), even members with zero visits: "you're at 0, a friend's at 12"
 // is itself a nudge. Never other accounts: that would leak strangers' names.
-function getLeaderboardStats(userId) {
-  const users = db.prepare(`
-    SELECT id, email FROM users
-    WHERE id = ? OR id IN (
-      SELECT gm2.user_id FROM group_members gm1
-      JOIN group_members gm2 ON gm2.group_id = gm1.group_id
-      WHERE gm1.user_id = ?
-    )
-    ORDER BY id ASC
-  `).all(userId, userId);
-  const visitCountRows = db.prepare(
-    'SELECT user_id, COUNT(*) AS count FROM visits WHERE user_id IS NOT NULL GROUP BY user_id'
-  ).all();
-  const visitCounts = new Map(visitCountRows.map(r => [r.user_id, r.count]));
+const leaderboardUsersStmt = db.prepare(`
+  SELECT id, email FROM users
+  WHERE id = ? OR id IN (
+    SELECT gm2.user_id FROM group_members gm1
+    JOIN group_members gm2 ON gm2.group_id = gm1.group_id
+    WHERE gm1.user_id = ?
+  )
+  ORDER BY id ASC
+`);
 
+function getLeaderboardStats(userId) {
+  const users = leaderboardUsersStmt.all(userId, userId);
+
+  const cache = validStreakCache();
   return users
     .map(u => {
-      const streaks = getStreaks(u.id);
+      const { visitCount, streaks } = streakStats(cache, u.id);
       return {
         userId: u.id,
         email: u.email,
-        visitCount: visitCounts.get(u.id) || 0,
+        visitCount,
         currentStreak: streaks.currentStreak,
         longestStreak: streaks.longestStreak
       };
@@ -448,20 +508,19 @@ function leaveGroup(groupId, userId) {
   }
 }
 
-function getProgress(userId, city) {
-  const discovered = db.prepare(
-    'SELECT COUNT(*) AS count FROM discovered_restaurants WHERE user_id = ? AND city = ?'
-  ).get(userId, city).count;
-
-  const visited = db.prepare(`
-    SELECT COUNT(*) AS count FROM discovered_restaurants d
-    WHERE d.user_id = ? AND d.city = ?
-    AND EXISTS (
+// One pass over the user's city rows; COUNT(CASE ...) stays 0 (not NULL) when there are none.
+const progressStmt = db.prepare(`
+  SELECT COUNT(*) AS discovered,
+    COUNT(CASE WHEN EXISTS (
       SELECT 1 FROM visits v
       WHERE v.user_id = d.user_id AND LOWER(TRIM(v.restaurant_name)) = LOWER(TRIM(d.name))
-    )
-  `).get(userId, city).count;
+    ) THEN 1 END) AS visited
+  FROM discovered_restaurants d
+  WHERE d.user_id = ? AND d.city = ?
+`);
 
+function getProgress(userId, city) {
+  const { discovered, visited } = progressStmt.get(userId, city);
   return { city, discovered, visited };
 }
 
