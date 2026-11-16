@@ -240,12 +240,13 @@ function init() {
 
   document.getElementById('no-location-search-btn').addEventListener('click', openLocationPicker);
 
-  document.getElementById('location-search-input').addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
+  // Form submit (not keydown) so the iOS Search key works and an IME-confirming Enter does not search.
+  document.getElementById('location-search-form').addEventListener('submit', (event) => {
     event.preventDefault();
-    const query = event.target.value.trim();
+    const input = document.getElementById('location-search-input');
+    const query = input.value.trim();
     if (!query) return;
-    searchLocation(query, event.target);
+    searchLocation(query, input);
   });
 
   document.querySelectorAll('#price-filter-toggle button').forEach(btn => {
@@ -638,6 +639,7 @@ function toggleAuthMode() {
   document.getElementById('auth-submit-btn').textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
   document.getElementById('auth-toggle-mode').textContent =
     authMode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in';
+  document.getElementById('auth-password').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
   document.getElementById('auth-status').hidden = true;
 }
 
@@ -1205,6 +1207,7 @@ async function submitJoinGroup() {
 }
 
 async function leaveGroupClick(groupId) {
+  if (!confirm('Leave this group? If you are the last member, the group is deleted.')) return;
   try {
     await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
     if (activeGroupId === groupId) setActiveGroup(null);
