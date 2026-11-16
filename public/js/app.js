@@ -1,3 +1,18 @@
+function apiErrorFallback(status) {
+  if (status === 429) return "Too many requests, wait a minute and try again.";
+  if (status >= 500) return "Something went wrong on our side, try again in a moment.";
+  return "Something went wrong. Please try again.";
+}
+
+// Tolerates non-JSON bodies (proxy HTML, plain-text 429) so the server having answered is not reported as a network failure.
+async function readApiJson(response) {
+  let data = null;
+  try { data = await response.json(); } catch { /* non-JSON body */ }
+  if (!data || typeof data !== "object") data = {};
+  if (!response.ok && !data.error) data.error = apiErrorFallback(response.status);
+  return data;
+}
+
 let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false, dish: '' };
 let allRestaurants = [];
 let lastFilteredRestaurants = [];
@@ -512,7 +527,7 @@ async function checkAuth() {
   try {
     const response = await fetch('/api/auth/me');
     if (response.ok) {
-      const data = await response.json();
+      const data = await readApiJson(response);
       onAuthenticated(data.user);
     } else {
       showAuthGate();
@@ -591,7 +606,7 @@ async function submitAuthForm() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     if (!response.ok) {
       status.textContent = data.error;
@@ -835,7 +850,7 @@ async function loadProgress({ force = false } = {}) {
 
   try {
     const response = await fetch(`/api/progress?${params.toString()}`);
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     if (!response.ok || !data.city || data.discovered === 0) {
       block.hidden = true;
@@ -870,7 +885,7 @@ async function loadStreaks() {
       empty.hidden = false;
       return;
     }
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     if (!data.lastVisitDate) {
       block.hidden = true;
@@ -920,7 +935,7 @@ async function loadBadges() {
   try {
     const response = await fetch('/api/badges');
     if (!response.ok) return;
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     grid.replaceChildren();
     (data.badges || []).forEach(badge => grid.appendChild(badgeElement(badge)));
@@ -963,7 +978,7 @@ async function loadLeaderboard() {
   try {
     const response = await fetch('/api/leaderboard');
     if (!response.ok) return;
-    const data = await response.json();
+    const data = await readApiJson(response);
     const leaderboard = data.leaderboard || [];
 
     list.replaceChildren();
@@ -1068,7 +1083,7 @@ async function loadGroups() {
   try {
     const response = await fetch('/api/groups');
     if (!response.ok) return;
-    const data = await response.json();
+    const data = await readApiJson(response);
     groups = data.groups || [];
 
     const saved = getSavedActiveGroupId();
@@ -1094,7 +1109,7 @@ async function submitCreateGroup() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
     });
-    const data = await response.json();
+    const data = await readApiJson(response);
     if (!response.ok) {
       status.textContent = data.error;
       status.className = 'visit-status visit-status--error';
@@ -1123,7 +1138,7 @@ async function submitJoinGroup() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code })
     });
-    const data = await response.json();
+    const data = await readApiJson(response);
     if (!response.ok) {
       status.textContent = data.error;
       status.className = 'visit-status visit-status--error';
@@ -1202,7 +1217,7 @@ async function searchLocation(query, inputEl) {
   inputEl.disabled = true;
   try {
     const response = await fetch(`/api/geocode?address=${encodeURIComponent(query)}`);
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     if (!response.ok) {
       showLocationBanner(data.error || `Couldn't find "${query}". Try a different search.`);
@@ -1339,14 +1354,15 @@ async function loadRestaurants(seq, signal) {
 
   try {
     const response = await fetch(`/api/restaurants?${params.toString()}`, { signal: fetchSignal });
-    const data = await response.json();
+    const data = await readApiJson(response);
     if (seq !== searchSeq) return; // superseded by a newer search while this was in flight
 
     if (!response.ok) {
       showLocationBanner(data.error || "Couldn't load restaurants nearby. Try again in a moment.");
     }
 
-    allRestaurants = data.restaurants || [];
+    if (response.ok && !Array.isArray(data.restaurants)) showLocationBanner(apiErrorFallback(500));
+    allRestaurants = Array.isArray(data.restaurants) ? data.restaurants : [];
     if (response.ok) writeSearchCache(cacheKey, allRestaurants);
     applyLocalFilters();
     if (!pendingRecommendation) hideTicket(); // a queued Surprise Me keeps its skeleton card
@@ -1519,7 +1535,7 @@ async function getRecommendation() {
 
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/event-stream') || !response.body) {
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok) {
         showTicketError(data.error);
         return;
@@ -1547,7 +1563,7 @@ async function getRecommendation() {
         perfLog('recommend', t0);
       } else if (event === 'error') {
         finished = true;
-        showTicketError(data.error);
+        showTicketError((data && data.error) || apiErrorFallback(500));
       }
     });
     if (!finished) showTicketError("The recommendation got cut off. Try again in a moment.");
@@ -1728,7 +1744,7 @@ function hideTicket() {
 async function loadRecentVisits() {
   try {
     const response = await fetch('/api/visits');
-    const data = await response.json();
+    const data = await readApiJson(response);
     recentVisits = data.visits || [];
     renderVisitList();
   } catch (err) {
@@ -1822,7 +1838,7 @@ async function submitVisit() {
       body: JSON.stringify({ restaurantName, dish, rating, flavorTags })
     });
 
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     if (!response.ok) {
       status.textContent = data.error;
@@ -1852,7 +1868,7 @@ async function submitVisit() {
 async function loadPreferences() {
   try {
     const response = await fetch('/api/preferences');
-    const data = await response.json();
+    const data = await readApiJson(response);
     preferences = data.preferences;
 
     if (!preferences && !localStorage.getItem(`ff_prefs_skipped_${currentUser.id}`)) {
@@ -1908,7 +1924,7 @@ async function loadTopFlavors() {
 
   try {
     const response = await fetch('/api/flavors');
-    const data = await response.json();
+    const data = await readApiJson(response);
     const topFlavors = data.topFlavors || [];
 
     container.replaceChildren();
@@ -1946,7 +1962,7 @@ async function submitPreferences() {
       body: JSON.stringify({ favoriteCuisines, dietaryRestrictions, spiceTolerance })
     });
 
-    const data = await response.json();
+    const data = await readApiJson(response);
 
     if (!response.ok) {
       status.textContent = data.error;
