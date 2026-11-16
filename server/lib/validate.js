@@ -1,3 +1,5 @@
+const { findDietConflict } = require('./diet');
+
 // Fixed vocabulary (not free-form) so tags can actually be aggregated into
 // "top flavors" later. Free text from Claude would fragment across
 // synonyms like "tangy" vs "zesty" vs "sour".
@@ -75,6 +77,9 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
         return `the dish name/shared items mention "${found}", which conflicts with a vegan/vegetarian restriction; pick a candidate whose reviews support a compliant dish instead`;
       }
     }
+    // The other chips (gluten, dairy, nut, halal, kosher, shellfish).
+    const dietConflict = findDietConflict(dishText, dietaryRestrictions);
+    if (dietConflict) return dietConflict;
   }
   return null;
 }
