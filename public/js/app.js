@@ -518,7 +518,9 @@ function startAppData() {
 }
 
 function tryStartApp() {
-  if ((currentUser || isGuest) && mapsReady && !appStarted) {
+  // Not gated on Maps: location + search run while the Maps script downloads;
+  // map.js helpers no-op until the map exists and the maps-loaded handler paints.
+  if ((currentUser || isGuest) && !appStarted) {
     appStarted = true;
     startAppData();
   }
@@ -2007,6 +2009,12 @@ async function submitPreferences() {
 window.addEventListener('maps-loaded', () => {
   mapsReady = true;
   tryStartApp();
+  // Results/location may have arrived before the map existed; paint them now.
+  if (userLocation) {
+    setOriginMarker(userLocation.lat, userLocation.lng);
+    recenterMap(userLocation.lat, userLocation.lng);
+  }
+  renderMarkers(lastFilteredRestaurants);
 });
 
 // Handlers bind as soon as the (deferred) script runs so taps work while the
