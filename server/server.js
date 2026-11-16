@@ -577,6 +577,9 @@ let activeBackgroundFills = 0;
 
 // Shared by both /api/restaurants and /api/restaurants/rest so the two routes
 // can't compute the search's identity (and therefore cache key) differently.
+// Control chars become spaces, then trim and cap; non-strings become ''.
+const cleanText = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max).trim() : '');
+
 // Out-of-range or non-finite coordinates become NaN so callers' existing 400 check rejects them.
 function parseCoord(value, limit) {
   const n = parseFloat(value);
@@ -588,7 +591,7 @@ function resolveSearchParams(req) {
   const lng = parseCoord(req.query.lng, 180);
   // Repeated or bracketed params arrive as arrays/objects; treat them as absent.
   const str = v => (typeof v === 'string' ? v : undefined);
-  const cuisine = str(req.query.cuisine) && req.query.cuisine.trim().slice(0, 60);
+  const cuisine = cleanText(str(req.query.cuisine), 60);
   // Missing, non-numeric, zero or negative distance falls back to the 3 mi default.
   const parsedMiles = Number(str(req.query.maxDistance));
   const maxDistance = Number.isFinite(parsedMiles) && parsedMiles > 0 ? req.query.maxDistance : undefined;
@@ -1557,7 +1560,8 @@ const savedVisitsByKey = new Map();
 app.post('/api/visits', requireAuth, (req, res) => {
   const { restaurantName, dish, rating, flavorTags } = req.body;
 
-  if (!restaurantName || typeof restaurantName !== 'string' || !restaurantName.trim()) {
+  const name = cleanText(restaurantName, 200);
+  if (!name) {
     return res.status(400).json({ error: 'Restaurant name is required.' });
   }
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -1565,7 +1569,7 @@ app.post('/api/visits', requireAuth, (req, res) => {
   }
 
   const cleanFlavorTags = Array.isArray(flavorTags) ? [...new Set(flavorTags.filter(t => FLAVOR_TAGS.includes(t)))] : [];
-  const cleanDish = typeof dish === 'string' ? dish.trim().slice(0, 200) : '';
+  const cleanDish = cleanText(dish, 200);
 
   const idemKey = typeof req.body.idempotencyKey === 'string' && req.body.idempotencyKey.length <= 100
     ? `${req.user.id}:${req.body.idempotencyKey}` : null;
@@ -1576,7 +1580,7 @@ app.post('/api/visits', requireAuth, (req, res) => {
   try {
     const visit = insertVisit({
       userId: req.user.id,
-      restaurantName: restaurantName.trim().slice(0, 200),
+      restaurantName: name,
       dish: cleanDish || null,
       rating,
       flavorTags: cleanFlavorTags
@@ -1685,7 +1689,7 @@ function isStringArray(value) {
 // trim, cap at 60 chars, drop case-insensitive duplicates, keep first 10
 function cleanPrefList(list) {
   const seen = new Set();
-  return list.map(x => x.trim().slice(0, 60)).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())).slice(0, 10);
+  return list.map(x => cleanText(x, 60)).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())).slice(0, 10);
 }
 
 app.get('/api/preferences', requireAuth, (req, res) => {
@@ -1721,7 +1725,7 @@ app.post('/api/preferences', requireAuth, (req, res) => {
 });
 
 app.post('/api/groups', requireAuth, (req, res) => {
-  const name = typeof req.body.name === 'string' ? req.body.name.trim().slice(0, 40) : '';
+  const name = cleanText(req.body.name, 40);
   if (!name) {
     return res.status(400).json({ error: 'A group name is required.' });
   }
