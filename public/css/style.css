@@ -229,7 +229,7 @@ html, body {
    nearly the full width, so there's nowhere to push it and the fade-hide
    behavior below still applies. */
 @media (min-width: 721px) {
-  .shell:has(#tab-drawer.open) .left-column.hidden-by-drawer {
+  .shell.drawer-open .left-column.hidden-by-drawer {
     left: calc(56px + 360px + var(--space-4));
     opacity: 1;
     pointer-events: none;
@@ -1854,7 +1854,7 @@ select.visit-input option {
   }
   .tab-bar-btn svg { width: 25px; height: 25px; transition: scale 200ms var(--ease-spring); }
   .tab-bar-btn.active,
-  .shell:not(:has(#tab-drawer.open)) .tab-bar-btn[data-action="explore"] { color: var(--color-turmeric); }
+  .shell:not(.drawer-open) .tab-bar-btn[data-action="explore"] { color: var(--color-turmeric); }
   .tab-bar-btn.active svg { scale: 1.08; }
   .tab-bar-btn:active { scale: 0.9; }
 
@@ -1887,7 +1887,7 @@ select.visit-input option {
     pointer-events: none;
     transition: opacity var(--dur-med) var(--ease-ios);
   }
-  .shell:has(#tab-drawer.open) .sheet-backdrop { opacity: 1; pointer-events: auto; }
+  .shell.drawer-open .sheet-backdrop { opacity: 1; pointer-events: auto; }
 
   .tab-drawer {
     top: calc(var(--safe-top) + 10px);
@@ -1906,8 +1906,8 @@ select.visit-input option {
   }
   .tab-drawer.open { transform: translateY(0); }
   /* The sheet's own large title replaces these while it's up. */
-  .shell:has(#tab-drawer.open) .top-bar { opacity: 0; pointer-events: none; }
-  .shell:has(#tab-drawer.open) .top-bar > * { pointer-events: none; }
+  .shell.drawer-open .top-bar { opacity: 0; pointer-events: none; }
+  .shell.drawer-open .top-bar > * { pointer-events: none; }
   #tab-panel-past-reviews .recent-visits-block > .filter-label,
   #tab-panel-log-review .log-visit-block > .filter-label { display: none; }
 

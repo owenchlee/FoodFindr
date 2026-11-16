@@ -765,11 +765,6 @@ function openDrawer(tab) {
   document.getElementById('drawer-title').textContent = DRAWER_TAB_LABELS[tab] || '';
 
   drawer.hidden = false;
-  // Force a layout pass so the transform transition animates in from the
-  // off-screen starting position instead of jumping straight to open.
-  void drawer.offsetHeight;
-  drawer.classList.add('open');
-
   document.querySelectorAll('[data-tab]').forEach(btn => {
     const isActiveTab = btn.dataset.tab === tab;
     btn.classList.toggle('active', isActiveTab);
@@ -781,6 +776,11 @@ function openDrawer(tab) {
   document.getElementById('left-column').classList.add('hidden-by-drawer');
   document.getElementById('location-banner').classList.add('hidden-by-drawer');
   document.getElementById('active-group-banner').classList.add('hidden-by-drawer');
+  drawer.closest('.shell').classList.add('drawer-open');
+  // Force one style/layout pass for all the writes above so the transform
+  // transition animates in from the off-screen start instead of jumping open.
+  void drawer.offsetHeight;
+  drawer.classList.add('open');
 
   // The phone sheet covers the page, so it is modal there; the desktop panel is not.
   drawer.setAttribute('aria-modal', String(phoneLayout.matches));
@@ -828,6 +828,7 @@ document.addEventListener('keydown', (event) => {
 function closeDrawer() {
   const drawer = document.getElementById('tab-drawer');
   drawer.classList.remove('open');
+  drawer.closest('.shell').classList.remove('drawer-open');
   document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.classList.remove('active');
     btn.setAttribute('aria-expanded', 'false');
