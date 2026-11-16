@@ -474,7 +474,12 @@ function init() {
     event.currentTarget.setAttribute('aria-expanded', String(!form.hidden));
   });
   document.getElementById('change-password-form').addEventListener('submit', submitChangePassword);
-  document.getElementById('more-delete-btn').addEventListener('click', deleteAccount);
+  document.getElementById('more-delete-btn').addEventListener('click', event => {
+    const form = document.getElementById('delete-account-form');
+    form.hidden = !form.hidden;
+    event.currentTarget.setAttribute('aria-expanded', String(!form.hidden));
+  });
+  document.getElementById('delete-account-form').addEventListener('submit', deleteAccount);
   document.getElementById('sheet-backdrop').addEventListener('click', closeDrawer);
   document.getElementById('filters-toggle').addEventListener('click', () => {
     setRailExpanded(false);
@@ -615,6 +620,7 @@ function setMoreAccount(user) {
   document.getElementById('more-delete-btn').parentElement.hidden = !user;
   document.getElementById('more-password-btn').parentElement.hidden = !user;
   if (!user) document.getElementById('change-password-form').hidden = true;
+  if (!user) document.getElementById('delete-account-form').hidden = true;
 }
 
 async function submitChangePassword(event) {
@@ -703,19 +709,26 @@ async function logout() {
   }
 }
 
-async function deleteAccount() {
-  // shortcut: native prompt() for the password confirm, swap for a <dialog> if it looks off in the iOS shell.
-  const password = window.prompt('Delete your account? This permanently erases your visits, preferences and group memberships. Enter your password to confirm.');
-  if (!password) return;
+async function deleteAccount(event) {
+  event.preventDefault();
+  // masked password field, not prompt(): prompt() shows the password in plain text
+  const status = document.getElementById('da-status');
+  const button = document.getElementById('da-submit-btn');
+  const fail = message => {
+    status.textContent = message;
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
+  };
+  button.disabled = true;
   try {
     const response = await fetch('/api/account', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
+      body: JSON.stringify({ password: document.getElementById('da-password').value })
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      window.alert(data.error || 'Could not delete your account right now.');
+      fail(data.error || 'Could not delete your account right now.');
       return;
     }
     // ff-last-user too, or an offline relaunch would restore the deleted account's shell.
@@ -724,7 +737,9 @@ async function deleteAccount() {
     } catch (e) { /* ignore */ }
     location.reload();
   } catch (err) {
-    window.alert("Couldn't reach the server. Check your connection and try again.");
+    fail("Couldn't reach the server. Check your connection and try again.");
+  } finally {
+    button.disabled = false;
   }
 }
 
