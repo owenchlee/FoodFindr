@@ -28,7 +28,8 @@ function pickRandomTopPool(restaurants, poolSize) {
 // /api/prewarm or an earlier pick) but give Claude nothing to name a dish
 // from are made unlikely, since the old Claude-picks-from-8 path avoided them.
 // getCachedReviews is injected so this module stays free of server state.
-function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCachedReviews = () => null) {
+function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCachedReviews = () => null, recentPickIds = []) {
+  const justPicked = new Set(recentPickIds);
   const favorites = favoriteCuisines.map(c => c.toLowerCase());
   const recent = new Set(recentNames.map(n => n.toLowerCase()));
   const top = restaurants
@@ -42,6 +43,9 @@ function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCached
     if (recent.has((r.name || '').toLowerCase())) w *= 0.15;
     const cached = getCachedReviews(r.id);
     if (cached && cached.reviews.join(' ').length < 200) w *= 0.1;
+    // Shown on the last few taps: strongly avoid, but stay possible so a
+    // tiny result set still gets an answer.
+    if (justPicked.has(r.id)) w *= 0.001;
     return w;
   });
   let roll = Math.random() * weights.reduce((a, b) => a + b, 0);

@@ -27,7 +27,7 @@ const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = req
 const { shapeAndFilter } = require('./lib/places');
 const { sanitizeText, makeKnownPlaces, cleanCandidates, cleanPlaceIds } = require('./lib/trust');
 const { pickRandomTopPool, chooseInstantPick: pickInstant } = require('./lib/pick');
-const chooseInstantPick = (restaurants, favs, recent) => pickInstant(restaurants, favs, recent, id => reviewsCache.get(id));
+const chooseInstantPick = (restaurants, favs, recent, recentPickIds) => pickInstant(restaurants, favs, recent, id => reviewsCache.get(id), recentPickIds);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1264,7 +1264,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY. Add it to .env.' });
   }
 
-  const { price, groupSize, sharing, dish, groupId } = req.body;
+  const { price, groupSize, sharing, dish, groupId, recentPickIds } = req.body;
   const candidates = cleanCandidates(req.body.restaurants, knownPlaces);
 
   if (candidates.length === 0) {
@@ -1326,7 +1326,10 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     pool = [chooseInstantPick(
       budgetPool,
       [...new Set(members.flatMap(m => (m.preferences ? m.preferences.favoriteCuisines : [])))],
-      members.flatMap(m => (m.visitHighlights || []).map(v => v.restaurant_name))
+      members.flatMap(m => (m.visitHighlights || []).map(v => v.restaurant_name)),
+      Array.isArray(recentPickIds)
+        ? recentPickIds.filter(id => typeof id === 'string' && id.length <= 200).slice(0, 5)
+        : []
     )];
   } else {
     pool = dishCraving ? budgetPool.slice(0, poolSize) : pickRandomTopPool(budgetPool, poolSize);

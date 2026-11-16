@@ -49,3 +49,9 @@ test('chooseInstantPick up-weights favorite cuisines', () => {
   const rs = [mk(1, 4.5, { cuisine: 'Italian' }), mk(2, 4.5, { cuisine: 'Thai' })];
   assert.ok(share(() => chooseInstantPick(rs, ['italian'], []).id === 'id1') > 0.6);
 });
+
+test('chooseInstantPick avoids just-shown places but still answers with one candidate', () => {
+  const rs = [mk(1, 4.5), mk(2, 4.5)];
+  assert.ok(share(() => chooseInstantPick(rs, [], [], () => null, ['id1']).id === 'id1') < 0.05);
+  assert.strictEqual(chooseInstantPick([mk(1, 4.5)], [], [], () => null, ['id1']).id, 'id1');
+});

@@ -1584,7 +1584,8 @@ async function getRecommendation() {
         groupSize: currentFilters.groupSize,
         sharing: currentFilters.sharing,
         dish: currentFilters.dish,
-        groupId: activeGroupId
+        groupId: activeGroupId,
+        recentPickIds: recentPickIds.slice(-3)
       })
     });
 
@@ -1656,7 +1657,14 @@ async function readEventStream(response, onEvent) {
   }
 }
 
+// Ids of the last few picked places, sent so Surprise Me avoids repeating them.
+const recentPickIds = [];
+
 function showRecommendation(data) {
+  if (data.restaurant && typeof data.restaurant.id === 'string') {
+    recentPickIds.push(data.restaurant.id);
+    if (recentPickIds.length > 3) recentPickIds.shift();
+  }
   const previousPickId = lastRecommendation && lastRecommendation.restaurant.id;
   // The streamed path already fired this at the reveal (the pick event).
   if (!streamedPickId) haptics.success();
