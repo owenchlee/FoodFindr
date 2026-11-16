@@ -95,6 +95,10 @@ test('discovered restaurants: dedupe per user, progress per city, rollback on er
   db.insertVisit({ userId: id, restaurantName: '  taco place ', rating: 4 });
   assert.deepStrictEqual(db.getProgress(id, 'Austin'), { city: 'Austin', discovered: 2, visited: 1 });
   assert.deepStrictEqual(db.getProgress(id, 'Dallas'), { city: 'Dallas', discovered: 1, visited: 0 });
+  // A chain's locations count once as visited; curly apostrophes and inner spacing are ignored.
+  db.recordDiscovered(id, [r('c1', 'Joe’s  Pizza'), r('c2', "Joe's Pizza")], 'Chainville');
+  db.insertVisit({ userId: id, restaurantName: "joe's pizza", rating: 4 });
+  assert.deepStrictEqual(db.getProgress(id, 'Chainville'), { city: 'Chainville', discovered: 2, visited: 1 });
   // OR IGNORE swallows constraint errors, so use an unbindable value to force a failure midway; the batch rolls back.
   assert.throws(() => db.recordDiscovered(id, [r('p4', 'Ok'), { id: 'p5', name: {}, lat: 1, lng: 2 }], 'Houston'));
   assert.strictEqual(db.getProgress(id, 'Houston').discovered, 0);

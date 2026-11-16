@@ -123,7 +123,7 @@ db.exec(`
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_visits_user_logged ON visits(user_id, logged_at);
   CREATE INDEX IF NOT EXISTS idx_discovered_user_city ON discovered_restaurants(user_id, city);
-  -- Expression must match getProgress's EXISTS exactly so it becomes an index seek.
+  -- No longer used by getProgress (it now normalises names in JS); kept since dropping an index is a schema change.
   CREATE INDEX IF NOT EXISTS idx_visits_user_name_norm ON visits(user_id, LOWER(TRIM(restaurant_name)));
   -- PK is (group_id, user_id); "which groups is this user in" (leaderboard, listUserGroups) needs user_id first.
   CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id, group_id);
@@ -550,20 +550,20 @@ function leaveGroup(groupId, userId) {
   }
 }
 
-// One pass over the user's city rows; COUNT(CASE ...) stays 0 (not NULL) when there are none.
-const progressStmt = db.prepare(`
-  SELECT COUNT(*) AS discovered,
-    COUNT(CASE WHEN EXISTS (
-      SELECT 1 FROM visits v
-      WHERE v.user_id = d.user_id AND LOWER(TRIM(v.restaurant_name)) = LOWER(TRIM(d.name))
-    ) THEN 1 END) AS visited
-  FROM discovered_restaurants d
-  WHERE d.user_id = ? AND d.city = ?
-`);
+const visitNamesStmt = db.prepare('SELECT restaurant_name FROM visits WHERE user_id = ?');
+visitNamesStmt.setReturnArrays(true);
+const discoveredNamesStmt = db.prepare('SELECT name FROM discovered_restaurants WHERE user_id = ? AND city = ?');
+discoveredNamesStmt.setReturnArrays(true);
+
+// Same-named places (a chain) count once as visited; case, spacing and curly quotes are ignored.
+const normName = s => String(s || '').toLowerCase().replace(/[‘’ʼ`]/g, "'").replace(/\s+/g, ' ').trim();
 
 function getProgress(userId, city) {
-  const { discovered, visited } = progressStmt.get(userId, city);
-  return { city, discovered, visited };
+  const discoveredRows = discoveredNamesStmt.all(userId, city);
+  const visitedNames = new Set(visitNamesStmt.all(userId).map(r => normName(r[0])));
+  const discoveredNames = new Set(discoveredRows.map(r => normName(r[0])));
+  const visited = [...discoveredNames].filter(n => visitedNames.has(n)).length;
+  return { city, discovered: discoveredRows.length, visited };
 }
 
 module.exports = {
