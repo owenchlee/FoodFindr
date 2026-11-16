@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const os = require('os');
 const path = require('path');
-process.env.DB_PATH = path.join(os.tmpdir(), `ff-test-${process.pid}.db`);
+// Random suffix: a reused PID must not reopen an old run's DB (its users already exist).
+process.env.DB_PATH = path.join(os.tmpdir(), `ff-test-${process.pid}-${require('crypto').randomBytes(4).toString('hex')}.db`);
 const db = require('../server/db');
 
 test('leaderboard shows only you and people who share a group with you', () => {
