@@ -545,12 +545,19 @@ async function checkAuth() {
     const response = await fetch('/api/auth/me');
     if (response.ok) {
       const data = await readApiJson(response);
+      // Storage can throw (private mode, quota); that must not look like a network failure.
+      try { localStorage.setItem('ff-last-user', JSON.stringify(data.user)); } catch (e) { /* ignore */ }
       onAuthenticated(data.user);
     } else {
+      try { localStorage.removeItem('ff-last-user'); } catch (e) { /* ignore */ }
       showAuthGate();
     }
   } catch (err) {
-    showAuthGate();
+    // Network failure is not a sign-out: keep the shell for the last known user.
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem('ff-last-user')); } catch (e) { /* ignore */ }
+    if (last && last.email) onAuthenticated(last);
+    else showAuthGate();
   }
 }
 
@@ -688,6 +695,7 @@ async function logout() {
   try {
     await fetch('/api/auth/logout', { method: 'POST' });
   } finally {
+    try { localStorage.removeItem('ff-last-user'); } catch (e) { /* ignore */ }
     location.reload();
   }
 }
