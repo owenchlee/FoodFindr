@@ -63,6 +63,9 @@ html {
   text-size-adjust: 100%;
 }
 body {
+  background: var(--color-char);
+  color: var(--color-paper);
+  font-family: var(--font-body);
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -83,7 +86,7 @@ button, a, input, select, label, [role="button"] { touch-action: manipulation; }
    Uses the individual `scale` property so it composes with any transform a
    control already has (e.g. translateX(-50%) centring) instead of replacing
    it. */
-button, .cta, .chip, a.ticket-map-link {
+button, a.ticket-map-link {
   transition-property: scale, background, color, border-color, opacity, box-shadow;
   transition-duration: 160ms;
   transition-timing-function: var(--ease-ios);
@@ -99,20 +102,11 @@ button:active:not(:disabled), .cta:active:not(:disabled), .chip:active, a.ticket
    native text-selection/callout ("Copy", "Look Up", etc.) menu, which reads
    as a bug on non-text controls. Scoped to interactive chrome and the map,
    not to actual text content (inputs, ticket copy, reviews), which should
-   stay selectable/copyable as normal. */
+   stay selectable/copyable as normal. Other chrome inherits this from body;
+   these can sit inside the selectable text above, so they reset it. */
 button,
 svg,
-.cta,
-.chip,
-.rail-btn,
-.tabs-toggle,
-.filters-toggle,
-.side-rail,
-.top-bar .wordmark,
-#map,
-.badge-card,
-.leaderboard-row,
-.star-rating {
+.chip {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -126,12 +120,6 @@ html, body {
   width: 100%;
   overscroll-behavior: none;
   touch-action: pan-x pan-y;
-}
-
-body {
-  background: var(--color-char);
-  color: var(--color-paper);
-  font-family: var(--font-body);
 }
 
 .shell {
@@ -309,17 +297,7 @@ body {
   position: absolute;
   inset: -12px;
 }
-/* Invisible hit-area expansion to a 44x44pt minimum tap target (Apple HIG)
-   without changing the button's visible 20x20 glyph size or the surrounding
-   layout - these are absolutely positioned, so the expanded pseudo doesn't
-   push anything else around. */
-.dish-clear-btn::before {
-  content: '';
-  position: absolute;
-  inset: -12px;
-}
 .dish-clear-btn:hover { color: var(--color-paper); background: rgba(242, 234, 225, 0.12); }
-.dish-clear-btn[hidden] { display: none; }
 .filters-toggle {
   flex-shrink: 0;
   font-family: var(--font-body);
@@ -354,7 +332,6 @@ body {
   padding: var(--space-3);
   box-shadow: var(--shadow-md);
 }
-.location-picker-popover[hidden] { display: none; }
 .location-picker-hint {
   font-size: 0.72rem;
   color: var(--color-paper-dim);
@@ -375,7 +352,6 @@ body {
   border-color: rgba(200, 57, 30, 0.5);
   padding: var(--space-2) var(--space-3);
 }
-.offline-banner[hidden] { display: none; }
 
 .location-banner {
   top: calc(var(--top-bar-height) + var(--space-3));
@@ -394,13 +370,13 @@ body {
   opacity: 1;
   transition: opacity 200ms ease;
 }
-.location-banner[hidden] { display: none; }
 /* Stack below the offline banner instead of overlapping it on the rare
    occasion both are visible at once, same pattern as .active-group-banner
    below stacking under .location-banner. */
 #offline-banner:not([hidden]) ~ .location-banner { top: calc(var(--top-bar-height) + var(--space-3) + 44px); }
 #offline-banner:not([hidden]) ~ .active-group-banner { top: calc(var(--top-bar-height) + var(--space-3) + 88px); }
-.location-banner button {
+.location-banner button,
+.active-group-banner button {
   flex-shrink: 0;
   background: none;
   border: none;
@@ -434,18 +410,7 @@ body {
   opacity: 1;
   transition: opacity 200ms ease;
 }
-.active-group-banner[hidden] { display: none; }
 .active-group-banner.hidden-by-drawer { opacity: 0; pointer-events: none; }
-.active-group-banner button {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: inherit;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 var(--space-1);
-}
 .active-group-banner button:focus-visible {
   outline: 2px solid var(--color-turmeric);
   outline-offset: 2px;
@@ -710,7 +675,6 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
    the release so it springs closed/open from wherever it was let go. */
 .tab-drawer.dragging { transition: none; }
 .tab-drawer.open { transform: translateX(0); }
-.tab-drawer[hidden] { display: none; }
 
 .drawer-header {
   position: sticky;
@@ -752,17 +716,14 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 .drawer-close::before { content: ''; position: absolute; inset: -8px; }
 
 .tab-drawer-panel { padding: var(--space-4); padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom)); }
-.tab-drawer-panel[hidden] { display: none; }
 
 .log-visit-block { padding-top: 0; }
 .recent-visits-block { padding-top: 0; }
-.progress-block[hidden] { display: none; }
 .progress-empty {
   font-size: 0.82rem;
   color: var(--color-paper-dim);
   margin: 0;
 }
-.progress-empty[hidden] { display: none; }
 
 .progress-city {
   font-family: var(--font-body);
@@ -793,16 +754,16 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   margin: var(--space-2) 0 0;
 }
 
-.streak-block { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-hairline); }
+.streak-block,
+.badges-block,
+.leaderboard-block { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-hairline); }
 .streak-stats { display: flex; gap: var(--space-4); margin-top: var(--space-2); }
 .streak-stat { display: flex; flex-direction: column; align-items: flex-start; }
 .streak-stat-value { font-family: var(--font-data); font-size: 1.6rem; font-weight: 600; color: var(--color-turmeric); line-height: 1; }
 .streak-stat-label { font-size: 0.72rem; color: var(--color-paper-dim); margin-top: 2px; }
 .streak-hint { font-size: 0.78rem; color: var(--color-paper-dim); margin: var(--space-2) 0 0; }
 .streak-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-hairline); }
-.streak-empty[hidden] { display: none; }
 
-.badges-block { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-hairline); }
 .badge-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2); margin-top: var(--space-2); }
 .badge-card {
   display: flex;
@@ -820,7 +781,6 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 .badge-description { font-size: 0.72rem; color: var(--color-paper-dim); line-height: 1.35; }
 .badge-progress { font-family: var(--font-data); font-size: 0.7rem; color: var(--color-paper-dim); margin-top: 2px; }
 
-.leaderboard-block { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-hairline); }
 .leaderboard-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .leaderboard-row {
   display: grid;
@@ -839,12 +799,10 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
 .leaderboard-count { font-family: var(--font-data); font-size: 0.74rem; color: var(--color-paper-dim); }
 .leaderboard-streak { font-family: var(--font-data); font-size: 0.74rem; color: var(--color-chili); }
 .leaderboard-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin-top: var(--space-2); }
-.leaderboard-empty[hidden] { display: none; }
 
 .group-block { display: flex; flex-direction: column; gap: var(--space-2); }
 .group-hint { font-size: 0.78rem; line-height: 1.4; color: var(--color-paper-dim); margin: 0; }
 .group-empty { font-size: 0.82rem; color: var(--color-paper-dim); margin: var(--space-2) 0 0; }
-.group-empty[hidden] { display: none; }
 
 .group-list {
   list-style: none;
@@ -976,7 +934,6 @@ select.visit-input option {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
 }
-.restaurant-suggestions[hidden] { display: none; }
 .restaurant-suggestions li + li { margin-top: 2px; }
 .restaurant-suggestions button {
   display: block;
@@ -1068,7 +1025,6 @@ select.visit-input option {
   text-align: center;
   padding: var(--space-5) var(--space-3);
 }
-.empty-state[hidden] { display: none; }
 .empty-state-icon {
   display: flex;
   align-items: center;
@@ -1231,7 +1187,6 @@ select.visit-input option {
   flex-direction: column;
   gap: var(--space-1);
 }
-.rail-account[hidden] { display: none; }
 .rail-account-email {
   display: none;
   font-family: var(--font-body);
@@ -1255,7 +1210,6 @@ select.visit-input option {
   background: rgba(28, 21, 18, 0.92);
   backdrop-filter: blur(3px);
 }
-.auth-gate[hidden] { display: none; }
 
 .auth-card {
   width: min(360px, 90vw);
@@ -1435,7 +1389,26 @@ select.visit-input option {
   box-shadow: var(--shadow-lg);
   padding: var(--space-5) var(--space-4);
 }
-.no-location-state[hidden] { display: none; }
+/* Components that set their own display need [hidden] restated. */
+.dish-clear-btn[hidden],
+.location-picker-popover[hidden],
+.offline-banner[hidden],
+.location-banner[hidden],
+.active-group-banner[hidden],
+.tab-drawer[hidden],
+.tab-drawer-panel[hidden],
+.progress-block[hidden],
+.progress-empty[hidden],
+.streak-empty[hidden],
+.leaderboard-empty[hidden],
+.group-empty[hidden],
+.restaurant-suggestions[hidden],
+.empty-state[hidden],
+.rail-account[hidden],
+.auth-gate[hidden],
+.no-location-state[hidden] {
+  display: none;
+}
 .no-location-title {
   font-family: var(--font-display);
   font-size: 1.1rem;
@@ -1681,7 +1654,6 @@ select.visit-input option {
     left: var(--gutter);
     right: calc(var(--gutter) + env(safe-area-inset-right));
     top: calc(var(--safe-top) + 8px);
-    display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-2);
@@ -1691,6 +1663,7 @@ select.visit-input option {
     border: none;
     box-shadow: none;
     pointer-events: none;
+    transition: opacity var(--dur-med) var(--ease-ios);
   }
   .top-bar > * { pointer-events: auto; }
   .top-bar .wordmark { display: none; }
@@ -1835,8 +1808,7 @@ select.visit-input option {
     border-radius: 999px;
     font-size: 0.9rem;
   }
-  .ticket-map-link { margin-right: 8px; }
-  .ticket-map-link { background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
+  .ticket-map-link { margin-right: 8px; background: rgba(242, 234, 225, 0.08); color: var(--color-paper); }
   .ticket-log-btn { background: var(--color-turmeric); color: var(--color-ink); }
   .ticket-map-link:hover { color: var(--color-paper); }
   .ticket-log-btn:hover { color: var(--color-ink); }
@@ -1931,19 +1903,16 @@ select.visit-input option {
     height: auto;
     border: none;
     border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
-    background: var(--color-char-2);
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
     transform: translateY(105%);
     transition: transform 380ms var(--ease-ios);
   }
   .tab-drawer.open { transform: translateY(0); }
   /* The sheet's own large title replaces these while it's up. */
-  .top-bar { transition: opacity var(--dur-med) var(--ease-ios); }
   .shell:has(#tab-drawer.open) .top-bar { opacity: 0; pointer-events: none; }
   .shell:has(#tab-drawer.open) .top-bar > * { pointer-events: none; }
   #tab-panel-past-reviews .recent-visits-block > .filter-label,
   #tab-panel-log-review .log-visit-block > .filter-label { display: none; }
-  .visit-form { margin-top: 0; }
 
   .sheet-grabber {
     display: block;
@@ -1959,7 +1928,6 @@ select.visit-input option {
   .drawer-header {
     padding: 26px 20px 12px;
     border-bottom: none;
-    background: var(--color-char-2);
     border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
     touch-action: none;
     cursor: grab;
@@ -1967,7 +1935,6 @@ select.visit-input option {
   .drawer-title {
     font-family: var(--font-display);
     font-size: 1.85rem;
-    font-weight: 600;
     letter-spacing: -0.015em;
     line-height: 1.1;
   }
@@ -2003,7 +1970,7 @@ select.visit-input option {
   .cta--secondary { min-height: 48px; border-radius: 12px; font-size: 1rem; padding: 0 18px; }
   .star-rating { gap: 6px; }
   .star-rating button { font-size: 2.1rem; padding: 2px 4px; }
-  .visit-form { gap: 14px; }
+  .visit-form { margin-top: 0; gap: 14px; }
   .visit-status { font-size: 0.9rem; }
 
   .visit-list { gap: 10px; }
@@ -2031,7 +1998,7 @@ select.visit-input option {
   .group-item-actions button { min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 0.82rem; }
   .faq-question { font-size: 0.98rem; }
   .faq-answer { font-size: 0.9rem; line-height: 1.5; }
-  .how-it-works { display: block; padding-top: 0; border-top: none; }
+  .how-it-works { padding-top: 0; border-top: none; }
   .how-it-works li { font-size: 0.95rem; }
   .price-hint { font-size: 0.78rem; }
   .group-size-row button { width: 44px; height: 44px; border-radius: 12px; font-size: 1.2rem; }
@@ -2064,7 +2031,7 @@ select.visit-input option {
     background: var(--color-char-2);
     border-top: 0.5px solid rgba(242, 234, 225, 0.12);
   }
-  .prefs-skip { font-size: 0.95rem; text-decoration: none; color: var(--color-paper-dim); min-height: 44px; }
+  .prefs-skip { font-size: 0.95rem; text-decoration: none; min-height: 44px; }
   .prefs-actions .cta { min-height: 50px; border-radius: 14px; padding: 0 22px; font-size: 1rem; }
 
   /* ----- Sign in ----- */
