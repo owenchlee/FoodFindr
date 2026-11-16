@@ -930,7 +930,7 @@ async function loadStreaks() {
   const empty = document.getElementById('streak-empty');
 
   try {
-    const response = await fetch('/api/streaks');
+    const response = await fetch('/api/streaks?tz=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone));
     if (!response.ok) {
       block.hidden = true;
       empty.hidden = false;
@@ -984,7 +984,7 @@ function badgeElement(badge) {
 async function loadBadges() {
   const grid = document.getElementById('badge-grid');
   try {
-    const response = await fetch('/api/badges');
+    const response = await fetch('/api/badges?tz=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone));
     if (!response.ok) return;
     const data = await readApiJson(response);
 
@@ -1027,7 +1027,7 @@ async function loadLeaderboard() {
   const empty = document.getElementById('leaderboard-empty');
 
   try {
-    const response = await fetch('/api/leaderboard');
+    const response = await fetch('/api/leaderboard?tz=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone));
     if (!response.ok) return;
     const data = await readApiJson(response);
     const leaderboard = data.leaderboard || [];

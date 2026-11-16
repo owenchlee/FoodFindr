@@ -1,7 +1,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('fs');
 const path = require('path');
-const { computeStats, evaluateBadges } = require('./badges');
+const { computeStats, evaluateBadges, localDay, safeZone } = require('./badges');
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'foodfindr.db');
 // node:sqlite creates the DB file itself but not its parent directory.
@@ -331,13 +331,16 @@ function recordDiscovered(userId, restaurants, city) {
   }
 }
 
-// Streaks are computed from UTC calendar days (not per-user local time),
-// a deliberate simplification. Two visits logged the same UTC day only
-// count once, so back-to-back logging in one sitting can't inflate a streak.
+// Streaks use calendar days in the viewer's IANA zone (UTC if missing or
+// invalid). Two visits on the same local day only count once, so back-to-back
+// logging in one sitting can't inflate a streak.
 // Prepared once; arrays instead of row objects since the leaderboard calls this per member.
 // substr in SQL: only the 10-char UTC day crosses into JS, not the full timestamp.
 const streakDaysStmt = db.prepare('SELECT substr(logged_at, 1, 10) FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
 streakDaysStmt.setReturnArrays(true);
+// Non-UTC zones need the full timestamp to find the local day.
+const streakTimesStmt = db.prepare('SELECT logged_at FROM visits WHERE user_id = ? ORDER BY logged_at ASC');
+streakTimesStmt.setReturnArrays(true);
 
 // Per-user { visitCount, streaks } cache. Valid while no connection has written (total_changes covers
 // this connection, data_version covers others) and the UTC day is unchanged (currentStreak depends on today).
@@ -354,18 +357,22 @@ function validStreakCache() {
   return streakCache;
 }
 
-function streakStats(cache, userId) {
-  let entry = cache.get(userId);
+// tz must already be safeZone()'d. Today's local day is in the key, since currentStreak depends on it.
+function streakStats(cache, userId, tz = 'UTC') {
+  const today = localDay(new Date().toISOString(), tz);
+  const key = `${userId}|${tz}|${today}`;
+  let entry = cache.get(key);
   if (!entry) {
-    const rows = streakDaysStmt.all(userId);
-    entry = { visitCount: rows.length, streaks: streaksFromRows(rows) };
-    cache.set(userId, entry);
+    // Local days of ascending timestamps stay ascending, so streaksFromRows' adjacent dedupe still holds.
+    const rows = tz === 'UTC' ? streakDaysStmt.all(userId) : streakTimesStmt.all(userId).map(r => [localDay(r[0], tz)]);
+    entry = { visitCount: rows.length, streaks: streaksFromRows(rows, today) };
+    cache.set(key, entry);
   }
   return entry;
 }
 
-function getStreaks(userId) {
-  return { ...streakStats(validStreakCache(), userId).streaks };
+function getStreaks(userId, tz) {
+  return { ...streakStats(validStreakCache(), userId, safeZone(tz)).streaks };
 }
 
 // Date.parse dominated leaderboard time; memoize it. Grows by one entry per distinct calendar day ever logged.
@@ -379,8 +386,8 @@ function parseDay(d) {
   return ms;
 }
 
-// rows: [[YYYY-MM-DD], ...] sorted ascending, as returned by streakDaysStmt.
-function streaksFromRows(rows) {
+// rows: [[YYYY-MM-DD], ...] sorted ascending, as returned by streakDaysStmt; today: YYYY-MM-DD in the same zone.
+function streaksFromRows(rows, today) {
   if (rows.length === 0) {
     return { currentStreak: 0, longestStreak: 0, lastVisitDate: null };
   }
@@ -406,8 +413,7 @@ function streaksFromRows(rows) {
     longestStreak = Math.max(longestStreak, run);
   }
 
-  const now = new Date();
-  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const todayUTC = parseDay(today);
   const lastDay = days[days.length - 1];
   const gapFromToday = (todayUTC - lastDay) / 86400000;
 
@@ -428,9 +434,10 @@ const badgeRowsStmt = db.prepare(
 );
 
 // Badge stats share the streak cache entry, so they clear on the same writes / day change.
-function getBadges(userId) {
-  const entry = streakStats(validStreakCache(), userId);
-  if (!entry.badgeStats) entry.badgeStats = computeStats(badgeRowsStmt.all(userId), entry.streaks);
+function getBadges(userId, tz) {
+  tz = safeZone(tz);
+  const entry = streakStats(validStreakCache(), userId, tz);
+  if (!entry.badgeStats) entry.badgeStats = computeStats(badgeRowsStmt.all(userId), entry.streaks, tz);
   return evaluateBadges(entry.badgeStats);
 }
 
@@ -447,13 +454,15 @@ const leaderboardUsersStmt = db.prepare(`
   ORDER BY id ASC
 `);
 
-function getLeaderboardStats(userId) {
+// Every member's streak is counted on the viewer's calendar (tz).
+function getLeaderboardStats(userId, tz) {
+  tz = safeZone(tz);
   const users = leaderboardUsersStmt.all(userId, userId);
 
   const cache = validStreakCache();
   return users
     .map(u => {
-      const { visitCount, streaks } = streakStats(cache, u.id);
+      const { visitCount, streaks } = streakStats(cache, u.id, tz);
       return {
         userId: u.id,
         email: u.email,

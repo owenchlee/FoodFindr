@@ -107,6 +107,9 @@ test('streaks: empty, same-day dedupe, longest run, current streak alive or brok
   setDates(id, ['2024-03-01T01:00:00.000Z', '2024-03-01T20:00:00.000Z', '2024-03-02T08:00:00.000Z',
     '2024-03-03T08:00:00.000Z', '2024-03-10T08:00:00.000Z', '2024-03-11T08:00:00.000Z']);
   assert.deepStrictEqual(db.getStreaks(id), { currentStreak: 0, longestStreak: 3, lastVisitDate: '2024-03-11' });
+  // In LA the 01:00Z visit falls on Feb 29, making a 4-day run; a bad zone falls back to UTC.
+  assert.deepStrictEqual(db.getStreaks(id, 'America/Los_Angeles'), { currentStreak: 0, longestStreak: 4, lastVisitDate: '2024-03-11' });
+  assert.deepStrictEqual(db.getStreaks(id, 'Not/AZone'), db.getStreaks(id));
 
   const live = mk('live@x.com');
   for (let i = 0; i < 3; i++) db.insertVisit({ userId: live, restaurantName: 'L' + i, rating: 3 });

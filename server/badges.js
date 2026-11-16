@@ -7,14 +7,33 @@ const HONEST_CRITIC_TARGET = 3;
 const WEEKEND_REGULAR_TARGET = 5;
 const COMEBACK_GAP_DAYS = 14;
 
-function uniqueSortedUTCDays(timestamps) {
-  const days = new Set(timestamps.map(ts => ts.slice(0, 10)));
+// Canonical IANA zone name, or 'UTC' when missing/invalid. Canonicalising
+// ('america/new_york' -> 'America/New_York') keeps dayFormats and the streak
+// cache bounded by the real zone list, not by client-chosen spellings.
+function safeZone(tz) {
+  if (typeof tz !== 'string' || !tz || tz.length > 64) return 'UTC';
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).resolvedOptions().timeZone; } catch { return 'UTC'; }
+}
+
+const dayFormats = new Map();
+// 'YYYY-MM-DD' of an ISO instant on the calendar of IANA zone `tz`.
+function localDay(ts, tz) {
+  let f = dayFormats.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+    dayFormats.set(tz, f);
+  }
+  return f.format(new Date(ts));
+}
+
+function uniqueSortedDays(timestamps, tz) {
+  const days = new Set(timestamps.map(ts => localDay(ts, tz)));
   return Array.from(days).sort();
 }
 
 // `rows` is [{ rating, flavor_tags, logged_at }] for one user; `streaks` is
 // the result of db.js's getStreaks(userId) for the same user.
-function computeStats(rows, streaks) {
+function computeStats(rows, streaks, tz = 'UTC') {
   const lowRatingCount = rows.filter(r => r.rating <= 2).length;
   const distinctRatingCount = new Set(rows.map(r => r.rating)).size;
 
@@ -25,11 +44,11 @@ function computeStats(rows, streaks) {
   }
 
   const weekendCount = rows.filter(r => {
-    const day = new Date(r.logged_at).getUTCDay();
+    const day = new Date(`${localDay(r.logged_at, tz)}T00:00:00Z`).getUTCDay();
     return day === 0 || day === 6;
   }).length;
 
-  const days = uniqueSortedUTCDays(rows.map(r => r.logged_at));
+  const days = uniqueSortedDays(rows.map(r => r.logged_at), tz);
   let hadComebackGap = false;
   for (let i = 1; i < days.length; i++) {
     const gapDays = (Date.parse(`${days[i]}T00:00:00Z`) - Date.parse(`${days[i - 1]}T00:00:00Z`)) / 86400000;
@@ -89,4 +108,4 @@ function evaluateBadges(stats) {
   ];
 }
 
-module.exports = { computeStats, evaluateBadges };
+module.exports = { computeStats, evaluateBadges, localDay, safeZone };

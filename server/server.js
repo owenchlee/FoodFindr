@@ -1567,7 +1567,7 @@ app.get('/api/flavors', requireAuth, (req, res) => {
 
 app.get('/api/streaks', requireAuth, (req, res) => {
   try {
-    res.json(getStreaks(req.user.id));
+    res.json(getStreaks(req.user.id, req.query.tz));
   } catch (err) {
     console.error('Failed to load streaks:', err);
     res.status(500).json({ error: 'Could not load your streak right now.', currentStreak: 0, longestStreak: 0, lastVisitDate: null });
@@ -1576,7 +1576,7 @@ app.get('/api/streaks', requireAuth, (req, res) => {
 
 app.get('/api/badges', requireAuth, (req, res) => {
   try {
-    res.json({ badges: getBadges(req.user.id) });
+    res.json({ badges: getBadges(req.user.id, req.query.tz) });
   } catch (err) {
     console.error('Failed to load badges:', err);
     res.status(500).json({ error: 'Could not load badges right now.', badges: [] });
@@ -1595,7 +1595,7 @@ function deriveDisplayName(email) {
 
 app.get('/api/leaderboard', requireAuth, (req, res) => {
   try {
-    const stats = getLeaderboardStats(req.user.id);
+    const stats = getLeaderboardStats(req.user.id, req.query.tz);
     const leaderboard = stats.map((row, i) => ({
       rank: i + 1,
       displayName: deriveDisplayName(row.email),
