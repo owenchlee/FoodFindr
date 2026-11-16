@@ -22,6 +22,13 @@ const {
   parseCookies, requireAuth, optionalAuth
 } = require('./auth');
 
+const { FLAVOR_TAGS, isValidRecommendation } = require('./lib/validate');
+const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = require('./lib/budget');
+const { shapeAndFilter } = require('./lib/places');
+const { sanitizeText, makeKnownPlaces, cleanCandidates, cleanPlaceIds } = require('./lib/trust');
+const { pickRandomTopPool, chooseInstantPick: pickInstant } = require('./lib/pick');
+const chooseInstantPick = (restaurants, favs, recent) => pickInstant(restaurants, favs, recent, id => reviewsCache.get(id));
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PLACES_SERVER_KEY = process.env.GOOGLE_PLACES_SERVER_KEY;
@@ -31,20 +38,6 @@ if (process.env.NODE_ENV === 'production') {
   // Needed behind the deploy host's reverse proxy so express-rate-limit and
   // secure-cookie logic see the real client IP/protocol instead of the proxy's.
   app.set('trust proxy', 1);
-}
-
-// Fixed vocabulary (not free-form) so tags can actually be aggregated into
-// "top flavors" later. Free text from Claude would fragment across
-// synonyms like "tangy" vs "zesty" vs "sour".
-const FLAVOR_TAGS = ['Spicy', 'Tangy', 'Sweet', 'Savory', 'Umami', 'Sour', 'Smoky', 'Creamy', 'Fresh', 'Rich', 'Herby', 'Crispy'];
-
-// Per-person dollar ceilings for each price tier. Must match the UI hint text in
-// index.html: "$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)".
-const PRICE_TIER_MAX_USD = { 1: 15, 2: 30, 3: 60 };
-
-function totalGroupBudget(groupSize, targetPrice) {
-  const perPerson = PRICE_TIER_MAX_USD[targetPrice] || PRICE_TIER_MAX_USD[2];
-  return groupSize * perPerson;
 }
 
 // Host-based allowlist (Google's documented alternative to nonce-based CSP).
@@ -233,41 +226,6 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
-function distanceInMiles(lat1, lng1, lat2, lng2) {
-  const earthRadiusMiles = 3958.8;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) ** 2;
-  return earthRadiusMiles * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// Words Places' `types` array uses that aren't useful as a displayed "cuisine"
-const GENERIC_PLACE_TYPES = new Set(['restaurant', 'food', 'point_of_interest', 'establishment']);
-
-// Venues (hotels, gyms, spas) that carry a "restaurant" type just because they
-// have in-house dining, not because they are one. Filter these out.
-const NON_RESTAURANT_TYPES = new Set(['lodging', 'gym', 'spa', 'night_club', 'casino']);
-
-function titleCase(str) {
-  return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function placeToRestaurant(place, cuisineHint) {
-  const specificType = place.types && place.types.find(t => !GENERIC_PLACE_TYPES.has(t));
-  return {
-    id: place.place_id,
-    name: place.name,
-    cuisine: cuisineHint ? titleCase(cuisineHint) : (specificType ? titleCase(specificType) : 'Restaurant'),
-    price: place.price_level != null ? place.price_level : null,
-    rating: place.rating != null ? place.rating : null,
-    lat: place.geometry.location.lat,
-    lng: place.geometry.location.lng
-  };
-}
-
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -443,6 +401,10 @@ async function continuePlacesFetch(entry, key, endpoint, params, firstPageToken)
 // without the cache bucketing leaking into displayed distances.
 const placesCache = makeTtlCache({ ttlMs: 10 * 60 * 1000, maxEntries: 200 });
 
+// Place ids we've returned from our own searches; /api/recommend and
+// /api/prewarm refuse anything else so clients can't spend Place Details quota.
+const knownPlaces = makeKnownPlaces();
+
 // Deliberately excludes `price` (filtered client-side now, see shapeAndFilter)
 // and `groupId` (only affects the derived dietaryHint, already captured below).
 function placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
@@ -453,29 +415,6 @@ function placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
     dish.toLowerCase(),
     dietaryHint.toLowerCase()
   ].join('|');
-}
-
-// Shared post-filter pipeline for both phase 1 and phase 2/cached responses,
-// so the two can't drift and produce inconsistent markers. Price is
-// deliberately NOT filtered here - it's never sent to Google either, and is
-// applied entirely client-side (see applyLocalFilters in app.js) since it
-// needs zero network round trips.
-function shapeAndFilter(places, lat, lng, cuisine, maxDistance) {
-  let results = places
-    .filter(place => place.geometry && place.geometry.location)
-    .filter(place => !(place.types || []).some(t => NON_RESTAURANT_TYPES.has(t)))
-    .filter(place => !place.business_status || place.business_status === 'OPERATIONAL')
-    .map(place => {
-      const restaurant = placeToRestaurant(place, cuisine);
-      return {
-        ...restaurant,
-        distance: Math.round(distanceInMiles(lat, lng, restaurant.lat, restaurant.lng) * 10) / 10
-      };
-    });
-  if (maxDistance) {
-    results = results.filter(r => r.distance <= Number(maxDistance));
-  }
-  return results;
 }
 
 // Caches lat/lng (rounded to ~1.1km) -> city name so repeated searches in the
@@ -656,6 +595,7 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
     t.mark('places');
 
     const results = shapeAndFilter(entry.places, lat, lng, cuisine, maxDistance);
+    knownPlaces.add(results);
     const city = await geocodeCity(lat, lng);
     t.mark('geocode');
 
@@ -704,6 +644,7 @@ app.get('/api/restaurants/rest', optionalAuth, async (req, res) => {
     t.mark('places');
 
     const results = shapeAndFilter(places, lat, lng, cuisine, maxDistance);
+    knownPlaces.add(results);
     const city = await geocodeCity(lat, lng);
     t.mark('geocode');
     recordDiscoveredAsync(req.user && req.user.id, results, city);
@@ -1186,115 +1127,6 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   return result;
 }
 
-// Returns null when valid, or a short human-readable reason string when not -
-// the reason doubles as the corrective text sent back to Claude on retry (see
-// askClaudeForRecommendation), so keep each one specific enough to act on.
-function isValidRecommendation(input, candidates, dietaryRestrictions) {
-  if (!input || typeof input !== 'object') return 'the response was not a valid object';
-  if (typeof input.place_id !== 'string' || !candidates.some(c => c.place_id === input.place_id)) {
-    return 'place_id must exactly match one of the candidates provided';
-  }
-  if (typeof input.dish_suggestion !== 'string' || !input.dish_suggestion.trim()) {
-    return 'dish_suggestion was missing or empty';
-  }
-  if (typeof input.reason !== 'string' || !input.reason.trim() || /<\/?\w+[^>]*>/.test(input.reason)) {
-    return 'reason was missing, empty, or contained stray markup like </reason> or <parameter>';
-  }
-  if (!Array.isArray(input.flavor_tags) || input.flavor_tags.length !== 3 || !input.flavor_tags.every(tag => FLAVOR_TAGS.includes(tag))) {
-    return `flavor_tags must be exactly 3 values from: ${FLAVOR_TAGS.join(', ')}`;
-  }
-  if (dietaryRestrictions && dietaryRestrictions.length > 0) {
-    // A required field under strict:true can't be silently omitted the way a
-    // regex-sniffed sentence in `reason` could - this replaces that check.
-    if (typeof input.dietary_note !== 'string' || !input.dietary_note.trim()) {
-      return 'dietary_note is required here and must state whether the dish is confirmed compliant with the stated dietary restriction(s), or that it could not be confirmed';
-    }
-
-    // The dish name itself must not assert a diet label ("Vegan tacos") unless a
-    // review for that exact restaurant actually used that word. Otherwise the name
-    // alone (more prominent in the UI than the full reason) can mislead someone
-    // skimming past a hedge buried in the reason text.
-    const dietLabels = ['vegan', 'vegetarian', 'plant-based', 'plant based', 'dairy-free', 'dairy free'];
-    const dishText = [input.dish_suggestion, ...(Array.isArray(input.shared_items) ? input.shared_items : [])]
-      .join(' ').toLowerCase();
-    const namedLabels = dietLabels.filter(label => dishText.includes(label));
-    if (namedLabels.length > 0) {
-      const chosen = candidates.find(c => c.place_id === input.place_id);
-      const reviewText = (chosen && Array.isArray(chosen.reviews) ? chosen.reviews.join(' ') : '').toLowerCase();
-      const groundedInReviews = namedLabels.some(label => reviewText.includes(label));
-      if (!groundedInReviews) {
-        return `the dish name claims "${namedLabels[0]}" but no review for this restaurant used that word; only claim a diet label in the dish name if a review for it actually says so`;
-      }
-    }
-
-    // Naming a dish with an obvious meat/seafood ingredient for a vegan or
-    // vegetarian restriction is unsafe even with a hedge in the reason text,
-    // since the dish name is what someone skimming will actually trust.
-    const needsMeatCheck = dietaryRestrictions.some(r => /vegan|vegetarian/i.test(r));
-    if (needsMeatCheck) {
-      const meatWords = ['chicken', 'beef', 'pork', 'bacon', 'ham', 'turkey', 'lamb', 'steak',
-        'sausage', 'meat', 'fish', 'shrimp', 'prawn', 'calamari', 'squid', 'crab', 'lobster',
-        'salmon', 'tuna', 'duck', 'veal', 'goat', 'mutton'];
-      const foundMeatWord = meatWords.find(word => new RegExp(`\\b${word}\\b`, 'i').test(dishText));
-      if (foundMeatWord) {
-        return `the dish name/shared items mention "${foundMeatWord}", which conflicts with a vegan/vegetarian restriction; pick a candidate whose reviews support a compliant dish instead`;
-      }
-    }
-  }
-  return null;
-}
-
-// "Surprise Me" should actually surprise: asking Claude to pick the single
-// "best" restaurant from the same top-8-by-rating list every time reliably
-// returns the same winner call after call, since nothing about the prompt or
-// candidate set changes between clicks. Sampling randomly from a wider
-// top-rated slice means each click genuinely can land on a different (still
-// good) restaurant, instead of relying on the model to invent variety on its
-// own, which isn't a reliable way to get it.
-function pickRandomTopPool(restaurants, poolSize) {
-  const topN = restaurants
-    .slice()
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    .slice(0, Math.max(poolSize * 2, 15));
-
-  for (let i = topN.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [topN[i], topN[j]] = [topN[j], topN[i]];
-  }
-  return topN.slice(0, poolSize);
-}
-
-// Instant Surprise Me pick, made here instead of by Claude so the restaurant
-// is on screen in one round trip rather than after Claude's ~2s time to
-// first token. Weighted random over the top-rated places: higher rating,
-// a favorite cuisine, and not having been there recently all raise the odds,
-// so repeated taps still vary. Places whose reviews are already cached (from
-// /api/prewarm or an earlier pick) but give Claude nothing to name a dish
-// from are made unlikely, since the old Claude-picks-from-8 path avoided them.
-function chooseInstantPick(restaurants, favoriteCuisines, recentNames) {
-  const favorites = favoriteCuisines.map(c => c.toLowerCase());
-  const recent = new Set(recentNames.map(n => n.toLowerCase()));
-  const top = restaurants
-    .slice()
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    .slice(0, 15);
-  const weights = top.map(r => {
-    let w = Math.max(0.3, (r.rating || 3.5) - 3.3) ** 2;
-    const cuisine = (r.cuisine || '').toLowerCase();
-    if (favorites.some(f => cuisine.includes(f) || f.includes(cuisine))) w *= 2.5;
-    if (recent.has((r.name || '').toLowerCase())) w *= 0.15;
-    const cached = reviewsCache.get(r.id);
-    if (cached && cached.reviews.join(' ').length < 200) w *= 0.1;
-    return w;
-  });
-  let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < top.length; i++) {
-    roll -= weights[i];
-    if (roll <= 0) return top[i];
-  }
-  return top[top.length - 1];
-}
-
 // Combines every group member's saved preferences and recent visit
 // highlights into one dataset, used for both search-query enrichment
 // (see /api/restaurants) and the recommendation prompt, so a group search
@@ -1314,10 +1146,11 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY. Add it to .env.' });
   }
 
-  const { restaurants: candidates, price, groupSize, sharing, dish, groupId } = req.body;
+  const { price, groupSize, sharing, dish, groupId } = req.body;
+  const candidates = cleanCandidates(req.body.restaurants, knownPlaces);
 
-  if (!candidates || candidates.length === 0) {
-    return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters.' });
+  if (candidates.length === 0) {
+    return res.status(400).json({ error: 'No restaurants to recommend from. Try widening your filters or searching again.' });
   }
 
   let groupData = null;
@@ -1330,7 +1163,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   }
 
   const isSharing = sharing === true;
-  const dishCraving = typeof dish === 'string' ? dish.trim().slice(0, 60) : '';
+  const dishCraving = sanitizeText(dish, 60);
   const preferences = req.user ? getPreferences(req.user.id) : null;
 
   // A group's "size" is however many people are actually in it, not
@@ -1346,9 +1179,8 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     ? groupPersonalizationInstruction(groupData.members)
     : personalizationInstruction(preferences, visitHighlights);
 
-  const targetPrice = price ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
-  const inBudget = candidates.filter(r => r.price == null || r.price <= targetPrice);
-  const budgetPool = inBudget.length > 0 ? inBudget : candidates;
+  const targetPrice = [1, 2, 3, 4].includes(Number(price)) ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
+  const budgetPool = pickBudgetPool(candidates, targetPrice);
 
   // A dietary restriction (solo, or pooled across a group) means only some
   // candidates will have review text Claude can actually point to as
@@ -1523,9 +1355,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 // and most searches never lead to a Surprise Me click.
 
 app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
-  const placeIds = Array.isArray(req.body.placeIds)
-    ? req.body.placeIds.filter(id => typeof id === 'string').slice(0, 15)
-    : [];
+  const placeIds = cleanPlaceIds(req.body.placeIds, knownPlaces);
   Promise.allSettled(placeIds.map(id => fetchPlaceReviews(id))).catch(() => {});
   res.status(202).json({ warming: placeIds.length });
 });

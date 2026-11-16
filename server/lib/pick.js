@@ -1,0 +1,55 @@
+const { shrunkRating } = require('./rating');
+
+// "Surprise Me" should actually surprise: asking Claude to pick the single
+// "best" restaurant from the same top-8-by-rating list every time reliably
+// returns the same winner call after call, since nothing about the prompt or
+// candidate set changes between clicks. Sampling randomly from a wider
+// top-rated slice means each click genuinely can land on a different (still
+// good) restaurant, instead of relying on the model to invent variety on its
+// own, which isn't a reliable way to get it.
+function pickRandomTopPool(restaurants, poolSize) {
+  const topN = restaurants
+    .slice()
+    .sort((a, b) => shrunkRating(b) - shrunkRating(a))
+    .slice(0, Math.max(poolSize * 2, 15));
+
+  for (let i = topN.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [topN[i], topN[j]] = [topN[j], topN[i]];
+  }
+  return topN.slice(0, poolSize);
+}
+
+// Instant Surprise Me pick, made here instead of by Claude so the restaurant
+// is on screen in one round trip rather than after Claude's ~2s time to
+// first token. Weighted random over the top-rated places: higher rating,
+// a favorite cuisine, and not having been there recently all raise the odds,
+// so repeated taps still vary. Places whose reviews are already cached (from
+// /api/prewarm or an earlier pick) but give Claude nothing to name a dish
+// from are made unlikely, since the old Claude-picks-from-8 path avoided them.
+// getCachedReviews is injected so this module stays free of server state.
+function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCachedReviews = () => null) {
+  const favorites = favoriteCuisines.map(c => c.toLowerCase());
+  const recent = new Set(recentNames.map(n => n.toLowerCase()));
+  const top = restaurants
+    .slice()
+    .sort((a, b) => shrunkRating(b) - shrunkRating(a))
+    .slice(0, 15);
+  const weights = top.map(r => {
+    let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.3) ** 2;
+    const cuisine = (r.cuisine || '').toLowerCase();
+    if (favorites.some(f => cuisine.includes(f) || f.includes(cuisine))) w *= 2.5;
+    if (recent.has((r.name || '').toLowerCase())) w *= 0.15;
+    const cached = getCachedReviews(r.id);
+    if (cached && cached.reviews.join(' ').length < 200) w *= 0.1;
+    return w;
+  });
+  let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < top.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return top[i];
+  }
+  return top[top.length - 1];
+}
+
+module.exports = { pickRandomTopPool, chooseInstantPick };
