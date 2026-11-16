@@ -189,6 +189,7 @@ function useLastLocationOrShowEmptyState(reason) {
     scheduleSearch({ immediate: true });
   } else {
     showNoLocationState();
+    cancelPendingRecommendation('Set a location first: allow location access or tap the pin to choose a spot.');
   }
 }
 
@@ -1485,7 +1486,8 @@ async function getRecommendation() {
   setRecommendButtonThinking(true);
   showTicketSkeleton();
 
-  if (restaurantsLoading) {
+  // !appStarted: Maps (and so the first search) hasn't loaded yet; replay once it has.
+  if (restaurantsLoading || !appStarted) {
     pendingRecommendation = true;
     return;
   }
@@ -2004,9 +2006,12 @@ async function submitPreferences() {
 
 window.addEventListener('maps-loaded', () => {
   mapsReady = true;
-  init();
   tryStartApp();
 });
+
+// Handlers bind as soon as the (deferred) script runs so taps work while the
+// Maps script is still loading; map.js helpers no-op until `map` exists.
+init();
 
 // Native shell setup (iOS/Capacitor only; a no-op in a browser). Runs as
 // soon as this script does rather than in init(), which waits for the ~480KB
