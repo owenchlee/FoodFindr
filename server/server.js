@@ -1412,6 +1412,8 @@ function shapeVisit(row) {
   };
 }
 
+const savedVisitsByKey = new Map();
+
 app.post('/api/visits', requireAuth, (req, res) => {
   const { restaurantName, dish, rating, flavorTags } = req.body;
 
@@ -1424,6 +1426,12 @@ app.post('/api/visits', requireAuth, (req, res) => {
 
   const cleanFlavorTags = Array.isArray(flavorTags) ? flavorTags.filter(t => FLAVOR_TAGS.includes(t)) : [];
 
+  const idemKey = typeof req.body.idempotencyKey === 'string' && req.body.idempotencyKey.length <= 100
+    ? `${req.user.id}:${req.body.idempotencyKey}` : null;
+  if (idemKey && savedVisitsByKey.has(idemKey)) {
+    return res.status(201).json({ visit: savedVisitsByKey.get(idemKey) });
+  }
+
   try {
     const visit = insertVisit({
       userId: req.user.id,
@@ -1432,7 +1440,13 @@ app.post('/api/visits', requireAuth, (req, res) => {
       rating,
       flavorTags: cleanFlavorTags
     });
-    res.status(201).json({ visit: shapeVisit(visit) });
+    const shaped = shapeVisit(visit);
+    if (idemKey) {
+      savedVisitsByKey.set(idemKey, shaped);
+      // shortcut: in-memory, lost on restart and capped at 1000 keys; move to a table if multi-process.
+      if (savedVisitsByKey.size > 1000) savedVisitsByKey.delete(savedVisitsByKey.keys().next().value);
+    }
+    res.status(201).json({ visit: shaped });
   } catch (err) {
     console.error('Failed to save visit:', err);
     res.status(500).json({ error: 'Could not save your visit right now.' });
