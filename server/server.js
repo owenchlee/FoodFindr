@@ -17,7 +17,7 @@ const {
 const {
   SESSION_COOKIE_NAME,
   isValidEmail, isValidPassword,
-  signup, login,
+  signup, login, changePassword,
   startSession, setSessionCookie, clearSessionCookie, endSession,
   parseCookies, requireAuth, optionalAuth
 } = require('./auth');
@@ -240,6 +240,36 @@ app.post('/api/auth/logout', (req, res) => {
   endSession(req.cookies && req.cookies[SESSION_COOKIE_NAME]);
   clearSessionCookie(res);
   res.status(204).end();
+});
+
+// Separate limiter so guessing the current password is capped like login.
+const passwordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.post('/api/auth/password', requireAuth, passwordLimiter, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (typeof currentPassword !== 'string') {
+    return res.status(400).json({ error: 'Enter your current password.' });
+  }
+  if (!isValidPassword(newPassword)) {
+    return res.status(400).json({ error: 'Password must be 8-128 characters.' });
+  }
+
+  try {
+    const result = await changePassword(req.user.id, currentPassword, newPassword, req.sessionToken);
+    if (result.error) {
+      return res.status(403).json({ error: result.error });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Password change failed:', err);
+    res.status(500).json({ error: 'Could not change your password right now.' });
+  }
 });
 
 app.get('/api/auth/me', requireAuth, (req, res) => {

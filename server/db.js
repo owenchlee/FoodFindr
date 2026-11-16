@@ -170,6 +170,23 @@ function deleteSession(token) {
   db.prepare('DELETE FROM sessions WHERE token = ?').run(hashToken(token));
 }
 
+function getUserById(id) {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
+// Swaps the hash and drops every session except the caller's, atomically.
+function changePasswordKeepingSession(userId, passwordHash, keepToken) {
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(userId, keepToken);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 // The account that adopts pre-existing (unowned) data must be the very first
 // one ever created. Call this right after inserting that first user.
 function adoptLegacyData(userId) {
@@ -534,7 +551,7 @@ function getProgress(userId, city) {
 }
 
 module.exports = {
-  countUsers, insertUser, getUserByEmail,
+  countUsers, insertUser, getUserByEmail, getUserById, changePasswordKeepingSession,
   createSession, getSessionWithUser, deleteSession, adoptLegacyData,
   insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
