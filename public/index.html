@@ -131,7 +131,7 @@
   </div>
 
   <div class="left-column" id="left-column">
-    <div class="ticket" id="ticket">
+    <div class="ticket" id="ticket" role="status">
       <button type="button" class="ticket-close-btn" id="ticket-close-btn" aria-label="Hide recommendation">×</button>
       <p class="ticket-eyebrow">Today's Pick</p>
       <h2 class="ticket-name" id="ticket-name"></h2>
@@ -167,7 +167,7 @@
 
   <div class="sheet-backdrop" id="sheet-backdrop" aria-hidden="true"></div>
 
-  <div class="tab-drawer" id="tab-drawer" hidden>
+  <div class="tab-drawer" id="tab-drawer" role="dialog" aria-labelledby="drawer-title" hidden>
     <div class="drawer-header">
       <span class="sheet-grabber" aria-hidden="true"></span>
       <span class="drawer-title" id="drawer-title"></span>
@@ -246,7 +246,7 @@
             <button type="button" data-star="5" aria-label="5 stars">☆</button>
           </div>
           <button type="submit" class="cta cta--secondary">Save Visit</button>
-          <p class="visit-status" id="visit-status" hidden></p>
+          <p class="visit-status" id="visit-status" role="status" hidden></p>
         </form>
       </div>
     </div>
@@ -337,7 +337,7 @@
         </form>
       </div>
 
-      <p class="visit-status" id="group-status" hidden></p>
+      <p class="visit-status" id="group-status" role="status" hidden></p>
     </div>
 
     <div class="tab-drawer-panel" id="tab-panel-more" hidden>
@@ -451,7 +451,7 @@
 
 </main>
 
-<div class="auth-gate" id="auth-gate" role="region" aria-label="Sign in" hidden>
+<div class="auth-gate" id="auth-gate" role="dialog" aria-modal="true" aria-label="Sign in to FoodFindr" hidden>
   <form class="auth-card" id="auth-form">
     <div class="wordmark auth-wordmark"><span class="wordmark-text">Food<span class="wordmark-accent">Findr</span></span><img src="/images/logo.png" alt="" class="wordmark-logo" /></div>
     <p class="auth-subtitle">Sign in to get recommendations, log visits, and track your taste profile.</p>
@@ -463,7 +463,7 @@
         <svg class="eye-icon eye-icon-hide" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.6 21.6 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.6 21.6 0 0 1-3.34 4.36M14.12 14.12a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
       </button>
     </div>
-    <p class="visit-status" id="auth-status" hidden></p>
+    <p class="visit-status" id="auth-status" role="status" hidden></p>
     <button type="submit" class="cta" id="auth-submit-btn">Log In</button>
     <button type="button" class="auth-toggle-mode" id="auth-toggle-mode">Need an account? Sign up</button>
     <button type="button" class="auth-toggle-mode" id="continue-as-guest-btn">Continue as Guest</button>

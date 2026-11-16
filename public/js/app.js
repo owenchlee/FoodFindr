@@ -585,6 +585,7 @@ function showAuthGate() {
   // up (e.g. covering the Log a Visit star rating).
   setRailExpanded(false);
   document.getElementById('auth-gate').hidden = false;
+  focusWithoutScroll(document.getElementById('auth-email'));
 }
 
 function continueAsGuest() {
@@ -744,7 +745,49 @@ function openDrawer(tab) {
   document.getElementById('left-column').classList.add('hidden-by-drawer');
   document.getElementById('location-banner').classList.add('hidden-by-drawer');
   document.getElementById('active-group-banner').classList.add('hidden-by-drawer');
+
+  // The phone sheet covers the page, so it is modal there; the desktop panel is not.
+  drawer.setAttribute('aria-modal', String(phoneLayout.matches));
+  focusWithoutScroll(document.getElementById('drawer-close-btn'));
 }
+
+// Sign-in gate is modal: keep Tab inside it. Escape closes the picker / side rail.
+document.addEventListener('keydown', (event) => {
+  const gate = document.getElementById('auth-gate');
+  if (!gate.hidden) {
+    if (event.key !== 'Tab') return;
+    const items = [...gate.querySelectorAll('button, input')].filter(el => !el.disabled && el.offsetParent !== null);
+    const first = items[0], last = items[items.length - 1];
+    if (!gate.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    return;
+  }
+  if (event.key !== 'Escape') return;
+  if (!document.getElementById('location-picker-popover').hidden) {
+    closeLocationPicker();
+    focusWithoutScroll(document.getElementById('pick-location-btn'));
+  } else if (document.getElementById('side-rail').classList.contains('expanded') &&
+             !document.getElementById('tab-drawer').classList.contains('open')) {
+    setRailExpanded(false);
+    focusWithoutScroll(document.getElementById('tabs-toggle'));
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  const drawer = document.getElementById('tab-drawer');
+  if (!drawer || !drawer.classList.contains('open')) return;
+  if (event.key === 'Escape') {
+    closeDrawer();
+  } else if (event.key === 'Tab' && phoneLayout.matches) {
+    const items = [...drawer.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')]
+      .filter(el => !el.disabled && el.tabIndex >= 0 && el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    const outside = !drawer.contains(document.activeElement);
+    if (outside || (event.shiftKey && document.activeElement === first)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+});
 
 function closeDrawer() {
   const drawer = document.getElementById('tab-drawer');
@@ -1807,7 +1850,10 @@ function showTicketSkeleton() {
 }
 
 function hideTicket() {
-  document.getElementById('ticket').classList.remove('visible');
+  const ticket = document.getElementById('ticket');
+  const hadFocus = ticket.contains(document.activeElement);
+  ticket.classList.remove('visible');
+  if (hadFocus) focusWithoutScroll(document.getElementById('recommend-btn'));
 }
 
 async function loadRecentVisits() {
