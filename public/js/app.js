@@ -327,11 +327,17 @@ function init() {
   const prewarm = () => {
     if (lastFilteredRestaurants.length === 0 || lastPrewarmedSeq === searchSeq) return;
     lastPrewarmedSeq = searchSeq;
-    const placeIds = lastFilteredRestaurants.slice(0, 15).map(r => r.id);
+    // Same inputs as /api/recommend, so the server warms the place it will pick.
     fetch('/api/prewarm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeIds })
+      body: JSON.stringify({
+        restaurants: lastFilteredRestaurants,
+        price: currentFilters.price,
+        dish: currentFilters.dish,
+        groupId: activeGroupId,
+        recentPickIds: recentPickIds.slice(-3)
+      })
     }).catch(() => {});
   };
   recommendBtn.addEventListener('mouseenter', prewarm);

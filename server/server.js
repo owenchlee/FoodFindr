@@ -25,7 +25,7 @@ const {
 const { FLAVOR_TAGS, isValidRecommendation } = require('./lib/validate');
 const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = require('./lib/budget');
 const { shapeAndFilter } = require('./lib/places');
-const { sanitizeText, makeKnownPlaces, cleanCandidates, cleanPlaceIds } = require('./lib/trust');
+const { sanitizeText, makeKnownPlaces, cleanCandidates } = require('./lib/trust');
 const { pickRandomTopPool, chooseInstantPick: pickInstant } = require('./lib/pick');
 const chooseInstantPick = (restaurants, favs, recent, recentPickIds) => pickInstant(restaurants, favs, recent, id => reviewsCache.get(id), recentPickIds);
 
@@ -774,9 +774,21 @@ app.get('/api/progress', requireAuth, async (req, res) => {
 // Me click fans out to 8-12 of them with otherwise zero reuse between clicks.
 const reviewsCache = makeTtlCache({ ttlMs: 24 * 60 * 60 * 1000, maxEntries: 3000 });
 
-async function fetchPlaceReviews(placeId) {
+// In-flight fetches are shared so a recommend that arrives while a prewarm is
+// still running waits for it instead of billing a second Place Details call.
+const inflightReviews = new Map();
+
+function fetchPlaceReviews(placeId) {
   const cached = reviewsCache.get(placeId);
-  if (cached) return cached.reviews;
+  if (cached) return Promise.resolve(cached.reviews);
+  if (!inflightReviews.has(placeId)) {
+    const p = fetchPlaceReviewsUncached(placeId).finally(() => inflightReviews.delete(placeId));
+    inflightReviews.set(placeId, p);
+  }
+  return inflightReviews.get(placeId);
+}
+
+async function fetchPlaceReviewsUncached(placeId) {
 
   const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
   url.searchParams.set('place_id', placeId);
@@ -1245,6 +1257,25 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   return result;
 }
 
+function cleanRecentPickIds(ids) {
+  return Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && id.length <= 200).slice(0, 5) : [];
+}
+
+function instantPickFor(groupData, preferences, visitHighlights, budgetPool, recentPickIds) {
+  const members = groupData ? groupData.members : [{ preferences, visitHighlights }];
+  return chooseInstantPick(
+    budgetPool,
+    [...new Set(members.flatMap(m => (m.preferences ? m.preferences.favoriteCuisines : [])))],
+    members.flatMap(m => (m.visitHighlights || []).map(v => v.restaurant_name)),
+    cleanRecentPickIds(recentPickIds)
+  );
+}
+
+// The place /api/prewarm chose and warmed, per user (or IP for guests), so
+// the next instant /api/recommend picks that same, already-cached place.
+const warmedPicks = new Map();
+const pickKey = req => (req.user ? 'u' + req.user.id : 'ip' + req.ip);
+
 // Combines every group member's saved preferences and recent visit
 // highlights into one dataset, used for both search-query enrichment
 // (see /api/restaurants) and the recommendation prompt, so a group search
@@ -1322,15 +1353,12 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   const instant = !dishCraving && !hasDietaryRestriction;
   let pool;
   if (instant) {
-    const members = groupData ? groupData.members : [{ preferences, visitHighlights }];
-    pool = [chooseInstantPick(
-      budgetPool,
-      [...new Set(members.flatMap(m => (m.preferences ? m.preferences.favoriteCuisines : [])))],
-      members.flatMap(m => (m.visitHighlights || []).map(v => v.restaurant_name)),
-      Array.isArray(recentPickIds)
-        ? recentPickIds.filter(id => typeof id === 'string' && id.length <= 200).slice(0, 5)
-        : []
-    )];
+    // Use the pick /api/prewarm already warmed, if it is still a candidate.
+    const warmed = warmedPicks.get(pickKey(req));
+    warmedPicks.delete(pickKey(req));
+    const warmedPick = warmed && Date.now() - warmed.at < 120000
+      ? budgetPool.find(r => r.id === warmed.id) : null;
+    pool = [warmedPick || instantPickFor(groupData, preferences, visitHighlights, budgetPool, recentPickIds)];
   } else {
     pool = dishCraving ? budgetPool.slice(0, poolSize) : pickRandomTopPool(budgetPool, poolSize);
   }
@@ -1476,7 +1504,32 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 // and most searches never lead to a Surprise Me click.
 
 app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
-  const placeIds = cleanPlaceIds(req.body.placeIds, knownPlaces);
+  const { price, dish, groupId, recentPickIds } = req.body;
+  // Same trust boundary as /api/recommend: only places this server returned.
+  const candidates = cleanCandidates(req.body.restaurants, knownPlaces);
+  let groupData = null;
+  if (groupId && req.user && isGroupMember(Number(groupId), req.user.id)) {
+    groupData = getCombinedGroupData(Number(groupId));
+  }
+  const preferences = req.user ? getPreferences(req.user.id) : null;
+  const restrictions = groupData ? groupData.dietaryRestrictions : (preferences ? preferences.dietaryRestrictions : []);
+  const targetPrice = [1, 2, 3, 4].includes(Number(price)) ? Number(price) : Math.max(0, ...candidates.map(r => r.price || 0));
+  const budgetPool = pickBudgetPool(candidates, targetPrice);
+
+  // Mirror /api/recommend: plain Surprise Me needs one place's reviews (the
+  // pick, remembered for the recommend); a craving or restriction warms its pool.
+  let placeIds = [];
+  if (budgetPool.length > 0) {
+    if (sanitizeText(dish, 60) || restrictions.length > 0) {
+      placeIds = budgetPool.slice(0, restrictions.length > 0 ? 12 : 8).map(r => r.id);
+    } else {
+      const visitHighlights = !groupData && req.user ? getVisitHighlights(req.user.id) : [];
+      const pick = instantPickFor(groupData, preferences, visitHighlights, budgetPool, recentPickIds);
+      if (warmedPicks.size > 1000) warmedPicks.clear();
+      warmedPicks.set(pickKey(req), { id: pick.id, at: Date.now() });
+      placeIds = [pick.id];
+    }
+  }
   Promise.allSettled(placeIds.map(id => fetchPlaceReviews(id))).catch(() => {});
   res.status(202).json({ warming: placeIds.length });
 });
