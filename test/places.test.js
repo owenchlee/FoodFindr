@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { distanceInMiles, titleCase, placeToRestaurant, shapeAndFilter } = require('../server/lib/places');
+const { distanceInMiles, titleCase, isEatery, cuisineLabel, placeToRestaurant, shapeAndFilter } = require('../server/lib/places');
 
 const place = (o = {}) => ({
   place_id: 'p1', name: 'Taco Spot', types: ['mexican_restaurant', 'restaurant', 'food'],
@@ -16,14 +16,14 @@ test('distanceInMiles: zero, and ~69 miles per degree of latitude', () => {
 
 test('placeToRestaurant maps fields the frontend reads', () => {
   assert.deepStrictEqual(placeToRestaurant(place()), {
-    id: 'p1', name: 'Taco Spot', cuisine: 'Mexican Restaurant', price: 2, rating: 4.5, ratingCount: null, lat: 40, lng: -75
+    id: 'p1', name: 'Taco Spot', cuisine: 'Mexican', price: 2, rating: 4.5, ratingCount: null, lat: 40, lng: -75
   });
   assert.strictEqual(placeToRestaurant(place({ user_ratings_total: 812 })).ratingCount, 812);
 });
 
 test('placeToRestaurant: cuisine hint wins, generic types fall back, missing price/rating are null', () => {
   assert.strictEqual(placeToRestaurant(place(), 'thai').cuisine, 'Thai');
-  assert.strictEqual(placeToRestaurant(place({ types: ['restaurant', 'food'] })).cuisine, 'Restaurant');
+  assert.strictEqual(placeToRestaurant(place({ name: "Joe's", types: ['restaurant', 'food'] })).cuisine, 'Restaurant');
   const r = placeToRestaurant(place({ price_level: undefined, rating: undefined }));
   assert.strictEqual(r.price, null);
   assert.strictEqual(r.rating, null);
@@ -49,4 +49,17 @@ test('shapeAndFilter distance filter keeps places within maxDistance miles', () 
   assert.deepStrictEqual(shapeAndFilter([near, far], 40, -75, null, '10').map(r => r.id), ['near', 'far']);
   assert.deepStrictEqual(shapeAndFilter([near, far], 40, -75, null, 0).map(r => r.id), ['near', 'far']); // 0 = no limit
   assert.strictEqual(shapeAndFilter([far], 40, -75, null, null)[0].distance, 6.9);
+});
+
+test('shops are not eateries, takeaway places are', () => {
+  assert.strictEqual(isEatery({ types: ['supermarket', 'food', 'store'] }), false);
+  assert.strictEqual(isEatery({ types: ['restaurant', 'lodging'] }), false);
+  assert.strictEqual(isEatery({ types: ['meal_takeaway', 'restaurant', 'food'] }), true);
+});
+
+test('cuisine comes from the name, service types are never cuisines', () => {
+  assert.strictEqual(cuisineLabel({ name: 'Sushi Zen', types: ['restaurant'] }), 'Sushi');
+  assert.strictEqual(cuisineLabel({ name: 'Café Pho 99', types: ['meal_takeaway'] }), 'Vietnamese');
+  assert.strictEqual(cuisineLabel({ name: "Joe's", types: ['meal_takeaway', 'store'] }), 'Restaurant');
+  assert.strictEqual(cuisineLabel({ name: "Joe's", types: ['cafe', 'food'] }), 'Cafe');
 });
