@@ -55,7 +55,8 @@ test('sessions: create, read with user, delete', () => {
   const id = mk('sess@x.com');
   db.createSession({ token: 't1', userId: id, expiresAt: '2099-01-01T00:00:00.000Z' });
   assert.deepStrictEqual({ ...db.getSessionWithUser('t1') },
-    { token: 't1', expires_at: '2099-01-01T00:00:00.000Z', user_id: id, email: 'sess@x.com' });
+    // the table stores sha256(token), never the raw cookie value
+    { token: require('crypto').createHash('sha256').update('t1').digest('hex'), expires_at: '2099-01-01T00:00:00.000Z', user_id: id, email: 'sess@x.com' });
   db.deleteSession('t1');
   assert.strictEqual(db.getSessionWithUser('t1'), undefined);
 });
