@@ -580,7 +580,11 @@ let activeBackgroundFills = 0;
 function resolveSearchParams(req) {
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
-  const { cuisine, maxDistance, groupId } = req.query;
+  // Repeated or bracketed params arrive as arrays/objects; treat them as absent.
+  const str = v => (typeof v === 'string' ? v : undefined);
+  const cuisine = str(req.query.cuisine);
+  const maxDistance = str(req.query.maxDistance);
+  const groupId = str(req.query.groupId);
   const dish = typeof req.query.dish === 'string' ? req.query.dish.trim().slice(0, 60) : '';
   const distanceMiles = maxDistance ? Number(maxDistance) : 3;
   const radiusMeters = Math.min(distanceMiles * 1609.34, 50000);
@@ -704,7 +708,12 @@ app.get('/api/restaurants/rest', optionalAuth, async (req, res) => {
     return res.status(400).json({ error: 'lat, lng, and searchId are required.', restaurants: [] });
   }
 
-  const key = decodeURIComponent(searchId);
+  let key;
+  try {
+    key = decodeURIComponent(searchId);
+  } catch {
+    return res.status(400).json({ error: 'Invalid searchId.', restaurants: [] });
+  }
   const entry = placesCache.get(key);
   if (!entry) {
     // Server restarted or this entry aged out of the cache; the client keeps
