@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
@@ -144,6 +144,13 @@ app.get('/js/config.js', (req, res) => {
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 40,
+  // Valid signed-in sessions get a per-user bucket so friends behind one shared
+  // IP (wifi, CGNAT) don't starve each other. Everyone else, including forged
+  // cookies, falls back to the IP bucket.
+  keyGenerator: (req) => {
+    optionalAuth(req, null, () => {}); // only sets req.user for a verified session
+    return req.user ? `u:${req.user.id}` : ipKeyGenerator(req.ip);
+  },
   standardHeaders: true,
   legacyHeaders: false
 });
