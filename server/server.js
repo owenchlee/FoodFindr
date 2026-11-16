@@ -147,6 +147,11 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+// Private per-user JSON must never sit in a shared/browser cache.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api/restaurants', apiLimiter);
 app.use('/api/recommend', apiLimiter);
 
@@ -156,6 +161,14 @@ app.use('/api/recommend', apiLimiter);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Group codes are 6 chars, so cap join attempts to make guessing impractical.
+const joinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -1543,7 +1556,7 @@ app.post('/api/groups', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/groups/join', requireAuth, (req, res) => {
+app.post('/api/groups/join', joinLimiter, requireAuth, (req, res) => {
   const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
   if (!code) {
     return res.status(400).json({ error: 'A group code is required.' });

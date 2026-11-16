@@ -145,11 +145,16 @@ function getUserByEmail(email) {
   return db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email);
 }
 
+// Only a SHA-256 of the cookie token is stored; old plain-text rows just stop matching.
+const hashToken = (t) => require('crypto').createHash('sha256').update(String(t)).digest('hex');
+
 function createSession({ token, userId, expiresAt }) {
+  // Purge expired rows on every new session so the table can't grow forever.
+  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(new Date().toISOString());
   db.prepare(`
     INSERT INTO sessions (token, user_id, created_at, expires_at)
     VALUES (?, ?, ?, ?)
-  `).run(token, userId, new Date().toISOString(), expiresAt);
+  `).run(hashToken(token), userId, new Date().toISOString(), expiresAt);
 }
 
 function getSessionWithUser(token) {
@@ -158,11 +163,11 @@ function getSessionWithUser(token) {
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token = ?
-  `).get(token);
+  `).get(hashToken(token));
 }
 
 function deleteSession(token) {
-  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(hashToken(token));
 }
 
 // The account that adopts pre-existing (unowned) data must be the very first

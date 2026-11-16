@@ -76,12 +76,18 @@ async function signup(email, password) {
   return { user };
 }
 
+let dummyHash;
 async function login(email, password) {
   // Same generic failure message whether the email is unknown or the
   // password is wrong, so a login attempt can't be used to enumerate accounts.
   const genericError = 'Invalid email or password.';
   const user = getUserByEmail(email.trim());
-  if (!user) return { error: genericError };
+  // Unknown email still pays for one scrypt verify so timing doesn't reveal accounts.
+  if (!user) {
+    dummyHash = dummyHash || hashPassword('dummy-password');
+    await verifyPassword(password, await dummyHash);
+    return { error: genericError };
+  }
 
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return { error: genericError };
