@@ -320,6 +320,31 @@ async function readGoogleJson(response) {
   return response.json();
 }
 
+// GET a Google JSON endpoint, retrying once after a short backoff on a one-off
+// fault: network error, timeout, HTTP 5xx/429, unparseable body or
+// UNKNOWN_ERROR. Real answers (OK, ZERO_RESULTS, REQUEST_DENIED, a quota
+// status in the body...) are returned untouched. Throws if both attempts fail
+// at the transport level; a persistent 429 comes back as OVER_QUERY_LIMIT.
+async function googleGetJson(url) {
+  let last;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt) await delay(300);
+    try {
+      // Node's fetch has no default timeout; a hung socket would hold the request open.
+      const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (response.status === 429) { last = { status: 'OVER_QUERY_LIMIT' }; continue; }
+      if (response.status >= 500) { last = new Error(`Google HTTP ${response.status}`); continue; }
+      const data = await response.json();
+      if (data.status === 'UNKNOWN_ERROR') { last = data; continue; }
+      return data;
+    } catch (err) {
+      last = err;
+    }
+  }
+  if (last instanceof Error) throw last;
+  return last;
+}
+
 async function fetchPlacesPage(endpoint, params, pageToken) {
   const url = new URL(endpoint);
   if (pageToken) {
@@ -331,10 +356,7 @@ async function fetchPlacesPage(endpoint, params, pageToken) {
   }
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
-  // Node's fetch has no default timeout, so a hung socket would otherwise
-  // hold the request open indefinitely.
-  const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  return readGoogleJson(response);
+  return googleGetJson(url);
 }
 
 function buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
@@ -456,8 +478,7 @@ async function geocodeCity(lat, lng) {
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    const data = await response.json();
+    const data = await googleGetJson(url);
 
     if (data.status !== 'OK') {
       console.error('Geocoding error:', data.status, data.error_message || '');
@@ -499,11 +520,13 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
   url.searchParams.set('key', PLACES_SERVER_KEY);
 
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    const data = await readGoogleJson(response);
+    const data = await googleGetJson(url);
 
     if (GOOGLE_QUOTA_STATUSES.has(data.status)) {
       return res.status(503).json(GOOGLE_QUOTA_ERROR);
+    }
+    if (data.status === 'UNKNOWN_ERROR') {
+      return res.status(502).json({ error: 'Could not look up that location right now. Try again in a moment.' });
     }
     if (data.status !== 'OK' || !data.results[0]) {
       return res.status(404).json({ error: `Couldn't find "${address}".` });
