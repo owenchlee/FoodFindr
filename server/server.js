@@ -707,7 +707,7 @@ async function fetchPlaceReviews(placeId) {
     const data = await readGoogleJson(response);
 
     if (data.status === 'OK') {
-      reviews = (data.result.reviews || []).map(r => r.text).filter(Boolean);
+      reviews = (data.result.reviews || []).map(r => r.text).filter(Boolean).map(t => t.replace(/\s+/g, ' ').trim()).filter(Boolean); // collapse whitespace: fewer prompt chars, same content
       cacheable = true;
     } else if (data.status === 'ZERO_RESULTS' || data.status === 'NOT_FOUND') {
       // NOT_FOUND (a closed or removed place) is a definite answer, not a
@@ -1062,7 +1062,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     `${groupInstruction(groupSize, sharing, targetPrice)}` +
     `${personalizationText || ''}` +
     `${dishCravingInstruction(dish, dietaryRestrictions)}\n\n` +
-    JSON.stringify(candidates, null, 2);
+    JSON.stringify(candidates);
 
   const requireDietaryNote = Boolean(dietaryRestrictions && dietaryRestrictions.length > 0);
   const tool = recommendationToolDef(requireDietaryNote);
