@@ -18,7 +18,7 @@ test('sanitizeText caps length and rejects non-strings', () => {
 
 test('sanitizeCandidate keeps only known fields with valid types', () => {
   const c = sanitizeCandidate({ ...mk(1), evil: 'x', __proto__: { y: 1 } });
-  assert.deepStrictEqual(Object.keys(c).sort(), ['cuisine', 'distance', 'id', 'lat', 'lng', 'name', 'price', 'rating', 'ratingCount']);
+  assert.deepStrictEqual(Object.keys(c).sort(), ['cuisine', 'distance', 'id', 'lat', 'lng', 'name', 'openNow', 'price', 'rating', 'ratingCount']);
   assert.strictEqual(c.name, 'Place 1');
 });
 

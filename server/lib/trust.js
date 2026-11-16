@@ -37,7 +37,8 @@ function sanitizeCandidate(raw) {
     rating: finite(raw.rating, 0, 5),
     ratingCount: finite(raw.ratingCount, 0, 1e7),
     lat, lng,
-    distance: finite(raw.distance, 0, 1000)
+    distance: finite(raw.distance, 0, 1000),
+    openNow: typeof raw.openNow === 'boolean' ? raw.openNow : null
   };
 }
 

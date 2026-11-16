@@ -100,7 +100,9 @@ function placeToRestaurant(place, cuisineHint) {
     rating: place.rating != null ? place.rating : null,
     ratingCount: place.user_ratings_total != null ? place.user_ratings_total : null,
     lat: place.geometry.location.lat,
-    lng: place.geometry.location.lng
+    lng: place.geometry.location.lng,
+    // null = Google gave no hours; treated as possibly open
+    openNow: place.opening_hours && typeof place.opening_hours.open_now === 'boolean' ? place.opening_hours.open_now : null
   };
 }
 

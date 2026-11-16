@@ -1389,7 +1389,9 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
     : personalizationInstruction(preferences, visitHighlights);
 
   const targetPrice = [1, 2, 3, 4].includes(Number(price)) ? Number(price) : Math.max(...candidates.map(r => r.price || 0));
-  const budgetPool = pickBudgetPool(candidates, targetPrice);
+  // Never send anyone to a place known to be closed; fall back only if everything is.
+  const openCandidates = candidates.filter(r => r.openNow !== false);
+  const budgetPool = pickBudgetPool(openCandidates.length > 0 ? openCandidates : candidates, targetPrice);
 
   // A dietary restriction (solo, or pooled across a group) means only some
   // candidates will have review text Claude can actually point to as
@@ -1574,7 +1576,9 @@ app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
   const preferences = req.user ? getPreferences(req.user.id) : null;
   const restrictions = groupData ? groupData.dietaryRestrictions : (preferences ? preferences.dietaryRestrictions : []);
   const targetPrice = [1, 2, 3, 4].includes(Number(price)) ? Number(price) : Math.max(0, ...candidates.map(r => r.price || 0));
-  const budgetPool = pickBudgetPool(candidates, targetPrice);
+  // Never send anyone to a place known to be closed; fall back only if everything is.
+  const openCandidates = candidates.filter(r => r.openNow !== false);
+  const budgetPool = pickBudgetPool(openCandidates.length > 0 ? openCandidates : candidates, targetPrice);
 
   // Mirror /api/recommend: plain Surprise Me needs one place's reviews (the
   // pick, remembered for the recommend); a craving or restriction warms its pool.

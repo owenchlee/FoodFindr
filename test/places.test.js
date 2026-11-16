@@ -16,8 +16,9 @@ test('distanceInMiles: zero, and ~69 miles per degree of latitude', () => {
 
 test('placeToRestaurant maps fields the frontend reads', () => {
   assert.deepStrictEqual(placeToRestaurant(place()), {
-    id: 'p1', name: 'Taco Spot', cuisine: 'Mexican', price: 2, rating: 4.5, ratingCount: null, lat: 40, lng: -75
+    id: 'p1', name: 'Taco Spot', cuisine: 'Mexican', price: 2, rating: 4.5, ratingCount: null, lat: 40, lng: -75, openNow: null
   });
+  assert.strictEqual(placeToRestaurant(place({ opening_hours: { open_now: false } })).openNow, false);
   assert.strictEqual(placeToRestaurant(place({ user_ratings_total: 812 })).ratingCount, 812);
 });
 
