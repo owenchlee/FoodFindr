@@ -216,6 +216,10 @@ function insertVisit({ userId, restaurantName, dish, rating, flavorTags }) {
   `).get(restaurantName, dish ?? null, rating, new Date().toISOString(), JSON.stringify(flavorTags || []), userId);
 }
 
+function deleteVisit(userId, visitId) {
+  return db.prepare('DELETE FROM visits WHERE id = ? AND user_id = ?').run(visitId, userId).changes > 0;
+}
+
 function getTopFlavors(userId, limit = 3) {
   const rows = db.prepare(
     "SELECT flavor_tags FROM visits WHERE user_id = ? AND rating >= 4 AND flavor_tags IS NOT NULL AND flavor_tags != '[]' ORDER BY id"
@@ -532,7 +536,7 @@ function getProgress(userId, city) {
 module.exports = {
   countUsers, insertUser, getUserByEmail,
   createSession, getSessionWithUser, deleteSession, adoptLegacyData,
-  insertVisit, listVisits, getVisitHighlights, getTopFlavors,
+  insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
