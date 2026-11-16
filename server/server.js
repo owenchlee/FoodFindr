@@ -626,6 +626,8 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
   const key = placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
 
   try {
+    // geocodeCity never rejects, so it can run alongside the Places fetch.
+    const cityPromise = geocodeCity(lat, lng);
     let entry = placesCache.get(key);
     const cacheState = entry ? (entry.complete ? 'hit' : 'partial') : 'miss';
 
@@ -669,7 +671,7 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
 
     const results = shapeAndFilter(entry.places, lat, lng, cuisine, maxDistance);
     knownPlaces.add(results);
-    const city = await geocodeCity(lat, lng);
+    const city = await cityPromise;
     t.mark('geocode');
 
     recordDiscoveredAsync(req.user && req.user.id, results, city);
