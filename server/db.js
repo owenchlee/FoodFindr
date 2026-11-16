@@ -183,7 +183,8 @@ function changePasswordKeepingSession(userId, passwordHash, keepToken) {
   db.exec('BEGIN');
   try {
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
-    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(userId, keepToken);
+    // Stored tokens are hashed, so compare against the hash of the caller's cookie.
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(userId, hashToken(keepToken));
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');

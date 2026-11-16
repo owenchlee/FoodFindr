@@ -136,3 +136,13 @@ test('sliding refresh: an aging session is extended (hashed row) and re-cookied;
   auth.optionalAuth(req, null, () => {});
   assert.strictEqual(req.user.id, user.id);
 });
+
+test('changePassword keeps the caller signed in and ends every other session', async () => {
+  const { user } = await auth.signup('cp@x.com', 'password1');
+  const mine = auth.startSession(user.id).token, other = auth.startSession(user.id).token;
+  assert.deepStrictEqual(await auth.changePassword(user.id, 'wrong-pass', 'password2', mine), { error: 'Current password is incorrect.' });
+  assert.deepStrictEqual(await auth.changePassword(user.id, 'password1', 'password2', mine), {});
+  assert.ok(db.getSessionWithUser(mine));
+  assert.strictEqual(db.getSessionWithUser(other), undefined);
+  assert.ok((await auth.login('cp@x.com', 'password2')).user);
+});
