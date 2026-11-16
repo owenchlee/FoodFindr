@@ -474,6 +474,7 @@ function init() {
     event.currentTarget.setAttribute('aria-expanded', String(!form.hidden));
   });
   document.getElementById('change-password-form').addEventListener('submit', submitChangePassword);
+  document.getElementById('more-delete-btn').addEventListener('click', deleteAccount);
   document.getElementById('sheet-backdrop').addEventListener('click', closeDrawer);
   document.getElementById('filters-toggle').addEventListener('click', () => {
     setRailExpanded(false);
@@ -610,6 +611,7 @@ function setMoreAccount(user) {
   document.getElementById('more-account-sub').textContent = user ? user.email : 'Sign up to save visits and your taste';
   document.getElementById('more-signup-btn').parentElement.hidden = Boolean(user);
   document.getElementById('more-logout-btn').parentElement.hidden = !user;
+  document.getElementById('more-delete-btn').parentElement.hidden = !user;
   document.getElementById('more-password-btn').parentElement.hidden = !user;
   if (!user) document.getElementById('change-password-form').hidden = true;
 }
@@ -697,6 +699,31 @@ async function logout() {
   } finally {
     try { localStorage.removeItem('ff-last-user'); } catch (e) { /* ignore */ }
     location.reload();
+  }
+}
+
+async function deleteAccount() {
+  // shortcut: native prompt() for the password confirm, swap for a <dialog> if it looks off in the iOS shell.
+  const password = window.prompt('Delete your account? This permanently erases your visits, preferences and group memberships. Enter your password to confirm.');
+  if (!password) return;
+  try {
+    const response = await fetch('/api/account', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      window.alert(data.error || 'Could not delete your account right now.');
+      return;
+    }
+    // ff-last-user too, or an offline relaunch would restore the deleted account's shell.
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('ff_') || k.startsWith('ff-')).forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* ignore */ }
+    location.reload();
+  } catch (err) {
+    window.alert("Couldn't reach the server. Check your connection and try again.");
   }
 }
 

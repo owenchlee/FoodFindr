@@ -550,6 +550,31 @@ function leaveGroup(groupId, userId) {
   }
 }
 
+function deleteUser(userId) {
+  db.exec('BEGIN');
+  try {
+    // Hand groups they created to the longest-standing other member (FK on created_by).
+    db.prepare(`
+      UPDATE groups SET created_by = (
+        SELECT user_id FROM group_members
+        WHERE group_id = groups.id AND user_id != ?
+        ORDER BY joined_at, user_id LIMIT 1)
+      WHERE created_by = ?
+        AND EXISTS (SELECT 1 FROM group_members WHERE group_id = groups.id AND user_id != ?)
+    `).run(userId, userId, userId);
+    db.prepare('DELETE FROM group_members WHERE user_id = ?').run(userId);
+    // Whatever they created that nobody else joined is now empty.
+    db.prepare(`DELETE FROM groups WHERE id NOT IN (SELECT group_id FROM group_members)`).run();
+    for (const table of ['sessions', 'visits', 'preferences', 'discovered_restaurants']) {
+      db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(userId);
+    }
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
 const visitNamesStmt = db.prepare('SELECT restaurant_name FROM visits WHERE user_id = ?');
 visitNamesStmt.setReturnArrays(true);
 const discoveredNamesStmt = db.prepare('SELECT name FROM discovered_restaurants WHERE user_id = ? AND city = ?');
@@ -574,5 +599,5 @@ module.exports = {
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
-  getGroupMemberIds, getGroupMembers, leaveGroup
+  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser
 };

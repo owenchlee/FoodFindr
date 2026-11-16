@@ -159,3 +159,18 @@ test('groups: create, join case-insensitively, idempotent join, members, leave a
   assert.deepStrictEqual(db.listUserGroups(owner), []);
   assert.strictEqual(db.joinGroupByCode(friend, g.code), null);
 });
+
+test('deleteUser erases the account and its data, hands shared groups on, drops solo groups', () => {
+  const gone = mk('del-me@x.com'), stay = mk('del-stay@x.com');
+  const shared = db.createGroup(gone, 'Shared');
+  db.joinGroupByCode(stay, shared.code);
+  const solo = db.createGroup(gone, 'Solo');
+  db.insertVisit({ userId: gone, restaurantName: 'X', rating: 3 });
+  db.createSession({ token: 'del-t', userId: gone, expiresAt: '2099-01-01T00:00:00.000Z' });
+  db.deleteUser(gone);
+  assert.strictEqual(db.getUserById(gone), undefined);
+  assert.strictEqual(db.getSessionWithUser('del-t'), undefined);
+  assert.strictEqual(db.listVisits(gone).length, 0);
+  assert.deepStrictEqual(db.getGroupMemberIds(shared.id), [stay]);
+  assert.strictEqual(db.joinGroupByCode(stay, solo.code), null);
+});
