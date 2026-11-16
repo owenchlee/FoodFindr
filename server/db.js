@@ -166,6 +166,10 @@ function getSessionWithUser(token) {
   `).get(hashToken(token));
 }
 
+function extendSession(token, expiresAt) {
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(expiresAt, hashToken(token));
+}
+
 function deleteSession(token) {
   db.prepare('DELETE FROM sessions WHERE token = ?').run(hashToken(token));
 }
@@ -593,7 +597,7 @@ function getProgress(userId, city) {
 
 module.exports = {
   countUsers, insertUser, getUserByEmail, getUserById, changePasswordKeepingSession,
-  createSession, getSessionWithUser, deleteSession, adoptLegacyData,
+  createSession, getSessionWithUser, extendSession, deleteSession, adoptLegacyData,
   insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,

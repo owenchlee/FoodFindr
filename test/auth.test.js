@@ -121,3 +121,18 @@ test('parseCookies decodes values, skips bare pairs, tolerates bad encoding', ()
   auth.parseCookies(empty, {}, () => {});
   assert.deepStrictEqual(empty.cookies, {});
 });
+
+test('sliding refresh: an aging session is extended (hashed row) and re-cookied; a fresh one is left alone', () => {
+  const user = db.insertUser({ email: 'slide@x.com', passwordHash: 'x' });
+  const token = 'slide-token';
+  db.createSession({ token, userId: user.id, expiresAt: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString() });
+  const r = run(auth.requireAuth, reqWith(token));
+  assert.ok(r.called);
+  assert.strictEqual(r.res.cookies[auth.SESSION_COOKIE_NAME].value, token);
+  assert.ok(new Date(db.getSessionWithUser(token).expires_at).getTime() > Date.now() + 29 * 24 * 3600 * 1000);
+  assert.deepStrictEqual(run(auth.optionalAuth, reqWith(token)).res.cookies, {});
+  // apiLimiter's keyGenerator passes res = null.
+  const req = reqWith(token);
+  auth.optionalAuth(req, null, () => {});
+  assert.strictEqual(req.user.id, user.id);
+});

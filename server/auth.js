@@ -1,12 +1,13 @@
 const crypto = require('crypto');
 const {
   getUserByEmail, insertUser, countUsers, adoptLegacyData,
-  createSession, getSessionWithUser, deleteSession,
+  createSession, getSessionWithUser, extendSession, deleteSession,
   getUserById, changePasswordKeepingSession
 } = require('./db');
 
 const SESSION_COOKIE_NAME = 'ff_session';
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, fixed from login (no sliding refresh)
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days idle limit, slid forward on use
+const REFRESH_BELOW_MS = 29 * 24 * 60 * 60 * 1000; // throttle: at most ~one write per day per session
 
 // N=2^14 keeps scrypt's memory use (128*N*r bytes = 16MB) comfortably under
 // Node's default scrypt maxmem (32MB), so no need to pass a maxmem override.
@@ -156,6 +157,13 @@ function parseCookies(req, res, next) {
   next();
 }
 
+// Slide the 30-day window forward and re-send the cookie so active users stay signed in.
+function refreshSession(res, token, session) {
+  if (new Date(session.expires_at).getTime() - Date.now() >= REFRESH_BELOW_MS) return;
+  extendSession(token, new Date(Date.now() + SESSION_TTL_MS).toISOString());
+  setSessionCookie(res, token);
+}
+
 function requireAuth(req, res, next) {
   const token = req.cookies && req.cookies[SESSION_COOKIE_NAME];
   const session = token ? getSessionWithUser(token) : null;
@@ -163,6 +171,7 @@ function requireAuth(req, res, next) {
   if (!session || new Date(session.expires_at).getTime() < Date.now()) {
     return res.status(401).json({ error: 'Not signed in.' });
   }
+  refreshSession(res, token, session);
 
   req.user = { id: session.user_id, email: session.email };
   req.sessionToken = token;
@@ -179,6 +188,8 @@ function optionalAuth(req, res, next) {
   if (session && new Date(session.expires_at).getTime() >= Date.now()) {
     req.user = { id: session.user_id, email: session.email };
     req.sessionToken = token;
+    // res is null when apiLimiter's keyGenerator calls this just to identify the user.
+    if (res) refreshSession(res, token, session);
   }
 
   next();
