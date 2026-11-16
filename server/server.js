@@ -1520,7 +1520,11 @@ app.post('/api/visits', requireAuth, (req, res) => {
 
 app.get('/api/visits', requireAuth, (req, res) => {
   try {
-    res.json({ visits: listVisits(req.user.id).map(shapeVisit) });
+    const beforeId = Number(req.query.beforeId);
+    const before = req.query.beforeLoggedAt && Number.isInteger(beforeId)
+      ? { loggedAt: String(req.query.beforeLoggedAt), id: beforeId }
+      : undefined;
+    res.json({ visits: listVisits(req.user.id, before).map(shapeVisit) });
   } catch (err) {
     console.error('Failed to load visits:', err);
     res.status(500).json({ error: 'Could not load past visits.', visits: [] });

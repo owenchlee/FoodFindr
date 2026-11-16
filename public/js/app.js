@@ -19,6 +19,7 @@ let lastFilteredRestaurants = [];
 let userLocation = null;
 let usingCustomLocation = false;
 let recentVisits = [];
+let visitsHasMore = false;
 let lastRecommendation = null;
 let preferences = null;
 let currentUser = null;
@@ -1800,11 +1801,30 @@ async function loadRecentVisits() {
     const response = await fetch('/api/visits');
     const data = await readApiJson(response);
     recentVisits = data.visits || [];
+    visitsHasMore = recentVisits.length >= 50;
     renderVisitList();
   } catch (err) {
     // Leave whatever visit list is already rendered from the last successful load.
   }
 }
+
+async function loadOlderVisits() {
+  const last = recentVisits[recentVisits.length - 1];
+  if (!last) return;
+  try {
+    const q = new URLSearchParams({ beforeLoggedAt: last.loggedAt, beforeId: last.id });
+    const response = await fetch('/api/visits?' + q);
+    const data = await response.json();
+    const seen = new Set(recentVisits.map(v => v.id));
+    const older = (data.visits || []).filter(v => !seen.has(v.id));
+    recentVisits.push(...older);
+    visitsHasMore = (data.visits || []).length >= 50;
+    renderVisitList();
+  } catch (err) {
+    // Keep the button so the user can retry.
+  }
+}
+document.getElementById('visit-more').addEventListener('click', loadOlderVisits);
 
 function visitItemElement(visit) {
   const li = document.createElement('li');
@@ -1875,6 +1895,7 @@ function renderVisitList() {
   list.replaceChildren();
   recentVisits.forEach(visit => list.appendChild(visitItemElement(visit)));
   empty.hidden = recentVisits.length > 0;
+  document.getElementById('visit-more').hidden = !visitsHasMore;
 }
 
 function resetVisitForm() {
