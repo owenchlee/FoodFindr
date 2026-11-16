@@ -517,7 +517,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--color-paper);
-  background: var(--color-chili);
+  background: #b8341a; /* 4.5:1 with paper text */
   border: none;
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
@@ -771,8 +771,8 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   background: rgba(242, 234, 225, 0.05);
   border: 1px solid rgba(242, 234, 225, 0.1);
   border-radius: var(--radius-sm);
-  opacity: 0.55;
 }
+.badge-card:not(.badge-card--earned) .badge-name { opacity: 0.7; }
 .badge-card--earned { opacity: 1; border-color: rgba(217, 166, 26, 0.4); background: rgba(217, 166, 26, 0.08); }
 .badge-name { font-family: var(--font-body); font-size: 0.8rem; font-weight: 600; color: var(--color-paper); }
 .badge-card--earned .badge-name { color: var(--color-turmeric); }
@@ -1137,7 +1137,7 @@ select.visit-input option {
 .inset-row-label { flex: 1; }
 .inset-row-chevron { color: var(--color-paper-dim); font-size: 1.4rem; line-height: 1; }
 .inset-row--center { justify-content: center; font-weight: 600; color: var(--color-turmeric); }
-.inset-row--danger { color: #e2573a; }
+.inset-row--danger { color: #ee6e52; }
 
 /* Phone-only chrome; the phone block turns these on. */
 .tab-bar,
@@ -1532,7 +1532,7 @@ select.visit-input option {
   font-size: 0.68rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-chili);
+  color: #ec6a4d;
   margin: 0 0 var(--space-2);
   padding-right: var(--space-5);
 }
