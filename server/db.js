@@ -596,6 +596,34 @@ function getProgress(userId, city) {
   return { city, discovered: discoveredRows.length, visited };
 }
 
+function exportUserData(userId) {
+  const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(userId);
+  const visits = db.prepare(
+    'SELECT id, restaurant_name, dish, rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY id'
+  ).all(userId).map(v => {
+    let tags = [];
+    try { tags = JSON.parse(v.flavor_tags) || []; } catch { /* legacy/null tags */ }
+    return { ...v, flavor_tags: tags };
+  });
+  const preferences = db.prepare(
+    'SELECT favorite_cuisines, dietary_restrictions, spice_tolerance, price_tolerance, updated_at FROM preferences WHERE user_id = ?'
+  ).get(userId);
+  if (preferences) {
+    for (const k of ['favorite_cuisines', 'dietary_restrictions']) {
+      try { preferences[k] = JSON.parse(preferences[k]); } catch { /* keep raw text */ }
+    }
+  }
+  const groups = db.prepare(`
+    SELECT g.name, g.code, gm.joined_at FROM groups g
+    JOIN group_members gm ON gm.group_id = g.id
+    WHERE gm.user_id = ? ORDER BY g.id
+  `).all(userId);
+  const discovered_restaurants = db.prepare(
+    'SELECT place_id, name, city, lat, lng, first_seen_at FROM discovered_restaurants WHERE user_id = ? ORDER BY first_seen_at, place_id'
+  ).all(userId);
+  return { user, visits, preferences: preferences || null, groups, discovered_restaurants };
+}
+
 module.exports = {
   countUsers, insertUser, getUserByEmail, getUserById, changePasswordKeepingSession,
   createSession, getSessionWithUser, extendSession, deleteSession, adoptLegacyData,
@@ -604,5 +632,5 @@ module.exports = {
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
-  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser
+  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData
 };

@@ -174,3 +174,13 @@ test('deleteUser erases the account and its data, hands shared groups on, drops 
   assert.deepStrictEqual(db.getGroupMemberIds(shared.id), [stay]);
   assert.strictEqual(db.joinGroupByCode(stay, solo.code), null);
 });
+
+test('exportUserData returns only this user\'s data and never secrets', () => {
+  const id = mk('export@x.com'), other = mk('export-other@x.com');
+  db.insertVisit({ userId: id, restaurantName: 'Mine', rating: 5, flavorTags: ['Spicy'] });
+  db.insertVisit({ userId: other, restaurantName: 'Theirs', rating: 2 });
+  const out = db.exportUserData(id);
+  assert.strictEqual(out.user.email, 'export@x.com');
+  assert.deepStrictEqual(out.visits.map(v => [v.restaurant_name, v.flavor_tags]), [['Mine', ['Spicy']]]);
+  assert.ok(!JSON.stringify(out).includes('password'));
+});

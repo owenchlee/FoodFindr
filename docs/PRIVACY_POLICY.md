@@ -92,13 +92,16 @@ exists, or until you delete it in the app (see "Your choices" below).
   any of the account-only data described above.
 - You can deny location access; the app will ask you to search for a city
   or address manually instead.
+- You can download a copy of your data at any time: when signed in, open the
+  You panel and tap "Download My Data". You get a JSON file with your account
+  email, all your visits, preferences, groups (names and codes), and
+  discovered restaurants. It never includes your password hash or session
+  tokens, or other people's data.
 - You can delete your account yourself: open the "You" tab, tap "Delete my
   account" and confirm with your password. This permanently erases your
   visits, preferences, discovered restaurants, sessions and group
   memberships. Groups you created stay with the remaining members; groups
   with no one else in them are removed.
-- [DRAFT NOTE: a data-export mechanism does not exist yet; decide whether
-  to offer one before publishing.]
 
 ## Children's privacy
 
