@@ -1117,10 +1117,15 @@ function anthropicError(e, response) {
   return err;
 }
 
+// The usual 20s timeout, plus the client-gone signal when there is one.
+const anthropicSignal = (abortSignal) => abortSignal
+  ? AbortSignal.any([AbortSignal.timeout(20000), abortSignal])
+  : AbortSignal.timeout(20000);
+
 // Streams one Messages API call (stream:true) and returns the same
 // { input, toolUseId } shape as the non-streamed call, calling onPartial with
 // parsePartialToolInput's output each time more tool input arrives.
-async function streamClaudeToolCall(requestBody, onPartial) {
+async function streamClaudeToolCall(requestBody, onPartial, abortSignal) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -1128,7 +1133,7 @@ async function streamClaudeToolCall(requestBody, onPartial) {
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json'
     },
-    signal: AbortSignal.timeout(20000),
+    signal: anthropicSignal(abortSignal),
     // eager_input_streaming turns off the API's per-parameter buffering, so
     // place_id arrives as soon as it's generated instead of after the whole
     // key/value is done (measured: ~2.7s -> first byte otherwise). The trade
@@ -1213,7 +1218,7 @@ function formatCandidatesForPrompt(candidates) {
   ).join('\n');
 }
 
-async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial) {
+async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, sharing, personalizationText, dietaryRestrictions, dish }, perfCounters, onPartial, abortSignal) {
   // Static instructions live in the system prompt so the per-request user
   // turn only carries what varies, and tools + system form a stable prefix.
   // One candidate = the instant path in /api/recommend already chose it.
@@ -1243,6 +1248,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   // non-streamed call, which gets one retry on a transient fault.
   let calls = 0;
   async function callClaude(extraMessages) {
+    abortSignal?.throwIfAborted(); // client left: don't pay for an answer nobody sees
     const requestBody = {
       model: CLAUDE_HAIKU_MODEL,
       max_tokens: 1024,
@@ -1257,8 +1263,8 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     if (onPartial && !extraMessages) {
       calls++;
       if (perfCounters) perfCounters.claudeCalls++;
-      try { return await streamClaudeToolCall(requestBody, onPartial); } catch (err) {
-        if (err.permanent) throw err;
+      try { return await streamClaudeToolCall(requestBody, onPartial, abortSignal); } catch (err) {
+        if (err.permanent || abortSignal?.aborted) throw err;
         lastErr = err;
       }
     }
@@ -1266,6 +1272,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
       if (lastErr) {
         if (calls >= 3) throw lastErr;
         await new Promise(r => setTimeout(r, lastErr.retryAfterMs || 500));
+        abortSignal?.throwIfAborted();
       }
       calls++;
       if (perfCounters) perfCounters.claudeCalls++;
@@ -1277,7 +1284,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
             'anthropic-version': '2023-06-01',
             'content-type': 'application/json'
           },
-          signal: AbortSignal.timeout(20000),
+          signal: anthropicSignal(abortSignal),
           body: JSON.stringify(requestBody)
         });
         // HTML error pages (proxies, outages) must become a retryable error, not a JSON throw.
@@ -1289,7 +1296,7 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
         if (!toolUse) throw new Error('Claude did not return a structured recommendation.');
         return { input: toolUse.input, toolUseId: toolUse.id };
       } catch (err) {
-        if (err.permanent || lastErr) throw err; // second failure in this call: give up
+        if (err.permanent || lastErr || abortSignal?.aborted) throw err; // second failure in this call, or client gone: give up
         lastErr = err;
       }
     }
@@ -1432,7 +1439,11 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
   // exact same validation + repair path as the JSON response, and may even
   // name a different restaurant if the repair retry picked another one.
   const wantsStream = (req.get('accept') || '').includes('text/event-stream');
+  // Aborted when the client disconnects before we finish answering.
+  const clientGone = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) clientGone.abort(); });
   const send = (event, data) => {
+    if (clientGone.signal.aborted) return;
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     // compression() buffers until flushed; without this nothing reaches the
     // client until the response ends, which defeats the point.
@@ -1517,7 +1528,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
       personalizationText,
       dietaryRestrictions,
       dish: dishCraving
-    }, perfCounters, onPartial);
+    }, perfCounters, onPartial, clientGone.signal);
     t.mark('claude');
     const pick = pool.find(r => r.id === place_id) || pool[0];
 
@@ -1547,6 +1558,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
       res.json(payload);
     }
   } catch (err) {
+    if (clientGone.signal.aborted) return; // client left; nothing to log or send
     console.error('Recommendation failed:', err);
     const quota = err.code === GOOGLE_QUOTA_ERROR.code;
     const body = quota ? GOOGLE_QUOTA_ERROR : { error: "Couldn't generate a recommendation right now. Try again in a moment." };
