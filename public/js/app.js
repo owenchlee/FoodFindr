@@ -560,6 +560,8 @@ function onAuthenticated(user) {
     loadBadges();
     loadLeaderboard();
     loadGroups();
+    // Guest searches never recorded the area; a (cached, cheap) re-search now does.
+    scheduleSearch({ immediate: true });
   }
 }
 
@@ -1151,6 +1153,7 @@ async function submitJoinGroup() {
     input.value = '';
     status.hidden = true;
     await loadGroups();
+    loadLeaderboard();
   } catch (err) {
     status.textContent = "Couldn't reach the server. Check your connection and try again.";
     status.className = 'visit-status visit-status--error';
@@ -1163,6 +1166,7 @@ async function leaveGroupClick(groupId) {
     await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
     if (activeGroupId === groupId) setActiveGroup(null);
     await loadGroups();
+    loadLeaderboard();
   } catch (err) {
     // A failed leave just means the group is still in the list; the user can retry.
   }
@@ -1996,9 +2000,13 @@ async function submitPreferences() {
       return;
     }
 
+    // The server folds restrictions into the Places query, so refetch if they changed.
+    const restrictionsChanged = JSON.stringify(((preferences && preferences.dietaryRestrictions) || []).slice().sort()) !==
+      JSON.stringify((data.preferences.dietaryRestrictions || []).slice().sort());
     preferences = data.preferences;
     status.hidden = true;
     document.getElementById('prefs-dialog').close();
+    if (restrictionsChanged) scheduleSearch({ immediate: true });
   } catch (err) {
     status.textContent = "Couldn't reach the server. Check your connection and try again.";
     status.className = 'visit-status visit-status--error';
