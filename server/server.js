@@ -1106,6 +1106,17 @@ function parsePartialToolInput(src) {
   return { values, partial };
 }
 
+// 400/401 and other non-429 4xx will fail the same way again; everything else is worth one more try.
+function anthropicError(e, response) {
+  const err = new Error(`Anthropic API error: ${e.type}: ${e.message}`);
+  const status = response ? response.status : 0;
+  err.permanent = ['invalid_request_error', 'authentication_error', 'permission_error', 'not_found_error'].includes(e.type) ||
+    (status >= 400 && status < 500 && status !== 429);
+  const ra = response && Number(response.headers.get('retry-after'));
+  err.retryAfterMs = ra > 0 ? Math.min(ra * 1000, 2000) : 500;
+  return err;
+}
+
 // Streams one Messages API call (stream:true) and returns the same
 // { input, toolUseId } shape as the non-streamed call, calling onPartial with
 // parsePartialToolInput's output each time more tool input arrives.
@@ -1136,7 +1147,7 @@ async function streamClaudeToolCall(requestBody, onPartial) {
   if (!response.ok || !contentType.includes('text/event-stream')) {
     const data = await response.json().catch(() => ({}));
     const e = data.error || { type: `http_${response.status}`, message: 'unexpected response' };
-    throw new Error(`Anthropic API error: ${e.type}: ${e.message}`);
+    throw anthropicError(e, response);
   }
 
   const decoder = new TextDecoder();
@@ -1149,7 +1160,7 @@ async function streamClaudeToolCall(requestBody, onPartial) {
   while (!complete) {
     const { value, done } = await reader.read();
     if (done) break;
-    buffered += decoder.decode(value, { stream: true });
+    buffered = (buffered + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n');
     let sep;
     while ((sep = buffered.indexOf('\n\n')) !== -1) {
       const rawEvent = buffered.slice(0, sep);
@@ -1158,7 +1169,7 @@ async function streamClaudeToolCall(requestBody, onPartial) {
       if (!dataLine) continue;
       const event = JSON.parse(dataLine.slice(5).trim());
       if (event.type === 'error') {
-        throw new Error(`Anthropic API error: ${event.error.type}: ${event.error.message}`);
+        throw anthropicError(event.error);
       }
       if (event.type === 'message_delta' && event.delta && event.delta.stop_reason) {
         stopReason = event.delta.stop_reason;
@@ -1166,7 +1177,7 @@ async function streamClaudeToolCall(requestBody, onPartial) {
         toolUseId = event.content_block.id;
       } else if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
         json += event.delta.partial_json;
-        if (onPartial) onPartial(parsePartialToolInput(json));
+        if (onPartial) { try { onPartial(parsePartialToolInput(json)); } catch { /* partial display is best-effort */ } }
         // A fully closed top-level object can't be extended or truncated, so
         // stop here instead of waiting for the trailing stop events.
         if (toolUseId && json.trimEnd().endsWith('}')) {
@@ -1228,8 +1239,10 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   const requireDietaryNote = Boolean(dietaryRestrictions && dietaryRestrictions.length > 0);
   const tool = recommendationToolDef(requireDietaryNote);
 
+  // At most 3 Anthropic calls per request: a failed stream falls back to the
+  // non-streamed call, which gets one retry on a transient fault.
+  let calls = 0;
   async function callClaude(extraMessages) {
-    if (perfCounters) perfCounters.claudeCalls++;
     const requestBody = {
       model: CLAUDE_HAIKU_MODEL,
       max_tokens: 1024,
@@ -1240,31 +1253,46 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
     };
     // Only the first call streams: a repair retry replaces whatever was
     // streamed, so there's nothing useful to show from it early.
-    if (onPartial && !extraMessages) return streamClaudeToolCall(requestBody, onPartial);
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json'
-      },
-      signal: AbortSignal.timeout(20000),
-      body: JSON.stringify(requestBody)
-    });
-
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(`Anthropic API error: ${data.error.type}: ${data.error.message}`);
+    let lastErr;
+    if (onPartial && !extraMessages) {
+      calls++;
+      if (perfCounters) perfCounters.claudeCalls++;
+      try { return await streamClaudeToolCall(requestBody, onPartial); } catch (err) {
+        if (err.permanent) throw err;
+        lastErr = err;
+      }
     }
-
-    const toolUse = data.content && data.content.find(block => block.type === 'tool_use');
-    if (!toolUse) {
-      throw new Error('Claude did not return a structured recommendation.');
+    for (;;) {
+      if (lastErr) {
+        if (calls >= 3) throw lastErr;
+        await new Promise(r => setTimeout(r, lastErr.retryAfterMs || 500));
+      }
+      calls++;
+      if (perfCounters) perfCounters.claudeCalls++;
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json'
+          },
+          signal: AbortSignal.timeout(20000),
+          body: JSON.stringify(requestBody)
+        });
+        // HTML error pages (proxies, outages) must become a retryable error, not a JSON throw.
+        const data = await response.json().catch(() => ({}));
+        if (data.error || !response.ok) {
+          throw anthropicError(data.error || { type: `http_${response.status}`, message: 'unexpected response' }, response);
+        }
+        const toolUse = data.content && data.content.find(block => block.type === 'tool_use');
+        if (!toolUse) throw new Error('Claude did not return a structured recommendation.');
+        return { input: toolUse.input, toolUseId: toolUse.id };
+      } catch (err) {
+        if (err.permanent || lastErr) throw err; // second failure in this call: give up
+        lastErr = err;
+      }
     }
-
-    return { input: toolUse.input, toolUseId: toolUse.id };
   }
 
   // strict:true plus the required dietary_note field should make malformed or
