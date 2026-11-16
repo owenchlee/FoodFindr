@@ -577,16 +577,24 @@ let activeBackgroundFills = 0;
 
 // Shared by both /api/restaurants and /api/restaurants/rest so the two routes
 // can't compute the search's identity (and therefore cache key) differently.
+// Out-of-range or non-finite coordinates become NaN so callers' existing 400 check rejects them.
+function parseCoord(value, limit) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : NaN;
+}
+
 function resolveSearchParams(req) {
-  const lat = parseFloat(req.query.lat);
-  const lng = parseFloat(req.query.lng);
+  const lat = parseCoord(req.query.lat, 90);
+  const lng = parseCoord(req.query.lng, 180);
   // Repeated or bracketed params arrive as arrays/objects; treat them as absent.
   const str = v => (typeof v === 'string' ? v : undefined);
-  const cuisine = str(req.query.cuisine);
-  const maxDistance = str(req.query.maxDistance);
+  const cuisine = str(req.query.cuisine) && req.query.cuisine.trim().slice(0, 60);
+  // Missing, non-numeric, zero or negative distance falls back to the 3 mi default.
+  const parsedMiles = Number(str(req.query.maxDistance));
+  const maxDistance = Number.isFinite(parsedMiles) && parsedMiles > 0 ? req.query.maxDistance : undefined;
   const groupId = str(req.query.groupId);
   const dish = typeof req.query.dish === 'string' ? req.query.dish.trim().slice(0, 60) : '';
-  const distanceMiles = maxDistance ? Number(maxDistance) : 3;
+  const distanceMiles = maxDistance ? parsedMiles : 3;
   const radiusMeters = Math.min(distanceMiles * 1609.34, 50000);
 
   // When searching as a group, fold the WHOLE group's dietary restrictions
@@ -747,8 +755,8 @@ app.get('/api/progress', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Server is missing GOOGLE_PLACES_SERVER_KEY. Add it to .env.', city: null });
   }
 
-  const lat = parseFloat(req.query.lat);
-  const lng = parseFloat(req.query.lng);
+  const lat = parseCoord(req.query.lat, 90);
+  const lng = parseCoord(req.query.lng, 180);
 
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     return res.status(400).json({ error: 'lat and lng are required.', city: null });
@@ -1556,7 +1564,8 @@ app.post('/api/visits', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Rating must be a whole number from 1 to 5.' });
   }
 
-  const cleanFlavorTags = Array.isArray(flavorTags) ? flavorTags.filter(t => FLAVOR_TAGS.includes(t)) : [];
+  const cleanFlavorTags = Array.isArray(flavorTags) ? [...new Set(flavorTags.filter(t => FLAVOR_TAGS.includes(t)))] : [];
+  const cleanDish = typeof dish === 'string' ? dish.trim().slice(0, 200) : '';
 
   const idemKey = typeof req.body.idempotencyKey === 'string' && req.body.idempotencyKey.length <= 100
     ? `${req.user.id}:${req.body.idempotencyKey}` : null;
@@ -1567,8 +1576,8 @@ app.post('/api/visits', requireAuth, (req, res) => {
   try {
     const visit = insertVisit({
       userId: req.user.id,
-      restaurantName: restaurantName.trim(),
-      dish: dish && String(dish).trim() ? String(dish).trim() : null,
+      restaurantName: restaurantName.trim().slice(0, 200),
+      dish: cleanDish || null,
       rating,
       flavorTags: cleanFlavorTags
     });
@@ -1673,6 +1682,12 @@ function isStringArray(value) {
   return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
 
+// trim, cap at 60 chars, drop case-insensitive duplicates, keep first 10
+function cleanPrefList(list) {
+  const seen = new Set();
+  return list.map(x => x.trim().slice(0, 60)).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())).slice(0, 10);
+}
+
 app.get('/api/preferences', requireAuth, (req, res) => {
   try {
     res.json({ preferences: getPreferences(req.user.id) });
@@ -1694,8 +1709,8 @@ app.post('/api/preferences', requireAuth, (req, res) => {
 
   try {
     const preferences = savePreferences(req.user.id, {
-      favoriteCuisines: favoriteCuisines.map(c => c.trim()).filter(Boolean).slice(0, 10),
-      dietaryRestrictions: dietaryRestrictions.map(d => d.trim()).filter(Boolean).slice(0, 10),
+      favoriteCuisines: cleanPrefList(favoriteCuisines),
+      dietaryRestrictions: cleanPrefList(dietaryRestrictions),
       spiceTolerance
     });
     res.json({ preferences });
