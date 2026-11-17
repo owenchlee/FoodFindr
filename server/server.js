@@ -12,7 +12,7 @@ const {
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
-  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData
+  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData, setDisplayName, getUserById
 } = require('./db');
 const {
   SESSION_COOKIE_NAME,
@@ -25,6 +25,7 @@ const {
 const { FLAVOR_TAGS, isValidRecommendation } = require('./lib/validate');
 const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = require('./lib/budget');
 const { shapeAndFilter } = require('./lib/places');
+const { cleanDisplayName, publicDisplayName } = require('./lib/displayName');
 const { sanitizeText, makeKnownPlaces, cleanCandidates } = require('./lib/trust');
 const { pickRandomTopPool, chooseInstantPick: pickInstant } = require('./lib/pick');
 const chooseInstantPick = (restaurants, favs, recent, recentPickIds) => pickInstant(restaurants, favs, recent, id => reviewsCache.get(id), recentPickIds);
@@ -229,7 +230,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const { token } = startSession(result.user.id);
     setSessionCookie(res, token);
-    res.json({ user: { id: result.user.id, email: result.user.email } });
+    res.json({ user: { id: result.user.id, email: result.user.email, displayName: result.user.display_name || null } });
   } catch (err) {
     console.error('Login failed:', err);
     res.status(500).json({ error: 'Could not sign you in right now.' });
@@ -294,7 +295,16 @@ app.delete('/api/account', requireAuth, passwordLimiter, async (req, res) => {
 });
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: { ...req.user, displayName: getUserById(req.user.id).display_name || null } });
+});
+
+app.post('/api/profile', requireAuth, (req, res) => {
+  const displayName = cleanDisplayName(req.body && req.body.displayName);
+  if (!displayName) {
+    return res.status(400).json({ error: 'Pick a name of 1 to 30 characters, without < or >.' });
+  }
+  setDisplayName(req.user.id, displayName);
+  res.json({ displayName });
 });
 
 app.get('/api/account/export', requireAuth, (req, res) => {
@@ -1725,22 +1735,12 @@ app.get('/api/badges', requireAuth, (req, res) => {
   }
 });
 
-// No display_name field exists. Leaderboard rows are limited to people who
-// joined a group with you, so this derives a readable name from the email
-// local-part instead of adding a profile field nobody would maintain.
-function deriveDisplayName(email) {
-  const localPart = email.split('@')[0];
-  const words = localPart.split(/[._+-]+/).filter(Boolean);
-  if (words.length === 0) return email;
-  return words.map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
-}
-
 app.get('/api/leaderboard', requireAuth, (req, res) => {
   try {
     const stats = getLeaderboardStats(req.user.id, req.query.tz);
     const leaderboard = stats.map((row, i) => ({
       rank: i + 1,
-      displayName: deriveDisplayName(row.email),
+      displayName: publicDisplayName(getUserById(row.userId)),
       visitCount: row.visitCount,
       currentStreak: row.currentStreak,
       longestStreak: row.longestStreak,
@@ -1851,7 +1851,7 @@ app.get('/api/groups/:id/members', requireAuth, (req, res) => {
   try {
     const members = getGroupMembers(groupId).map(m => ({
       id: m.id,
-      displayName: deriveDisplayName(m.email),
+      displayName: publicDisplayName(m),
       isYou: m.id === req.user.id
     }));
     res.json({ members });

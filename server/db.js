@@ -61,6 +61,12 @@ if (!visitColumns.some(col => col.name === 'user_id')) {
   db.exec('ALTER TABLE visits ADD COLUMN user_id INTEGER REFERENCES users(id)');
 }
 
+// Nullable: the name friends see. NULL means "not chosen", shown as a neutral fallback.
+const userColumns = db.prepare('PRAGMA table_info(users)').all();
+if (!userColumns.some(col => col.name === 'display_name')) {
+  db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
+}
+
 // `preferences` used to be a single global row enforced by CHECK (id = 1).
 // That shape can't become multi-user in place (SQLite can't drop a CHECK or
 // re-key a table with ALTER TABLE). Detect the old shape once, preserve it
@@ -539,7 +545,7 @@ function getGroupMemberIds(groupId) {
 
 function getGroupMembers(groupId) {
   return db.prepare(`
-    SELECT u.id, u.email FROM users u
+    SELECT u.id, u.email, u.display_name FROM users u
     JOIN group_members gm ON gm.user_id = u.id
     WHERE gm.group_id = ?
   `).all(groupId);
@@ -596,8 +602,12 @@ function getProgress(userId, city) {
   return { city, discovered: discoveredRows.length, visited };
 }
 
+function setDisplayName(userId, name) {
+  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name, userId);
+}
+
 function exportUserData(userId) {
-  const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(userId);
+  const user = db.prepare('SELECT id, email, display_name AS displayName, created_at FROM users WHERE id = ?').get(userId);
   const visits = db.prepare(
     'SELECT id, restaurant_name, dish, rating, flavor_tags, logged_at FROM visits WHERE user_id = ? ORDER BY id'
   ).all(userId).map(v => {
@@ -632,5 +642,5 @@ module.exports = {
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
-  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData
+  getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData, setDisplayName
 };
