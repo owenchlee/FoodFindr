@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { isValidRecommendation } = require('../server/lib/validate');
 
-const candidates = [{ place_id: 'p1', reviews: ['great vegan tacos here'] }, { place_id: 'p2', reviews: [] }];
+const candidates = [{ place_id: 'p1', reviews: ['great vegan tacos here', 'Also mentioned: cheese pizza, shamrock salad, hamachi-free salad, salami sandwich, prosciutto flatbread, anchovies toast, fried oysters, clam chowder, seared scallops, unagi eel bowl, smoked brisket, bbq ribs, gelatin dessert, fried eggs, butter naan, honey glazed carrots, dairy bowl, mac and cheese, peanut butter noodles, butternut squash soup, buffalo cauliflower, oyster mushroom tacos, wheel of falafel, honeydew salad, almond milk latte, gluten-free pasta, vegan cheese pizza, eggplant parmesan-style bake, chicken tacos, mushroom tacos, coconut milk curry.'] }, { place_id: 'p2', reviews: [] }];
 const good = (o = {}) => ({
   place_id: 'p1', dish_suggestion: 'Mushroom tacos', reason: 'Reviewers love the tacos.',
   flavor_tags: ['Spicy', 'Fresh', 'Crispy'], ...o
