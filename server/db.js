@@ -230,12 +230,21 @@ function adoptLegacyData(userId) {
   }
 }
 
-function insertVisit({ userId, restaurantName, dish, rating, flavorTags }) {
+const HOUR_MS = 3600 * 1000;
+// A client-supplied time is trusted only when within the last 72h and at most 5 min ahead; otherwise server time.
+function boundedLoggedAt(value, now = Date.now()) {
+  if (typeof value !== 'string') return new Date(now).toISOString();
+  const t = Date.parse(value);
+  if (Number.isNaN(t) || t < now - 72 * HOUR_MS || t > now + 5 * 60 * 1000) return new Date(now).toISOString();
+  return new Date(t).toISOString();
+}
+
+function insertVisit({ userId, restaurantName, dish, rating, flavorTags, loggedAt }) {
   return db.prepare(`
     INSERT INTO visits (restaurant_name, dish, rating, logged_at, flavor_tags, user_id)
     VALUES (?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).get(restaurantName, dish ?? null, rating, new Date().toISOString(), JSON.stringify(flavorTags || []), userId);
+  `).get(restaurantName, dish ?? null, rating, boundedLoggedAt(loggedAt), JSON.stringify(flavorTags || []), userId);
 }
 
 function deleteVisit(userId, visitId) {
@@ -627,7 +636,7 @@ function exportUserData(userId) {
 module.exports = {
   countUsers, insertUser, getUserByEmail, getUserById, changePasswordKeepingSession,
   createSession, getSessionWithUser, extendSession, deleteSession, adoptLegacyData,
-  insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
+  insertVisit, boundedLoggedAt, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
   getStreaks, getBadges, getLeaderboardStats,
