@@ -1425,6 +1425,22 @@ function applyLocalFilters() {
     ? allRestaurants.filter(r => r.price == null || r.price <= currentFilters.price)
     : allRestaurants.slice();
   renderMarkers(lastFilteredRestaurants);
+  showNoResults(lastFilteredRestaurants.length === 0, allRestaurants.length > 0);
+}
+
+// Reuses the no-location empty-state card; a separate element so it never
+// touches the location/error banners.
+function showNoResults(empty, hiddenByPrice) {
+  const el = document.getElementById('no-results-state');
+  if (empty) {
+    document.getElementById('no-results-title').textContent = hiddenByPrice
+      ? 'No restaurants match your price filter'
+      : 'No restaurants found nearby';
+    document.getElementById('no-results-hint').textContent = hiddenByPrice
+      ? 'Try a higher price range to see more places.'
+      : 'Try a wider distance, a different cuisine, or search another area.';
+  }
+  el.hidden = !empty;
 }
 
 // Client-side result cache for stale-while-revalidate (see loadRestaurants).

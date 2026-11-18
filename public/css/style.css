@@ -1403,7 +1403,8 @@ select.visit-input option {
 .empty-state[hidden],
 .rail-account[hidden],
 .auth-gate[hidden],
-.no-location-state[hidden] {
+.no-location-state[hidden],
+#no-results-state[hidden] {
   display: none;
 }
 .no-location-title {
