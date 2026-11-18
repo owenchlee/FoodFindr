@@ -55,3 +55,11 @@ test('chooseInstantPick avoids just-shown places but still answers with one cand
   assert.ok(share(() => chooseInstantPick(rs, [], [], () => null, ['id1']).id === 'id1') < 0.05);
   assert.strictEqual(chooseInstantPick([mk(1, 4.5)], [], [], () => null, ['id1']).id, 'id1');
 });
+
+test('chooseInstantPick boosts family labels, ignores empty labels, and matches visits loosely', () => {
+  const pair = (a, b) => [mk(0, 4.5, a), mk(1, 4.5, b)];
+  const rate = (rs, favs, recent, idx) => share(() => chooseInstantPick(rs, favs, recent).id === `id${idx}`, 3000);
+  assert.ok(rate(pair({ cuisine: 'Sushi' }, { cuisine: 'Korean' }), ['Japanese'], [], 0) > 0.6);
+  assert.ok(rate(pair({ cuisine: '' }, { cuisine: 'Korean' }), ['Thai'], [], 0) < 0.6);
+  assert.ok(rate(pair({ name: 'Café Luna' }, { name: 'Other' }), [], ['cafe  luna'], 0) < 0.3);
+});

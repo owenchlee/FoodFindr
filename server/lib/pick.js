@@ -1,4 +1,14 @@
 const { shrunkRating } = require('./rating');
+const normName = require('./normName');
+
+// Chips are coarser than card labels: a chip also covers these labels.
+const CUISINE_FAMILY = {
+  japanese: ['sushi', 'ramen'],
+  italian: ['pizza'],
+  chinese: ['dim sum'],
+  american: ['burgers', 'bbq', 'steakhouse', 'southern'],
+  mediterranean: ['greek', 'middle eastern'],
+};
 
 // "Surprise Me" should actually surprise: asking Claude to pick the single
 // "best" restaurant from the same top-8-by-rating list every time reliably
@@ -31,7 +41,7 @@ function pickRandomTopPool(restaurants, poolSize) {
 function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCachedReviews = () => null, recentPickIds = []) {
   const justPicked = new Set(recentPickIds);
   const favorites = favoriteCuisines.map(c => c.toLowerCase());
-  const recent = new Set(recentNames.map(n => n.toLowerCase()));
+  const recent = new Set(recentNames.map(normName));
   const top = restaurants
     .slice()
     .sort((a, b) => shrunkRating(b) - shrunkRating(a))
@@ -39,8 +49,8 @@ function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCached
   const weights = top.map(r => {
     let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.3) ** 2;
     const cuisine = (r.cuisine || '').toLowerCase();
-    if (favorites.some(f => cuisine.includes(f) || f.includes(cuisine))) w *= 2.5;
-    if (recent.has((r.name || '').toLowerCase())) w *= 0.15;
+    if (cuisine && favorites.some(f => cuisine.includes(f) || f.includes(cuisine) || (CUISINE_FAMILY[f] || []).includes(cuisine))) w *= 2.5;
+    if (recent.has(normName(r.name))) w *= 0.15;
     const cached = getCachedReviews(r.id);
     if (cached && cached.reviews.join(' ').length < 200) w *= 0.1;
     // Shown on the last few taps: strongly avoid, but stay possible so a

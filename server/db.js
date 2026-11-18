@@ -585,8 +585,7 @@ visitNamesStmt.setReturnArrays(true);
 const discoveredNamesStmt = db.prepare('SELECT name FROM discovered_restaurants WHERE user_id = ? AND city = ?');
 discoveredNamesStmt.setReturnArrays(true);
 
-// Same-named places (a chain) count once as visited; case, spacing and curly quotes are ignored.
-const normName = s => String(s || '').toLowerCase().replace(/[‘’ʼ`]/g, "'").replace(/\s+/g, ' ').trim();
+const normName = require('./lib/normName'); // a chain's same-named places count once as visited
 
 function getProgress(userId, city) {
   const discoveredRows = discoveredNamesStmt.all(userId, city);
