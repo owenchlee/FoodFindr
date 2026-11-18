@@ -952,8 +952,23 @@ function groupPersonalizationInstruction(members) {
     );
   }
 
-  const historyLines = members
-    .flatMap(m => (m.visitHighlights || []).map(v => `${v.restaurant_name} (rated ${v.rating}/5${v.dish ? `, ordered: ${v.dish}` : ''})`))
+  // Strictest wins, like dietary restrictions: the mildest tolerance in the group.
+  const spiceOrder = ['mild', 'medium', 'hot'];
+  const spiceLevels = members.filter(m => m.preferences).map(m => m.preferences.spiceTolerance);
+  if (spiceLevels.length > 0) {
+    const mildest = spiceLevels.reduce((a, b) => (spiceOrder.indexOf(b) < spiceOrder.indexOf(a) ? b : a));
+    parts.push(
+      `The group's spice tolerance is: ${mildest}, the mildest of any member's, so pick a dish everyone can handle ` +
+      `with regard to spice.`
+    );
+  }
+
+  // Round-robin (everyone's newest visit first) so the cap never drops later members.
+  const lists = members.map(m => m.visitHighlights || []);
+  const rounds = Math.max(0, ...lists.map(l => l.length));
+  const historyLines = Array.from({ length: rounds }, (_, i) => lists.map(l => l[i]).filter(Boolean))
+    .flat()
+    .map(v => `${v.restaurant_name} (rated ${v.rating}/5${v.dish ? `, ordered: ${v.dish}` : ''})`)
     .slice(0, 12);
   if (historyLines.length > 0) {
     parts.push(`Recent dining history across the group: ${historyLines.join('; ')}. Use this to gauge what the group tends to like.`);
