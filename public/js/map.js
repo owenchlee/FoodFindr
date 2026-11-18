@@ -116,12 +116,33 @@ function showRestaurantInfo(restaurant) {
   if (restaurant.cuisine) metaParts.push(restaurant.cuisine);
   if (restaurant.price) metaParts.push('$'.repeat(restaurant.price));
   if (restaurant.rating) metaParts.push(`★ ${restaurant.rating}`);
+  if (restaurant.ratingCount != null) metaParts.push(`${restaurant.ratingCount.toLocaleString()} reviews`);
+  if (restaurant.distance != null) metaParts.push(`${restaurant.distance} mi`);
   if (metaParts.length > 0) {
     const meta = document.createElement('div');
     meta.className = 'map-info-meta';
     meta.textContent = metaParts.join(' · ');
     div.appendChild(meta);
   }
+
+  if (restaurant.openNow === true || restaurant.openNow === false) {
+    div.append(' '); // keeps innerText/textContent of adjacent blocks from running together
+    const status = document.createElement('div');
+    status.className = 'map-info-meta';
+    status.style.fontWeight = '600';
+    status.style.color = restaurant.openNow ? '#1a7f37' : '#c62828';
+    status.textContent = restaurant.openNow ? 'Open now' : 'Closed now';
+    div.appendChild(status);
+  }
+
+  div.append(' ');
+  const link = document.createElement('a');
+  link.className = 'map-info-link';
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'Directions in Google Maps';
+  link.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.lat},${restaurant.lng}`)}&query_place_id=${encodeURIComponent(restaurant.id)}`;
+  div.appendChild(link);
 
   infoWindow.setContent(div);
   infoWindow.setPosition({ lat: restaurant.lat, lng: restaurant.lng });
@@ -156,6 +177,7 @@ function renderMarkers(restaurants) {
     const existing = markersById[restaurant.id];
     if (existing) {
       existing.ffRestaurant = restaurant; // same place, possibly fresher data
+      existing.title = markerTitle(restaurant);
       return;
     }
     let marker = markerPool.pop();
@@ -184,7 +206,7 @@ function renderMarkers(restaurants) {
 }
 
 function markerTitle(restaurant) {
-  return `${restaurant.name} · ${'$'.repeat(restaurant.price)}`;
+  return restaurant.price ? `${restaurant.name} · ${'$'.repeat(restaurant.price)}` : restaurant.name;
 }
 
 // Restyles just the previous and the new pick, instead of rebuilding the
