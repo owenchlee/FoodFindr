@@ -47,6 +47,7 @@ function perfLog(label, t0) {
 // per settled interaction anyway).
 let searchSeq = 0;
 let searchTimer = null;
+let lastChangeAt = 0;
 let searchAbort = null;
 // Resolves once the current search's background phase-2 fetch (if any)
 // finishes - awaited by getRecommendation so a Surprise Me click doesn't
@@ -62,7 +63,12 @@ function scheduleSearch({ immediate = false } = {}) {
   // queues itself via pendingRecommendation instead of racing the old results
   // (see the dish input's keydown handler in init()).
   restaurantsLoading = true;
-  if (immediate) { runSearch(); return; }
+  // Leading edge: the first change after a quiet window starts at once; only
+  // follow-ups inside the window (keyboard arrowing through the select) debounce.
+  const now = Date.now();
+  const quiet = now - lastChangeAt > 300;
+  lastChangeAt = now;
+  if (immediate || quiet) { runSearch(); return; }
   searchTimer = setTimeout(runSearch, 300);
 }
 
