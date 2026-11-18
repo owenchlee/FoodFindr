@@ -13,6 +13,25 @@ async function readApiJson(response) {
   return data;
 }
 
+// A 401 from our API while signed in means the session was revoked or expired: go back to sign-in.
+// Guests and the sign-in forms have no currentUser, so they are untouched; form contents stay as they are.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const response = await nativeFetch(...args);
+  const url = String(args[0] && args[0].url || args[0]);
+  if (response.status === 401 && currentUser && url.startsWith('/api/') && !url.startsWith('/api/auth/logout')) {
+    currentUser = null;
+    try { localStorage.removeItem('ff-last-user'); } catch (e) { /* ignore */ }
+    document.getElementById('rail-account').hidden = true;
+    document.getElementById('rail-account-guest').hidden = false;
+    showAuthGate();
+    const status = document.getElementById('auth-status');
+    status.textContent = 'You were signed out, sign in again.';
+    status.hidden = false;
+  }
+  return response;
+};
+
 let currentFilters = { price: 2, cuisine: '', maxDistance: 3, groupSize: 1, sharing: false, dish: '' };
 let allRestaurants = [];
 let lastFilteredRestaurants = [];
