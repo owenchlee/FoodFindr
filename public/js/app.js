@@ -1535,6 +1535,7 @@ async function loadRestaurants(seq, signal) {
     allRestaurants = Array.isArray(data.restaurants) ? data.restaurants : [];
     if (response.ok) writeSearchCache(cacheKey, allRestaurants);
     applyLocalFilters();
+    fitToResults(lastFilteredRestaurants, userLocation);
     if (!pendingRecommendation) hideTicket(); // a queued Surprise Me keeps its skeleton card
     loadProgress();
     perfLog('search phase1', t0);
@@ -1564,6 +1565,7 @@ async function loadRestaurants(seq, signal) {
             allRestaurants = more.restaurants;
             writeSearchCache(cacheKey, allRestaurants);
             applyLocalFilters();
+            if (!pickedMarkerId) fitToResults(lastFilteredRestaurants, userLocation); // do not yank the map off a shown pick
             perfLog('search phase2', t0);
           }
         })
