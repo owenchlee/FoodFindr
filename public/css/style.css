@@ -168,7 +168,8 @@ html, body {
   top: 0;
   left: 0;
   z-index: 9;
-  width: 56px;
+  width: calc(56px + env(safe-area-inset-left));
+  padding-left: env(safe-area-inset-left);
   height: 100vh;
   height: 100dvh;
   background: var(--color-char);
@@ -190,14 +191,14 @@ html, body {
      top bar's search pill wherever the two overlap, instead of the
      slide-out menu correctly overlaying it while open. */
   z-index: 11;
-  width: 210px;
+  width: calc(210px + env(safe-area-inset-left));
   box-shadow: var(--shadow-lg);
 }
 
 .left-column {
   position: fixed;
   top: calc(var(--top-bar-height) + var(--space-4));
-  left: calc(56px + var(--space-4));
+  left: calc(56px + var(--space-4) + env(safe-area-inset-left));
   z-index: 5;
   width: 300px;
   max-height: calc(100dvh - var(--top-bar-height) - var(--space-4) * 2);
@@ -219,7 +220,7 @@ html, body {
    under the expanded side rail instead of letting the rail's higher z-index
    (11, see .side-rail.expanded above) cover it. */
 .side-rail.expanded ~ .left-column {
-  left: calc(210px + var(--space-4));
+  left: calc(210px + var(--space-4) + env(safe-area-inset-left));
 }
 
 /* Same treatment for the filters/log-review drawer (.tab-drawer, z-index 8,
