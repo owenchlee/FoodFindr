@@ -577,6 +577,13 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
   const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
   url.searchParams.set('address', address);
   url.searchParams.set('key', PLACES_SERVER_KEY);
+  // Optional search-location bias: a soft ~55 km box so local namesakes rank first.
+  const biasLat = parseCoord(req.query.lat, 90);
+  const biasLng = parseCoord(req.query.lng, 180);
+  if (Number.isFinite(biasLat) && Number.isFinite(biasLng)) {
+    const d = 0.5;
+    url.searchParams.set('bounds', `${biasLat - d},${biasLng - d}|${biasLat + d},${biasLng + d}`);
+  }
 
   try {
     const data = await googleGetJson(url);
