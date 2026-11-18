@@ -659,7 +659,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   z-index: 8;
   width: 360px;
   max-width: calc(100vw - 56px);
-  height: calc(100dvh - var(--top-bar-height));
+  height: calc(100dvh - var(--top-bar-height) - env(safe-area-inset-bottom));
   overflow-y: auto;
   background: var(--color-char-2);
   color: var(--color-paper);
@@ -2180,6 +2180,7 @@ select.visit-input option {
 /* Landscape phones / large text: keep rail, headers and account card on screen. */
 @media (max-height: 420px) {
   .side-rail { gap: var(--space-1); padding-top: calc(var(--space-2) + env(safe-area-inset-top)); }
+  .group-form-block { margin-top: var(--space-3); padding-top: var(--space-3); }
 }
 .more-account-text { min-width: 0; }
 .drawer-title { min-width: 0; overflow-wrap: anywhere; }
