@@ -1838,6 +1838,8 @@ select.visit-input option {
   .tab-bar-btn {
     position: relative;
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: flex;
     flex-direction: column;
     align-items: center;
