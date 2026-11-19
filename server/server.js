@@ -21,6 +21,7 @@ const {
   startSession, setSessionCookie, clearSessionCookie, endSession,
   parseCookies, requireAuth, optionalAuth
 } = require('./auth');
+const { isWeakPassword, WEAK_MESSAGE } = require('./lib/weak-password');
 
 const { FLAVOR_TAGS, isValidRecommendation } = require('./lib/validate');
 const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = require('./lib/budget');
@@ -198,6 +199,9 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
   if (!isValidPassword(password)) {
     return res.status(400).json({ error: 'Password must be 8-128 characters.' });
   }
+  if (isWeakPassword(password, email)) {
+    return res.status(400).json({ error: WEAK_MESSAGE });
+  }
 
   try {
     const result = await signup(email, password);
@@ -258,6 +262,9 @@ app.post('/api/auth/password', requireAuth, passwordLimiter, async (req, res) =>
   }
   if (!isValidPassword(newPassword)) {
     return res.status(400).json({ error: 'Password must be 8-128 characters.' });
+  }
+  if (isWeakPassword(newPassword, req.user.email)) {
+    return res.status(400).json({ error: WEAK_MESSAGE });
   }
 
   try {
