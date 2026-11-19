@@ -69,7 +69,22 @@ function scheduleSearch({ immediate = false } = {}) {
 // Coming back to the app with a search still "in flight": iOS suspends the
 // web view in the background and the request may never settle, so start it
 // over rather than wait out the deadline.
+const STALE_AFTER_MS = 10 * 60 * 1000; // away longer than this: GPS spot and open_now are stale
+let hiddenAt = 0;
+let lastSearchFailed = false;
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > STALE_AFTER_MS && userLocation) {
+    hiddenAt = 0;
+    // Refresh position (GPS only) and results; a Surprise Me tapped meanwhile
+    // queues behind restaurantsLoading instead of using stale candidates.
+    restaurantsLoading = true;
+    if (usingCustomLocation) scheduleSearch({ immediate: true });
+    else requestUserLocation();
+    loadStreaks();
+    loadBadges();
+    return;
+  }
   if (document.visibilityState === 'visible' && restaurantsLoading && searchTimer === null &&
       Date.now() - searchStartedAt > 3000) {
     runSearch();
@@ -201,7 +216,10 @@ function useLastLocationOrShowEmptyState(reason) {
 function updateOfflineBanner() {
   document.getElementById('offline-banner').hidden = navigator.onLine;
 }
-window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('online', () => {
+  updateOfflineBanner();
+  if (lastSearchFailed && userLocation) scheduleSearch({ immediate: true });
+});
 window.addEventListener('offline', updateOfflineBanner);
 updateOfflineBanner();
 
@@ -1529,7 +1547,10 @@ async function loadRestaurants(seq, signal) {
 
     if (!response.ok) {
       showLocationBanner(data.error || "Couldn't load restaurants nearby. Try again in a moment.");
+    } else if (lastSearchFailed) {
+      document.getElementById('location-banner').hidden = true; // recovered: drop the stale error
     }
+    lastSearchFailed = !response.ok;
 
     if (response.ok && !Array.isArray(data.restaurants)) showLocationBanner(apiErrorFallback(500));
     allRestaurants = Array.isArray(data.restaurants) ? data.restaurants : [];
@@ -1579,6 +1600,7 @@ async function loadRestaurants(seq, signal) {
         ? 'Finding restaurants took too long. Try again in a moment.'
         : "Couldn't reach the server. Check your connection and try again.";
       showLocationBanner(message);
+      lastSearchFailed = true;
       restaurantsLoading = false;
       cancelPendingRecommendation(message);
       if (isInitialLoad) hideLoading(); else hideRefining();
