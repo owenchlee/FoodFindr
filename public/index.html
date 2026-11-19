@@ -565,7 +565,24 @@ function bootstrapMap() {
     return;
   }
 
+  const MSG = "The map isn't available right now. You can still tap Surprise Me.";
+  let notice;
+  const showNotice = () => {
+    if (notice) return;
+    notice = document.createElement('div');
+    notice.className = 'map-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = MSG;
+    document.getElementById('map').parentNode.appendChild(notice);
+  };
+  // Lie-fi: the script neither loads nor errors. Cleared below if Maps arrives late.
+  const slowTimer = setTimeout(showNotice, 10000);
+  // Google calls this when it rejects the key or billing (map greys out).
+  window.gm_authFailure = showNotice;
+
   window.onGoogleMapsReady = () => {
+    clearTimeout(slowTimer);
+    if (notice) { notice.remove(); notice = null; }
     initMap(defaultCenter, config.mapId);
     window.dispatchEvent(new Event('maps-loaded'));
   };
@@ -576,8 +593,9 @@ function bootstrapMap() {
   script.src = config.mapsScriptUrl ||
     `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsBrowserKey)}&libraries=marker&v=weekly&loading=async&callback=onGoogleMapsReady`;
   script.onerror = () => {
+    clearTimeout(slowTimer);
     document.getElementById('map').innerHTML =
-      '<div class="map-placeholder">Couldn\'t load Google Maps. Check your API key and internet connection.</div>';
+      `<div class="map-placeholder" role="status">${MSG}</div>`;
     window.dispatchEvent(new Event('maps-loaded'));
   };
   document.head.appendChild(script);
