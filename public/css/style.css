@@ -12,6 +12,7 @@
   --color-ink: #241c18;
 
   --color-hairline: rgba(217, 166, 26, 0.2);
+  --color-control-border: #766b61; /* 3:1 on the dark panels (WCAG 1.4.11) */
 
   --font-display: 'Fraunces', Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
   --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -441,7 +442,7 @@ html, body {
   padding: var(--space-2) 0;
   background: rgba(242, 234, 225, 0.06);
   color: var(--color-paper-dim);
-  border: 1px solid rgba(242, 234, 225, 0.14);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 150ms ease, color 150ms ease, border-color 150ms ease, scale 160ms var(--ease-ios);
@@ -467,7 +468,7 @@ select.cuisine-select {
   font-size: 0.9rem;
   background: rgba(242, 234, 225, 0.06);
   color: var(--color-paper);
-  border: 1px solid rgba(242, 234, 225, 0.14);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
@@ -497,7 +498,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font-size: 1rem;
   background: rgba(242, 234, 225, 0.06);
   color: var(--color-paper);
-  border: 1px solid rgba(242, 234, 225, 0.14);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -886,7 +887,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font-size: 0.9rem;
   background: rgba(242, 234, 225, 0.06);
   color: var(--color-paper);
-  border: 1px solid rgba(242, 234, 225, 0.14);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
 }
@@ -1306,7 +1307,7 @@ select.visit-input option {
   font-size: 0.82rem;
   background: rgba(242, 234, 225, 0.06);
   color: var(--color-paper-dim);
-  border: 1px solid rgba(242, 234, 225, 0.14);
+  border: 1px solid var(--color-control-border);
   border-radius: 999px;
   padding: var(--space-1) var(--space-3);
   cursor: pointer;
