@@ -10,7 +10,7 @@ const {
   insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
-  getStreaks, getBadges, getLeaderboardStats,
+  getStreaks, getBadges, getLeaderboardStats, getLeaderboardOptIn, setLeaderboardOptIn,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
   getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData
 } = require('./db');
@@ -1737,7 +1737,7 @@ function deriveDisplayName(email) {
 
 app.get('/api/leaderboard', requireAuth, (req, res) => {
   try {
-    const stats = getLeaderboardStats(req.user.id, req.query.tz);
+    const stats = getLeaderboardStats(req.user.id, req.query.tz, { optInOnly: true });
     const leaderboard = stats.map((row, i) => ({
       rank: i + 1,
       displayName: deriveDisplayName(row.email),
@@ -1746,10 +1746,21 @@ app.get('/api/leaderboard', requireAuth, (req, res) => {
       longestStreak: row.longestStreak,
       isYou: row.userId === req.user.id
     }));
-    res.json({ leaderboard });
+    res.json({ leaderboard, optIn: getLeaderboardOptIn(req.user.id) });
   } catch (err) {
     console.error('Failed to load leaderboard:', err);
     res.status(500).json({ error: 'Could not load the leaderboard right now.', leaderboard: [] });
+  }
+});
+
+app.post('/api/leaderboard/optin', requireAuth, (req, res) => {
+  if (typeof (req.body || {}).optIn !== 'boolean') return res.status(400).json({ error: 'optIn must be true or false.' });
+  try {
+    setLeaderboardOptIn(req.user.id, req.body.optIn);
+    res.json({ optIn: req.body.optIn });
+  } catch (err) {
+    console.error('Failed to save leaderboard opt-in:', err);
+    res.status(500).json({ error: 'Could not save that right now.' });
   }
 });
 

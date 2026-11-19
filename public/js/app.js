@@ -1132,6 +1132,7 @@ async function loadLeaderboard() {
     if (!response.ok) return;
     const data = await readApiJson(response);
     const leaderboard = data.leaderboard || [];
+    document.getElementById('leaderboard-optin').checked = !!data.optIn;
 
     list.replaceChildren();
     leaderboard.forEach(row => list.appendChild(leaderboardRowElement(row)));
@@ -1142,6 +1143,21 @@ async function loadLeaderboard() {
     // Leave whatever leaderboard is already rendered from the last successful load.
   }
 }
+
+document.getElementById('leaderboard-optin').addEventListener('change', async (e) => {
+  try {
+    const response = await fetch('/api/leaderboard/optin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ optIn: e.target.checked })
+    });
+    if (!response.ok) throw new Error('save failed');
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    return;
+  }
+  loadLeaderboard();
+});
 
 function groupItemElement(group) {
   const li = document.createElement('li');
