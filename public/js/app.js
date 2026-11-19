@@ -1532,7 +1532,8 @@ async function loadRestaurants(seq, signal) {
     }
 
     if (response.ok && !Array.isArray(data.restaurants)) showLocationBanner(apiErrorFallback(500));
-    allRestaurants = Array.isArray(data.restaurants) ? data.restaurants : [];
+    // A failed refresh keeps the restaurants already on the map (the banner explains).
+    if (response.ok) allRestaurants = Array.isArray(data.restaurants) ? data.restaurants : [];
     if (response.ok) writeSearchCache(cacheKey, allRestaurants);
     applyLocalFilters();
     if (!pendingRecommendation) hideTicket(); // a queued Surprise Me keeps its skeleton card
