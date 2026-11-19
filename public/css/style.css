@@ -729,6 +729,7 @@ input[type="range"] { flex: 1; accent-color: var(--color-turmeric); }
   font-weight: 600;
   color: var(--color-paper);
   margin: var(--space-3) 0 var(--space-2);
+  overflow-wrap: anywhere;
 }
 
 .progress-bar-track {
@@ -937,6 +938,7 @@ select.visit-input option {
   display: block;
   width: 100%;
   text-align: left;
+  overflow-wrap: anywhere;
   font-family: var(--font-body);
   font-size: 0.85rem;
   color: var(--color-paper);
@@ -1008,7 +1010,19 @@ select.visit-input option {
   color: var(--color-turmeric);
   flex-shrink: 0;
 }
-.visit-item-dish { font-size: 0.76rem; color: var(--color-paper-dim); }
+.visit-item-dish { font-size: 0.76rem; color: var(--color-paper-dim); overflow-wrap: anywhere; }
+.visit-item-delete {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  color: #ee6e52;
+  background: none;
+  border: 1px solid rgba(238, 110, 82, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
 .visit-item-date {
   font-family: var(--font-data);
   font-size: 0.7rem;
@@ -1068,6 +1082,7 @@ select.visit-input option {
   background: radial-gradient(circle at 35% 30%, rgba(217, 166, 26, 0.35), rgba(200, 57, 30, 0.2));
 }
 .more-avatar img { width: 44px; height: 44px; object-fit: contain; }
+.more-account-text { min-width: 0; }
 .more-account-name {
   font-family: var(--font-display);
   font-size: 1.3rem;
