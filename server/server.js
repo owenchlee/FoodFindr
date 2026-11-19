@@ -1813,7 +1813,7 @@ app.post('/api/groups', requireAuth, (req, res) => {
 });
 
 app.post('/api/groups/join', joinLimiter, requireAuth, (req, res) => {
-  const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+  const code = typeof req.body.code === 'string' ? req.body.code.replace(/[^A-Za-z0-9]/g, '') : '';
   if (!code) {
     return res.status(400).json({ error: 'A group code is required.' });
   }
