@@ -1,6 +1,6 @@
 // Per-person dollar ceilings for each price tier. Must match the UI hint text in
-// index.html: "$ under $15 · $$ under $30 · $$$ under $60, per person (approximate)".
-const PRICE_TIER_MAX_USD = { 1: 15, 2: 30, 3: 60 };
+// index.html: "$ under $15 · $$ under $30 · $$$ under $60 · $$$$ $60 and up, per person (approximate)".
+const PRICE_TIER_MAX_USD = { 1: 15, 2: 30, 3: 60, 4: 120 };
 
 function totalGroupBudget(groupSize, targetPrice) {
   const perPerson = PRICE_TIER_MAX_USD[targetPrice] || PRICE_TIER_MAX_USD[2];
