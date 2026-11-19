@@ -1677,7 +1677,7 @@ select.visit-input option {
     background: rgba(36, 28, 24, 0.86);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     backdrop-filter: blur(20px) saturate(160%);
-    border: 1px solid rgba(242, 234, 225, 0.1);
+    border: 1px solid var(--color-control-border);
     border-radius: 999px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
@@ -1733,6 +1733,7 @@ select.visit-input option {
     padding: 12px;
   }
   .location-picker-popover .visit-input { width: 100%; }
+  .top-bar .search-row .location-picker-popover .visit-input { border: 1px solid var(--color-control-border); border-radius: 12px; padding: 0 14px; background: rgba(242, 234, 225, 0.07); }
 
   /* ----- Surprise Me: floating pill in thumb reach ----- */
   /* 40px, not 14: the raised Log button pokes ~26px above the tab bar. */
@@ -1962,7 +1963,7 @@ select.visit-input option {
     padding: 0 14px;
     border-radius: 12px;
     background: rgba(242, 234, 225, 0.07);
-    border-color: rgba(242, 234, 225, 0.1);
+    border-color: var(--color-control-border);
   }
   .price-toggle button { min-height: 46px; border-radius: 12px; font-size: 0.95rem; }
   .cta--secondary { min-height: 48px; border-radius: 12px; font-size: 1rem; padding: 0 18px; }
