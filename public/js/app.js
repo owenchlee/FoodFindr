@@ -1338,11 +1338,18 @@ function requestUserLocation() {
       recenterMap(userLocation.lat, userLocation.lng);
       scheduleSearch({ immediate: true });
     },
-    () => {
+    (err) => {
       if (usingCustomLocation) return;
+      // Only code 1 is a permission problem; timeouts/unavailable fixes are not "denied".
+      if (err && err.code !== 1) {
+        document.querySelector('#no-location-state .no-location-title').textContent = "Couldn't find your location";
+        document.querySelector('#no-location-state .no-location-hint').textContent = 'Search for a city or address to get started.';
+        useLastLocationOrShowEmptyState("Couldn't find your location");
+        return;
+      }
       useLastLocationOrShowEmptyState('Location access denied');
     },
-    { timeout: 8000 }
+    { timeout: 8000, maximumAge: 5 * 60 * 1000 }
   );
 }
 
