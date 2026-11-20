@@ -1374,6 +1374,21 @@ select.visit-input option {
 
 #map { height: 100%; width: 100%; background: #1d2028; }
 
+.map-notice {
+  position: absolute;
+  top: var(--space-3, 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: 90%;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-radius: 12px;
+  background: #1d2028;
+  color: var(--color-paper-dim);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
 .map-placeholder {
   display: flex;
   align-items: center;
