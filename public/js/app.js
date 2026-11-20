@@ -1420,7 +1420,8 @@ async function searchLocation(query, inputEl) {
   inputEl.disabled = true;
   geocodePending = true;
   try {
-    const response = await fetch(`/api/geocode?address=${encodeURIComponent(query)}`);
+    const bias = userLocation ? `&lat=${userLocation.lat}&lng=${userLocation.lng}` : '';
+    const response = await fetch(`/api/geocode?address=${encodeURIComponent(query)}${bias}`);
     const data = await readApiJson(response);
 
     if (!response.ok) {
