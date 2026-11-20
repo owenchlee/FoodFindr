@@ -2249,7 +2249,7 @@ async function submitVisit() {
     const response = await fetch('/api/visits', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantName, dish, rating, flavorTags, idempotencyKey: visitAttempt.key })
+      body: JSON.stringify({ restaurantName, dish, rating, flavorTags, idempotencyKey: visitAttempt.key, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
     });
 
     const data = await readApiJson(response);
@@ -2265,7 +2265,9 @@ async function submitVisit() {
     recentVisits.unshift(data.visit);
     renderVisitList();
     resetVisitForm();
-    status.textContent = 'Visit logged!';
+    const earned = (data.newBadges || []).map(n => `You earned ${n}.`);
+    if (data.currentStreak >= 3) earned.push(`${data.currentStreak}-day streak!`);
+    status.textContent = ['Visit logged!', ...earned].join(' ');
     haptics.success();
     status.className = 'visit-status visit-status--ok';
     status.hidden = false;

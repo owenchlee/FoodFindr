@@ -1706,6 +1706,8 @@ app.post('/api/visits', requireAuth, (req, res) => {
   }
 
   try {
+    const tz = typeof req.body.tz === 'string' ? req.body.tz : undefined;
+    const earnedBefore = new Set(getBadges(req.user.id, tz).filter(b => b.earned).map(b => b.id));
     const visit = insertVisit({
       userId: req.user.id,
       restaurantName: name,
@@ -1720,7 +1722,8 @@ app.post('/api/visits', requireAuth, (req, res) => {
       // shortcut: in-memory, lost on restart and capped at 1000 keys; move to a table if multi-process.
       if (savedVisitsByKey.size > 1000) savedVisitsByKey.delete(savedVisitsByKey.keys().next().value);
     }
-    res.status(201).json({ visit: shaped });
+    const newBadges = getBadges(req.user.id, tz).filter(b => b.earned && !earnedBefore.has(b.id)).map(b => b.name);
+    res.status(201).json({ visit: shaped, newBadges, currentStreak: getStreaks(req.user.id, tz).currentStreak });
   } catch (err) {
     console.error('Failed to save visit:', err);
     res.status(500).json({ error: 'Could not save your visit right now.' });
