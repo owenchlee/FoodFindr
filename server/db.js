@@ -51,6 +51,11 @@ db.exec(`
   )
 `);
 
+// Opt-in leaderboard: existing users default to 0 (hidden from others).
+if (!db.prepare('PRAGMA table_info(users)').all().some(col => col.name === 'leaderboard_optin')) {
+  db.exec('ALTER TABLE users ADD COLUMN leaderboard_optin INTEGER NOT NULL DEFAULT 0');
+}
+
 const visitColumns = db.prepare('PRAGMA table_info(visits)').all();
 if (!visitColumns.some(col => col.name === 'flavor_tags')) {
   db.exec('ALTER TABLE visits ADD COLUMN flavor_tags TEXT');
@@ -474,10 +479,17 @@ const leaderboardUsersStmt = db.prepare(`
   ORDER BY id ASC
 `);
 
+const getOptInStmt = db.prepare('SELECT leaderboard_optin FROM users WHERE id = ?');
+const setOptInStmt = db.prepare('UPDATE users SET leaderboard_optin = ? WHERE id = ?');
+const getLeaderboardOptIn = (userId) => !!(getOptInStmt.get(userId) || {}).leaderboard_optin;
+const setLeaderboardOptIn = (userId, on) => { setOptInStmt.run(on ? 1 : 0, userId); };
+
 // Every member's streak is counted on the viewer's calendar (tz).
-function getLeaderboardStats(userId, tz) {
+// optInOnly hides other members who have not opted in; the viewer always stays.
+function getLeaderboardStats(userId, tz, { optInOnly = false } = {}) {
   tz = safeZone(tz);
-  const users = leaderboardUsersStmt.all(userId, userId);
+  let users = leaderboardUsersStmt.all(userId, userId);
+  if (optInOnly) users = users.filter(u => u.id === userId || getLeaderboardOptIn(u.id));
 
   const cache = validStreakCache();
   return users
@@ -639,7 +651,7 @@ function exportUserData(userId) {
   const discovered_restaurants = db.prepare(
     'SELECT place_id, name, city, lat, lng, first_seen_at FROM discovered_restaurants WHERE user_id = ? ORDER BY first_seen_at, place_id'
   ).all(userId);
-  return { user, visits, preferences: preferences || null, groups, discovered_restaurants };
+  return { user, visits, preferences: preferences || null, groups, discovered_restaurants, leaderboard_optin: getLeaderboardOptIn(userId) };
 }
 
 module.exports = {
@@ -649,7 +661,7 @@ module.exports = {
   insertVisit, boundedLoggedAt, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
-  getStreaks, getBadges, getLeaderboardStats,
+  getStreaks, getBadges, getLeaderboardStats, getLeaderboardOptIn, setLeaderboardOptIn,
   createGroup, joinGroupByCode, listUserGroups, isGroupMember,
   getGroupMemberIds, getGroupMembers, leaveGroup, deleteUser, exportUserData, setDisplayName
 };
