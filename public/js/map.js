@@ -86,10 +86,51 @@ function recenterMap(lat, lng) {
   map.setZoom(DEFAULT_ZOOM);
 }
 
+// Padding (px) for the parts of the map that on-screen controls cover, read
+// from their real rects: each control is charged to the nearest map edge.
+function overlayPadding() {
+  const mapRect = document.getElementById('map').getBoundingClientRect();
+  const pad = { top: 16, right: 16, bottom: 16, left: 16 };
+  ['.top-bar', '#recommend-btn', '#tab-bar', '#left-column'].forEach(sel => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const cost = {
+      top: r.bottom - mapRect.top, bottom: mapRect.bottom - r.top,
+      left: r.right - mapRect.left, right: mapRect.right - r.left
+    };
+    const edge = Object.keys(cost).reduce((a, b) => (cost[b] < cost[a] ? b : a));
+    pad[edge] = Math.max(pad[edge], cost[edge] + 16);
+  });
+  return pad;
+}
+
+// Frames the search results (and the origin) inside the part of the map the
+// controls leave visible.
+function fitToResults(restaurants, origin) {
+  if (!map || restaurants.length === 0) return;
+  const bounds = new google.maps.LatLngBounds();
+  restaurants.forEach(r => bounds.extend({ lat: r.lat, lng: r.lng }));
+  if (origin) bounds.extend(origin);
+  map.fitBounds(bounds, overlayPadding());
+  if (map.getZoom() > 16) map.setZoom(16);
+}
+
 function centerOnPick(lat, lng) {
   if (!map) return;
   map.panTo({ lat, lng });
   if (map.getZoom() < 16) map.setZoom(16);
+  // On phones the recommendation card sits over the map centre: shift the
+  // pick into the visible strip above it.
+  const ticket = document.getElementById('ticket');
+  const mapRect = document.getElementById('map').getBoundingClientRect();
+  if (!ticket || ticket.getBoundingClientRect().width < mapRect.width * 0.6) return;
+  const cardTop = ticket.getBoundingClientRect().top;
+  const centerY = mapRect.top + mapRect.height / 2;
+  if (cardTop >= centerY) return;
+  const visibleTop = mapRect.top + overlayPadding().top;
+  map.panBy(0, centerY - (visibleTop + cardTop) / 2);
 }
 
 function markerContent(restaurant, isPick) {
