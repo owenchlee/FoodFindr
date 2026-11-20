@@ -25,6 +25,36 @@ function findBlockedWord(text, isVegan) {
   return words.find(word => new RegExp(`\\b${word}(?:e?s)?\\b`, 'i').test(cleaned));
 }
 
+// Lowercase, accent-free, punctuation-free, singular-ish word list.
+function foodWords(text) {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean)
+    .map(w => (w.length > 3 ? w.replace(/(?:es|s)$/, '') : w));
+}
+const DISH_FILLER = new Set(['the', 'their', 'a', 'an', 'with', 'and', 'of', 'in', 'on', 'for', 'or', 'to',
+  'plate', 'platter', 'bowl', 'dish', 'order', 'special', 'side', 'extra', 'fresh', 'house', 'homemade', 'signature']);
+
+// Third-party review text can smuggle contact details or ads into dish/reason.
+const INJECTED = [
+  [/https?:|www\.|\]\(|\b[\w-]+\.(?:com|net|org|biz|io|co|app|me|ly|info|xyz)\b/i, 'a URL or link'],
+  [/[\w.+-]+@[\w-]+\.\w+/, 'an email address'],
+  [/\(?\b\d{3}\)?[\s.-]+\d{3}[\s.-]+\d{4}\b|\b\d{3}[-.]\d{4}\b/, 'a phone number'],
+  [/\b(?:promo|coupon|discount|voucher|referral)\s+code\b|\buse\s+code\b/i, 'a promo code'],
+];
+
+// Lenient grounding: at least half of the dish's food words (generic filler
+// ignored) must appear in the chosen place's reviews. shortcut: word overlap,
+// not real NLP; upgrade if wrongful rejections show up.
+function dishGroundingProblem(dish, chosen) {
+  if (/\bmost popular\b/i.test(dish)) return null;
+  const words = foodWords(dish).filter(w => !DISH_FILLER.has(w));
+  if (words.length === 0) return null;
+  const seen = new Set(foodWords((Array.isArray(chosen.reviews) ? chosen.reviews : []).join(' ')));
+  const hits = words.filter(w => seen.has(w)).length;
+  if (hits * 2 >= words.length) return null;
+  return `the dish "${dish}" is not mentioned in the reviews for this restaurant; only suggest a dish that a review for the chosen place actually names, or use a generic "their most popular item"`;
+}
+
 // Returns null when valid, or a short human-readable reason string when not -
 // the reason doubles as the corrective text sent back to Claude on retry (see
 // askClaudeForRecommendation), so keep each one specific enough to act on.
@@ -41,6 +71,11 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
   }
   if (!Array.isArray(input.flavor_tags) || input.flavor_tags.length !== 3 || !input.flavor_tags.every(tag => FLAVOR_TAGS.includes(tag))) {
     return `flavor_tags must be exactly 3 values from: ${FLAVOR_TAGS.join(', ')}`;
+  }
+  for (const [re, what] of INJECTED) {
+    if (re.test(input.dish_suggestion) || re.test(input.reason)) {
+      return `dish_suggestion and reason must not contain ${what}; write plain text about the food only`;
+    }
   }
   if (dietaryRestrictions && dietaryRestrictions.length > 0) {
     // A required field under strict:true can't be silently omitted the way a
@@ -80,6 +115,14 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
     // The other chips (gluten, dairy, nut, halal, kosher, shellfish).
     const dietConflict = findDietConflict(dishText, dietaryRestrictions);
     if (dietConflict) return dietConflict;
+  }
+  // After the diet checks so their more specific messages win. Sharing groups
+  // list several items, so the single-dish length cap and grounding skip them.
+  const isShared = Array.isArray(input.shared_items) && input.shared_items.length > 0;
+  if (!isShared) {
+    if (input.dish_suggestion.length > 90) return 'dish_suggestion must be a short dish name (under 90 characters), not a description; put details in reason';
+    const problem = dishGroundingProblem(input.dish_suggestion, candidates.find(c => c.place_id === input.place_id));
+    if (problem) return problem;
   }
   return null;
 }
