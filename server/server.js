@@ -1656,7 +1656,8 @@ app.post('/api/visits', requireAuth, (req, res) => {
       restaurantName: name,
       dish: cleanDish || null,
       rating,
-      flavorTags: cleanFlavorTags
+      flavorTags: cleanFlavorTags,
+      loggedAt: req.body.loggedAt
     });
     const shaped = shapeVisit(visit);
     if (idemKey) {

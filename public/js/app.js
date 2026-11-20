@@ -569,6 +569,7 @@ async function checkAuth() {
 
 function onAuthenticated(user) {
   currentUser = user;
+  flushVisitQueue();
   // A guest who signs up mid-session already has appStarted set, so
   // tryStartApp() below is a no-op for them, so load their account data here
   // instead of relying on startAppData(), which only runs once per session.
@@ -2085,6 +2086,7 @@ async function submitVisit() {
 
   if (visitSaving) return;
   visitSaving = true;
+  const tappedAt = new Date().toISOString();
   const saveButton = document.querySelector('#visit-form button[type="submit"]');
   saveButton.disabled = true;
   saveButton.setAttribute('aria-busy', 'true');
@@ -2125,8 +2127,17 @@ async function submitVisit() {
     loadBadges();
     loadLeaderboard();
   } catch (err) {
-    status.textContent = "Couldn't reach the server. Check your connection and try again.";
-    status.className = 'visit-status visit-status--error';
+    // No signal: keep the visit (with the tap time) and sync it later with the same idempotency key.
+    const queued = enqueueVisit({ restaurantName, dish, rating, flavorTags, idempotencyKey: visitAttempt.key, loggedAt: tappedAt });
+    if (queued) {
+      visitAttempt = null;
+      resetVisitForm();
+      status.textContent = 'Saved offline. It will sync when you are back online.';
+      status.className = 'visit-status';
+    } else {
+      status.textContent = "Couldn't reach the server. Check your connection and try again.";
+      status.className = 'visit-status visit-status--error';
+    }
     status.hidden = false;
   } finally {
     visitSaving = false;
@@ -2134,6 +2145,54 @@ async function submitVisit() {
     saveButton.removeAttribute('aria-busy');
   }
 }
+
+const VISIT_QUEUE_KEY = 'ff-visit-queue';
+let flushingVisits = false;
+
+function readVisitQueue() {
+  try { return JSON.parse(localStorage.getItem(VISIT_QUEUE_KEY)) || []; } catch (e) { return []; }
+}
+
+function enqueueVisit(item) {
+  try {
+    localStorage.setItem(VISIT_QUEUE_KEY, JSON.stringify([...readVisitQueue(), item]));
+    return true;
+  } catch (e) { return false; }
+}
+
+async function flushVisitQueue() {
+  if (flushingVisits) return;
+  flushingVisits = true;
+  let synced = false;
+  try {
+    for (const item of readVisitQueue()) {
+      let response;
+      try {
+        response = await fetch('/api/visits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+      } catch (e) { break; }
+      // Keep on 5xx and on 401 (signed out, not a bad visit); drop on other 2xx/4xx.
+      if (response.status >= 500 || response.status === 401) break;
+      try {
+        localStorage.setItem(VISIT_QUEUE_KEY, JSON.stringify(readVisitQueue().filter(q => q.idempotencyKey !== item.idempotencyKey)));
+      } catch (e) { break; }
+      if (response.ok) synced = true;
+    }
+  } finally {
+    flushingVisits = false;
+  }
+  if (synced) {
+    loadRecentVisits();
+    loadProgress({ force: true });
+    loadStreaks();
+    loadBadges();
+  }
+}
+
+window.addEventListener('online', flushVisitQueue);
 
 async function loadPreferences() {
   try {
