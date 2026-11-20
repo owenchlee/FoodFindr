@@ -1330,7 +1330,8 @@ async function submitCreateGroup() {
   const input = document.getElementById('create-group-name');
   const status = document.getElementById('group-status');
   const name = input.value.trim();
-  if (!name) return;
+  if (!name || input.dataset.busy) return;
+  input.dataset.busy = '1';
 
   try {
     const response = await fetch('/api/groups', {
@@ -1352,13 +1353,15 @@ async function submitCreateGroup() {
     status.textContent = "Couldn't reach the server. Check your connection and try again.";
     status.className = 'visit-status visit-status--error';
     status.hidden = false;
+  } finally {
+    delete input.dataset.busy;
   }
 }
 
 async function submitJoinGroup() {
   const input = document.getElementById('join-group-code');
   const status = document.getElementById('group-status');
-  const code = input.value.trim();
+  const code = input.value.replace(/[^A-Za-z0-9]/g, '');
   if (!code) return;
 
   try {
@@ -1375,7 +1378,9 @@ async function submitJoinGroup() {
       return;
     }
     input.value = '';
-    status.hidden = true;
+    status.textContent = `Joined ${data.group.name}`;
+    status.className = 'visit-status visit-status--ok';
+    status.hidden = false;
     await loadGroups();
     loadLeaderboard();
   } catch (err) {
@@ -1387,13 +1392,18 @@ async function submitJoinGroup() {
 
 async function leaveGroupClick(groupId) {
   if (!confirm('Leave this group? If you are the last member, the group is deleted.')) return;
+  const status = document.getElementById('group-status');
   try {
-    await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
+    const response = await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
+    if (!response.ok) throw new Error('leave failed');
+    status.hidden = true;
     if (activeGroupId === groupId) setActiveGroup(null);
     await loadGroups();
     loadLeaderboard();
   } catch (err) {
-    // A failed leave just means the group is still in the list; the user can retry.
+    status.textContent = "Couldn't leave the group. Check your connection and try again.";
+    status.className = 'visit-status visit-status--error';
+    status.hidden = false;
   }
 }
 
