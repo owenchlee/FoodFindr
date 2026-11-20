@@ -474,6 +474,7 @@ function init() {
     event.currentTarget.setAttribute('aria-expanded', String(!form.hidden));
   });
   document.getElementById('change-password-form').addEventListener('submit', submitChangePassword);
+  document.getElementById('display-name-form').addEventListener('submit', submitDisplayName);
   document.getElementById('more-delete-btn').addEventListener('click', event => {
     const form = document.getElementById('delete-account-form');
     form.hidden = !form.hidden;
@@ -613,7 +614,9 @@ function continueAsGuest() {
 
 // Header and account buttons of the phone "You" panel.
 function setMoreAccount(user) {
-  document.getElementById('more-account-name').textContent = user ? user.email.split('@')[0] : 'Browsing as guest';
+  document.getElementById('more-account-name').textContent = user ? (user.displayName || 'Set your name below') : 'Browsing as guest';
+  document.getElementById('display-name-form').hidden = !user;
+  if (user) document.getElementById('display-name-input').value = user.displayName || '';
   document.getElementById('more-account-sub').textContent = user ? user.email : 'Sign up to save visits and your taste';
   document.getElementById('more-signup-btn').parentElement.hidden = Boolean(user);
   document.getElementById('more-logout-btn').parentElement.hidden = !user;
@@ -622,6 +625,31 @@ function setMoreAccount(user) {
   document.getElementById('more-password-btn').parentElement.hidden = !user;
   if (!user) document.getElementById('change-password-form').hidden = true;
   if (!user) document.getElementById('delete-account-form').hidden = true;
+}
+
+async function submitDisplayName(event) {
+  event.preventDefault();
+  const status = document.getElementById('display-name-status');
+  try {
+    const response = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: document.getElementById('display-name-input').value })
+    });
+    const data = await response.json().catch(() => ({}));
+    status.hidden = false;
+    if (!response.ok) {
+      status.textContent = data.error || 'Could not save your name.';
+      return;
+    }
+    currentUser.displayName = data.displayName;
+    setMoreAccount(currentUser);
+    status.textContent = 'Saved.';
+    loadLeaderboard();
+  } catch {
+    status.hidden = false;
+    status.textContent = 'Could not save your name.';
+  }
 }
 
 async function submitChangePassword(event) {
