@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
+  closeDb,
   insertVisit, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
   getPreferences, savePreferences,
   recordDiscovered, getProgress,
@@ -1895,6 +1896,22 @@ app.post('/api/groups/:id/leave', requireAuth, (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`FoodFindr running at http://localhost:${PORT}`);
 });
+
+// Graceful shutdown: let in-flight requests finish, then close the DB (checkpoints the WAL).
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  // Hard deadline so a hung stream cannot block exit forever.
+  setTimeout(() => process.exit(1), 10000).unref();
+  httpServer.close(() => {
+    try { closeDb(); } catch (err) { console.error('DB close failed:', err); }
+    process.exit(0);
+  });
+  httpServer.closeIdleConnections();
+}
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);

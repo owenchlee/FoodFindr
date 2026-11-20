@@ -643,6 +643,7 @@ function exportUserData(userId) {
 }
 
 module.exports = {
+  closeDb: () => db.close(),
   countUsers, insertUser, getUserByEmail, getUserById, changePasswordKeepingSession,
   createSession, getSessionWithUser, extendSession, deleteSession, adoptLegacyData,
   insertVisit, boundedLoggedAt, listVisits, deleteVisit, getVisitHighlights, getTopFlavors,
