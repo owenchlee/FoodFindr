@@ -1666,6 +1666,13 @@ async function loadRestaurants(seq, signal) {
   }
 }
 
+// Lowercase, strip accents, drop apostrophes, '&' -> 'and', other punctuation -> space.
+function normalizeName(s) {
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/['’‘`´]/g, '').replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
 function renderRestaurantSuggestions(query) {
   const list = document.getElementById('restaurant-suggestions');
   const trimmed = query.trim().toLowerCase();
@@ -1676,8 +1683,22 @@ function renderRestaurantSuggestions(query) {
     return;
   }
 
-  const matches = lastFilteredRestaurants
-    .filter(r => r.name.toLowerCase().includes(trimmed))
+  // Search every result (not just the price-filtered ones) plus past visits,
+  // so a place you just ate at is always findable.
+  const q = normalizeName(query);
+  const seen = new Set();
+  const candidates = [...allRestaurants.map(r => r.name), ...recentVisits.map(v => v.restaurantName)]
+    .filter(n => n && !seen.has(n) && seen.add(n));
+  const rankOf = (n) => {
+    const norm = normalizeName(n);
+    if (norm.startsWith(q)) return 0;
+    if ((' ' + norm).includes(' ' + q)) return 1;
+    return norm.includes(q) ? 2 : -1;
+  };
+  const matches = (q ? candidates : [])
+    .map(name => ({ name, rank: rankOf(name) }))
+    .filter(m => m.rank >= 0)
+    .sort((a, b) => a.rank - b.rank) // Array.sort is stable: ties keep result order
     .slice(0, 6);
 
   list.replaceChildren();
