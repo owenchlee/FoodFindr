@@ -581,7 +581,8 @@ async function checkAuth() {
       try { localStorage.setItem('ff-last-user', JSON.stringify(data.user)); } catch (e) { /* ignore */ }
       onAuthenticated(data.user);
     } else {
-      try { localStorage.removeItem('ff-last-user'); } catch (e) { /* ignore */ }
+      // Only a known signed-in user's session ending wipes; a guest's 401 is normal and keeps their data.
+      try { if (localStorage.getItem('ff-last-user')) wipeLocalUserData(); } catch (e) { /* ignore */ }
       showAuthGate();
     }
   } catch (err) {
@@ -758,9 +759,16 @@ async function logout() {
   try {
     await fetch('/api/auth/logout', { method: 'POST' });
   } finally {
-    try { localStorage.removeItem('ff-last-user'); } catch (e) { /* ignore */ }
+    wipeLocalUserData();
     location.reload();
   }
+}
+
+// ff-last-user too, or an offline relaunch would restore the old account's shell.
+function wipeLocalUserData() {
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith('ff_') || k.startsWith('ff-')).forEach(k => localStorage.removeItem(k));
+  } catch (e) { /* ignore */ }
 }
 
 async function deleteAccount(event) {
@@ -785,10 +793,7 @@ async function deleteAccount(event) {
       fail(data.error || 'Could not delete your account right now.');
       return;
     }
-    // ff-last-user too, or an offline relaunch would restore the deleted account's shell.
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('ff_') || k.startsWith('ff-')).forEach(k => localStorage.removeItem(k));
-    } catch (e) { /* ignore */ }
+    wipeLocalUserData();
     location.reload();
   } catch (err) {
     fail("Couldn't reach the server. Check your connection and try again.");
