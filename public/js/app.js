@@ -1694,6 +1694,7 @@ function cancelPendingRecommendation(message) {
 const RECOMMEND_TIMEOUT_MS = 30000;
 let recommendSeq = 0;
 let recommendAbort = null;
+let lastStaleRetryAt = 0; // limits the quiet search-and-replay to once per 30 s
 let geocodePending = false; // a typed location is still being geocoded
 
 function invalidateRecommendation() {
@@ -1775,6 +1776,14 @@ async function getRecommendation() {
       const data = await readApiJson(response);
       if (seq !== recommendSeq) return;
       if (!response.ok) {
+        // 400 = the server no longer recognises these places (restart/deploy
+        // lost its memory). Re-run the search once to re-register them, then replay.
+        if (response.status === 400 && Date.now() - lastStaleRetryAt > 30000) {
+          lastStaleRetryAt = Date.now();
+          pendingRecommendation = true;
+          scheduleSearch({ immediate: true });
+          return;
+        }
         showTicketError(data.error);
         return;
       }
