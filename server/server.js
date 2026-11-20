@@ -153,6 +153,21 @@ const apiLimiter = rateLimit({
     optionalAuth(req, null, () => {}); // only sets req.user for a verified session
     return req.user ? `u:${req.user.id}` : ipKeyGenerator(req.ip);
   },
+  // Requests answered from placesCache cost Google nothing, so they are free.
+  skip: (req) => {
+    try {
+      if (req.baseUrl !== '/api/restaurants') return false;
+      if (req.path === '/rest') {
+        const e = typeof req.query.searchId === 'string' && placesCache.get(decodeURIComponent(req.query.searchId));
+        return !!(e && e.complete);
+      }
+      if (req.path !== '/') return false;
+      const { lat, lng, cuisine, dish, radiusMeters, dietaryHint } = resolveSearchParams(req);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return false;
+      const e = placesCache.get(placesCacheKey(lat, lng, radiusMeters, cuisine, dish, dietaryHint));
+      return !!(e && e.complete);
+    } catch { return false; }
+  },
   standardHeaders: true,
   legacyHeaders: false
 });
