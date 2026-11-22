@@ -22,7 +22,7 @@ const {
   parseCookies, requireAuth, optionalAuth
 } = require('./auth');
 
-const { FLAVOR_TAGS, isValidRecommendation } = require('./lib/validate');
+const { FLAVOR_TAGS, isValidRecommendation, normalizeRecommendation, fallbackRecommendation } = require('./lib/validate');
 const { PRICE_TIER_MAX_USD, totalGroupBudget, budgetPool: pickBudgetPool } = require('./lib/budget');
 const { shapeAndFilter } = require('./lib/places');
 const { sanitizeText, makeKnownPlaces, cleanCandidates } = require('./lib/trust');
@@ -1317,16 +1317,19 @@ async function askClaudeForRecommendation(candidates, targetPrice, { groupSize, 
   // blindly resending the whole candidate JSON, since it's both cheaper and
   // more likely to succeed than repeating the identical prompt verbatim.
   let { input: result, toolUseId } = await callClaude();
+  const rawFirst = result;
+  result = normalizeRecommendation(result);
   let failureReason = isValidRecommendation(result, candidates, dietaryRestrictions, true);
   if (failureReason) {
     const repair = await callClaude([
-      { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'recommend_restaurant', input: result }] },
+      { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'recommend_restaurant', input: rawFirst }] },
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: `That response was invalid: ${failureReason}. Please try again.` }] }
     ]);
-    result = repair.input;
+    result = normalizeRecommendation(repair.input);
     failureReason = isValidRecommendation(result, candidates, dietaryRestrictions, true);
     if (failureReason) {
-      throw new Error(`Claude returned a malformed recommendation twice in a row: ${failureReason}`);
+      console.warn(`Claude returned a malformed recommendation twice in a row: ${failureReason}; using fallback`);
+      result = fallbackRecommendation(candidates, result, dietaryRestrictions);
     }
   }
   return result;
