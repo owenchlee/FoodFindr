@@ -1174,6 +1174,9 @@ select.visit-input option {
 .ticket-log-btn:hover { color: var(--color-chili-dim); }
 .ticket--error .ticket-map-link,
 .ticket--error .ticket-log-btn { display: none; }
+.ticket-share-btn { min-width: 44px; min-height: 44px; padding: 0 10px; }
+.ticket-share-status { margin: var(--space-1) 0 0; font-size: 0.8rem; }
+.ticket-share-status:empty { display: none; }
 
 /* ---------- Rail account slot ---------- */
 .rail-account {
