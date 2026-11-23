@@ -521,7 +521,15 @@ function init() {
     openDrawer(tab);
     // Opened on demand instead of being fetched on every search (item 9);
     // force a refresh here since the location bucket may not have changed.
-    if (tab === 'progress') loadProgress({ force: true });
+    // Tab data is fetched on open (not at launch) so a launch only loads what
+    // the first screen needs, and each open also refreshes stale views.
+    if (tab === 'progress') {
+      loadProgress({ force: true });
+      loadStreaks();
+      loadBadges();
+      loadLeaderboard();
+    }
+    if (tab === 'past-reviews' || tab === 'log-review') loadRecentVisits();
   };
   document.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => openTabFromButton(btn.dataset.tab, { toggle: true }));
@@ -596,11 +604,7 @@ function startAppData() {
   // Visits/preferences are account-only routes, and a guest hitting them would
   // just get a 401, so skip loading them entirely rather than let that fail.
   if (!isGuest) {
-    loadRecentVisits();
     loadPreferences();
-    loadStreaks();
-    loadBadges();
-    loadLeaderboard();
     loadGroups();
   }
 }
@@ -651,11 +655,7 @@ function onAuthenticated(user) {
   setMoreAccount(user);
   tryStartApp();
   if (wasGuest && appStarted) {
-    loadRecentVisits();
     loadPreferences();
-    loadStreaks();
-    loadBadges();
-    loadLeaderboard();
     loadGroups();
     // Guest searches never recorded the area; a (cached, cheap) re-search now does.
     scheduleSearch({ immediate: true });
@@ -1692,7 +1692,6 @@ async function loadRestaurants(seq, signal) {
     applyLocalFilters();
     fitToResults(lastFilteredRestaurants, userLocation);
     if (!pendingRecommendation) hideTicket(); // a queued Surprise Me keeps its skeleton card
-    loadProgress();
     perfLog('search phase1', t0);
 
     if (isInitialLoad) hideLoading(); else hideRefining();
