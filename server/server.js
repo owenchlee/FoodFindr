@@ -464,7 +464,9 @@ function buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint) {
     // actually surfaces places associated with that term, instead of always
     // handing Claude the same generic top candidates and hoping one of
     // their reviews happens to mention it.
-    params.query = [dish, cuisine, dietaryHint, 'restaurants'].filter(Boolean).join(' ');
+    const seen = new Set();
+    params.query = [dish, cuisine, dietaryHint, 'restaurants'].filter(Boolean).join(' ').split(/\s+/)
+      .filter(w => !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase())).join(' ');
   } else {
     params.type = 'restaurant';
   }
@@ -679,7 +681,10 @@ function resolveSearchParams(req) {
     const preferences = getPreferences(req.user.id);
     dietaryRestrictionsForHint = preferences ? preferences.dietaryRestrictions : [];
   }
-  const dietaryHint = dietaryRestrictionsForHint.join(' ');
+  // Only restrictions that describe a kind of place go in the search text; avoidance ones
+  // ("Shellfish-Free") would pull results toward the food to avoid. Claude and the diet guard still get all of them.
+  const SEARCHABLE = new Set(['vegetarian', 'vegan', 'halal', 'kosher', 'gluten-free']);
+  const dietaryHint = dietaryRestrictionsForHint.filter(r => SEARCHABLE.has(String(r).toLowerCase())).join(' ');
 
   return { lat, lng, cuisine, maxDistance, dish, radiusMeters, dietaryHint };
 }
