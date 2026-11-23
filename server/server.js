@@ -643,6 +643,15 @@ app.get('/api/geocode', optionalAuth, apiLimiter, async (req, res) => {
 // so a burst of first-time searches can't spawn unbounded 2000ms-delay loops.
 const MAX_CONCURRENT_BACKGROUND_FILLS = 8;
 let activeBackgroundFills = 0;
+const backgroundFillQueue = [];
+
+function pumpBackgroundFills() {
+  while (activeBackgroundFills < MAX_CONCURRENT_BACKGROUND_FILLS && backgroundFillQueue.length) {
+    activeBackgroundFills++;
+    backgroundFillQueue.shift()()
+      .finally(() => { activeBackgroundFills--; pumpBackgroundFills(); });
+  }
+}
 
 // Shared by both /api/restaurants and /api/restaurants/rest so the two routes
 // can't compute the search's identity (and therefore cache key) differently.
@@ -741,11 +750,11 @@ app.get('/api/restaurants', optionalAuth, async (req, res) => {
       entry.inflight = null;
       entry.pagesFetched = 1;
 
-      if (nextPageToken && activeBackgroundFills < MAX_CONCURRENT_BACKGROUND_FILLS) {
-        activeBackgroundFills++;
+      if (nextPageToken) {
         const { endpoint: bgEndpoint, params: bgParams } = buildPlacesQuery(lat, lng, radiusMeters, cuisine, dish, dietaryHint);
-        continuePlacesFetch(entry, key, bgEndpoint, bgParams, nextPageToken)
-          .finally(() => { activeBackgroundFills--; });
+        // Over the cap, fills wait in FIFO order instead of being cut to page 1.
+        backgroundFillQueue.push(() => continuePlacesFetch(entry, key, bgEndpoint, bgParams, nextPageToken));
+        pumpBackgroundFills();
       } else {
         entry.complete = true;
         entry.resolveDone(entry.places);
