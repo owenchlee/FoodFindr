@@ -54,9 +54,12 @@ function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCached
   const justPicked = new Set(recentPickIds);
   const favorites = favoriteCuisines.map(c => c.toLowerCase());
   const recent = new Set(recentNames.map(normName));
+  // Rank by rating minus a small distance penalty so the top-15 slice leans near.
+  const far = Math.max(0, ...restaurants.map(r => r.distance || 0));
+  const score = r => shrunkRating(r) - (far > 0 && typeof r.distance === 'number' ? 0.4 * r.distance / far : 0);
   const top = restaurants
     .slice()
-    .sort((a, b) => shrunkRating(b) - shrunkRating(a))
+    .sort((a, b) => score(b) - score(a))
     .slice(0, 15);
   const maxDist = Math.max(0, ...top.map(r => r.distance || 0));
   const weights = top.map(r => {
