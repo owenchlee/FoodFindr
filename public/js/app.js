@@ -445,6 +445,30 @@ function init() {
     prefillVisitForm(lastRecommendation);
   });
 
+  document.getElementById('ticket-share-btn').addEventListener('click', async () => {
+    if (!lastRecommendation) return;
+    const { restaurant, dish } = lastRecommendation;
+    const url = document.getElementById('ticket-map-link').href;
+    const text = `${restaurant.name}${dish.name ? ` - try the ${dish.name}` : ''}\n${url}`;
+    const status = document.getElementById('ticket-share-status');
+    status.textContent = '';
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: restaurant.name, text, url });
+      } catch (err) {
+        if (err && err.name === 'AbortError') return; // user closed the share sheet
+        status.textContent = 'Could not share';
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = 'Copied';
+    } catch (err) {
+      status.textContent = 'Could not copy';
+    }
+  });
+
   document.getElementById('edit-preferences-btn').addEventListener('click', () => {
     if (isGuest) {
       showAuthGate();
