@@ -487,6 +487,19 @@ function init() {
   });
 
   const prefsDialog = document.getElementById('prefs-dialog');
+  // iOS 15.0-15.3 has no <dialog> API: emulate it by toggling [open] (styled via .dialog-fallback).
+  if (typeof prefsDialog.showModal !== 'function') {
+    prefsDialog.classList.add('dialog-fallback');
+    prefsDialog.showModal = prefsDialog.show = () => prefsDialog.setAttribute('open', '');
+    prefsDialog.close = () => {
+      if (!prefsDialog.hasAttribute('open')) return;
+      prefsDialog.removeAttribute('open');
+      prefsDialog.dispatchEvent(new Event('close'));
+    };
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && prefsDialog.hasAttribute('open')) prefsDialog.close();
+    });
+  }
   prefsDialog.addEventListener('click', (event) => {
     if (event.target === prefsDialog) prefsDialog.close();
   });
