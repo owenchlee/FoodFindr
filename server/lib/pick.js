@@ -36,7 +36,7 @@ function pickRandomTopPool(restaurants, poolSize) {
   // Weighted shuffle (Efraimidis-Spirakis): nearer places sort earlier on average.
   const maxDist = Math.max(0, ...topN.map(r => r.distance || 0));
   return topN
-    .map(r => ({ r, k: Math.random() ** (1 / nearness(r, maxDist, 3)) }))
+    .map(r => ({ r, k: Math.random() ** (1 / nearness(r, maxDist, 3.4)) }))
     .sort((a, b) => b.k - a.k)
     .slice(0, poolSize)
     .map(x => x.r);
