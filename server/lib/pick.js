@@ -63,7 +63,7 @@ function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCached
     .slice(0, 15);
   const maxDist = Math.max(0, ...top.map(r => r.distance || 0));
   const weights = top.map(r => {
-    let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.3) ** 2 * nearness(r, maxDist, 3.5);
+    let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.4) ** 2 * nearness(r, maxDist, 3.9);
     const cuisine = (r.cuisine || '').toLowerCase();
     if (cuisine && favorites.some(f => cuisine.includes(f) || f.includes(cuisine) || (CUISINE_FAMILY[f] || []).includes(cuisine))) w *= 2.5;
     if (recent.has(normName(r.name))) w *= 0.15;
