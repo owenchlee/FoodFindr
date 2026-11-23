@@ -127,4 +127,36 @@ function isValidRecommendation(input, candidates, dietaryRestrictions) {
   return null;
 }
 
-module.exports = { FLAVOR_TAGS, isValidRecommendation };
+// Fixes faults the server can fix itself (stray markup in reason, bad/duplicate/
+// wrong-count tags) so they never cost a repair call. Returns a copy; anything
+// else is left for isValidRecommendation to judge.
+function normalizeRecommendation(input) {
+  if (!input || typeof input !== 'object') return input;
+  const out = { ...input };
+  if (typeof out.reason === 'string') out.reason = out.reason.replace(/<\/?\w+[^>]*>/g, '').trim();
+  if (Array.isArray(out.flavor_tags)) {
+    const tags = [...new Set(out.flavor_tags.filter(t => FLAVOR_TAGS.includes(t)))];
+    // shortcut: pads with arbitrary vocabulary tags when Claude gave fewer than 3 valid ones.
+    for (const t of FLAVOR_TAGS) if (tags.length < 3 && !tags.includes(t)) tags.push(t);
+    out.flavor_tags = tags.slice(0, 3);
+  }
+  return out;
+}
+
+// Safe last resort when the repair also fails: the restaurant with a generic
+// dish and an honest note, never a dish that could conflict with a diet.
+function fallbackRecommendation(candidates, preferred, dietaryRestrictions) {
+  const chosen = candidates.find(c => preferred && c.place_id === preferred.place_id) || candidates[0];
+  const out = {
+    place_id: chosen.place_id,
+    dish_suggestion: 'their most popular item',
+    reason: `${chosen.name || 'This spot'} looks like a good fit for your budget. We could not pinpoint a specific dish, so ask what they recommend.`,
+    flavor_tags: ['Savory', 'Fresh', 'Rich']
+  };
+  if (dietaryRestrictions && dietaryRestrictions.length > 0) {
+    out.dietary_note = 'No compliant dish could be confirmed, so check with the restaurant before ordering.';
+  }
+  return out;
+}
+
+module.exports = { FLAVOR_TAGS, isValidRecommendation, normalizeRecommendation, fallbackRecommendation };
