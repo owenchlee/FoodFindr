@@ -19,9 +19,9 @@ const CUISINE_FAMILY = {
 // own, which isn't a reliable way to get it.
 // Gentle weight in (0.1, 1.1]: nearest places count most, farthest least.
 // Candidates without a distance (older clients) get a neutral 1.
-function nearness(r, maxDist) {
+function nearness(r, maxDist, p = 3) {
   if (!(maxDist > 0) || typeof r.distance !== 'number') return 1;
-  return 0.1 + (1 - r.distance / maxDist) ** 3;
+  return 0.03 + (1 - r.distance / maxDist) ** p;
 }
 
 function pickRandomTopPool(restaurants, poolSize) {
@@ -33,7 +33,7 @@ function pickRandomTopPool(restaurants, poolSize) {
   // Weighted shuffle (Efraimidis-Spirakis): nearer places sort earlier on average.
   const maxDist = Math.max(0, ...topN.map(r => r.distance || 0));
   return topN
-    .map(r => ({ r, k: Math.random() ** (1 / nearness(r, maxDist)) }))
+    .map(r => ({ r, k: Math.random() ** (1 / nearness(r, maxDist, 2)) }))
     .sort((a, b) => b.k - a.k)
     .slice(0, poolSize)
     .map(x => x.r);
@@ -57,7 +57,7 @@ function chooseInstantPick(restaurants, favoriteCuisines, recentNames, getCached
     .slice(0, 15);
   const maxDist = Math.max(0, ...top.map(r => r.distance || 0));
   const weights = top.map(r => {
-    let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.3) ** 2 * nearness(r, maxDist);
+    let w = Math.max(0.3, (shrunkRating(r) || 3.5) - 3.3) ** 2 * nearness(r, maxDist, 2);
     const cuisine = (r.cuisine || '').toLowerCase();
     if (cuisine && favorites.some(f => cuisine.includes(f) || f.includes(cuisine) || (CUISINE_FAMILY[f] || []).includes(cuisine))) w *= 2.5;
     if (recent.has(normName(r.name))) w *= 0.15;
