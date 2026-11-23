@@ -378,6 +378,7 @@ function init() {
         restaurants: lastFilteredRestaurants,
         price: currentFilters.price,
         dish: currentFilters.dish,
+        dietaryRestrictions: guestDiet(),
         groupId: activeGroupId,
         recentPickIds: recentPickIds.slice(-3)
       })
@@ -470,10 +471,6 @@ function init() {
   });
 
   document.getElementById('edit-preferences-btn').addEventListener('click', () => {
-    if (isGuest) {
-      showAuthGate();
-      return;
-    }
     setRailExpanded(false);
     closeDrawer();
     openPreferencesDialog();
@@ -1641,6 +1638,7 @@ async function loadRestaurants(seq, signal) {
   if (currentFilters.maxDistance) params.set('maxDistance', currentFilters.maxDistance);
   if (currentFilters.dish) params.set('dish', currentFilters.dish);
   if (activeGroupId) params.set('groupId', activeGroupId);
+  if (guestDiet().length) params.set('diet', guestDiet().join(','));
 
   // Stale-while-revalidate: if this exact search (same ~110m spot, same
   // filters, same account) ran recently, paint its markers now and let the
@@ -1896,6 +1894,7 @@ async function getRecommendation() {
         groupSize: currentFilters.groupSize,
         sharing: currentFilters.sharing,
         dish: currentFilters.dish,
+        dietaryRestrictions: guestDiet(),
         groupId: activeGroupId,
         recentPickIds: recentPickIds.slice(-3)
       })
@@ -2422,7 +2421,7 @@ function openPreferencesDialog() {
   populateCuisineChips();
 
   document.querySelectorAll('#prefs-dietary-chips .chip').forEach(chip => {
-    const isSelected = preferences && preferences.dietaryRestrictions.includes(chip.dataset.restriction);
+    const isSelected = isGuest ? guestDiet().includes(chip.dataset.restriction) : preferences && preferences.dietaryRestrictions.includes(chip.dataset.restriction);
     chip.classList.toggle('active', Boolean(isSelected));
   });
 
@@ -2431,7 +2430,7 @@ function openPreferencesDialog() {
     btn.classList.toggle('active', btn.dataset.spice === spice);
   });
 
-  loadTopFlavors();
+  if (!isGuest) loadTopFlavors();
   document.getElementById('prefs-dialog').showModal();
 }
 
@@ -2464,7 +2463,21 @@ function skipPreferences() {
   document.getElementById('prefs-dialog').close();
 }
 
+// A guest's dietary choice lives on the device (ff- prefix, so logout wipes it); the server only reads it when there is no session.
+const guestDiet = () => {
+  if (!isGuest) return [];
+  try { const v = JSON.parse(localStorage.getItem('ff-guest-diet')); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+};
+
 async function submitPreferences() {
+  if (isGuest) {
+    const before = guestDiet().slice().sort().join();
+    const picked = Array.from(document.querySelectorAll('#prefs-dietary-chips .chip.active')).map(chip => chip.dataset.restriction);
+    localStorage.setItem('ff-guest-diet', JSON.stringify(picked));
+    document.getElementById('prefs-dialog').close();
+    if (picked.slice().sort().join() !== before) scheduleSearch({ immediate: true });
+    return;
+  }
   const favoriteCuisines = Array.from(document.querySelectorAll('#prefs-cuisine-chips .chip.active'))
     .map(chip => chip.dataset.cuisine);
   const dietaryRestrictions = Array.from(document.querySelectorAll('#prefs-dietary-chips .chip.active'))
