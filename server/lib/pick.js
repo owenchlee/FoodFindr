@@ -25,9 +25,12 @@ function nearness(r, maxDist, p = 3) {
 }
 
 function pickRandomTopPool(restaurants, poolSize) {
+  // Rank by rating minus a small distance penalty so the candidate slice leans near.
+  const far = Math.max(0, ...restaurants.map(r => r.distance || 0));
+  const score = r => shrunkRating(r) - (far > 0 && typeof r.distance === 'number' ? 0.4 * r.distance / far : 0);
   const topN = restaurants
     .slice()
-    .sort((a, b) => shrunkRating(b) - shrunkRating(a))
+    .sort((a, b) => score(b) - score(a))
     .slice(0, Math.max(poolSize * 2, 15));
 
   // Weighted shuffle (Efraimidis-Spirakis): nearer places sort earlier on average.
