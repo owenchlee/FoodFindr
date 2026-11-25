@@ -8,6 +8,13 @@
     "test": "node --test"
   },
   "dependencies": {
+    "compression": "^1.8.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.6.0",
+    "helmet": "^8.3.0"
+  },
+  "devDependencies": {
     "@capacitor/browser": "^8.0.4",
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2",
@@ -15,11 +22,6 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.5.2",
     "@capacitor/keyboard": "^8.0.5",
-    "@capacitor/splash-screen": "^8.0.2",
-    "compression": "^1.8.2",
-    "dotenv": "^16.4.5",
-    "express": "^4.22.3",
-    "express-rate-limit": "^8.6.0",
-    "helmet": "^8.3.0"
+    "@capacitor/splash-screen": "^8.0.2"
   }
 }
