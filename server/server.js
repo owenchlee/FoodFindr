@@ -735,6 +735,8 @@ function resolveSearchParams(req) {
   } else if (req.user) {
     const preferences = getPreferences(req.user.id);
     dietaryRestrictionsForHint = preferences ? preferences.dietaryRestrictions : [];
+  } else {
+    dietaryRestrictionsForHint = guestDietList(req.query.diet);
   }
   const dietaryHint = dietaryRestrictionsForHint.join(' ');
 
@@ -985,6 +987,17 @@ function groupInstruction(groupSize, sharing, targetPrice) {
     `works well as an individual order at this budget, since everyone will be ordering their own.`;
 }
 
+// Guests have no account, so their diet comes from the client. Only the fixed chip values pass; anything else is dropped.
+const GUEST_DIETS = ['Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal', 'Kosher', 'Shellfish-Free'];
+function guestDietList(raw) {
+  const list = typeof raw === 'string' ? raw.slice(0, 200).split(',') : raw;
+  return Array.isArray(list) ? GUEST_DIETS.filter(d => list.includes(d)) : [];
+}
+function guestPreferences(raw) {
+  const dietaryRestrictions = guestDietList(raw);
+  return dietaryRestrictions.length ? { favoriteCuisines: [], dietaryRestrictions } : null;
+}
+
 function personalizationInstruction(preferences, visitHighlights) {
   const parts = [];
 
@@ -1005,7 +1018,7 @@ function personalizationInstruction(preferences, visitHighlights) {
         `than guessing, since menu/ingredient data isn't available and inventing one is never allowed.`
       );
     }
-    parts.push(`Their spice tolerance is: ${preferences.spiceTolerance}.`);
+    if (preferences.spiceTolerance) parts.push(`Their spice tolerance is: ${preferences.spiceTolerance}.`);
   }
 
   if (visitHighlights.length > 0) {
@@ -1503,7 +1516,7 @@ app.post('/api/recommend', optionalAuth, async (req, res) => {
 
   const isSharing = sharing === true;
   const dishCraving = sanitizeText(dish, 60);
-  const preferences = req.user ? getPreferences(req.user.id) : null;
+  const preferences = req.user ? getPreferences(req.user.id) : guestPreferences(req.body.dietaryRestrictions);
 
   // A group's "size" is however many people are actually in it, not
   // whatever the manual Group Size filter happens to be set to.
@@ -1708,7 +1721,7 @@ app.post('/api/prewarm', optionalAuth, apiLimiter, async (req, res) => {
   if (groupId && req.user && isGroupMember(Number(groupId), req.user.id)) {
     groupData = getCombinedGroupData(Number(groupId));
   }
-  const preferences = req.user ? getPreferences(req.user.id) : null;
+  const preferences = req.user ? getPreferences(req.user.id) : guestPreferences(req.body.dietaryRestrictions);
   const restrictions = groupData ? groupData.dietaryRestrictions : (preferences ? preferences.dietaryRestrictions : []);
   const targetPrice = [1, 2, 3, 4].includes(Number(price)) ? Number(price) : Math.max(0, ...candidates.map(r => r.price || 0));
   // Never send anyone to a place known to be closed; fall back only if everything is.
