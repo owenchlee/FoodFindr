@@ -130,6 +130,63 @@ function sendIndexHtml(req, res, next) {
   res.send(indexCache.html);
 }
 
+// Public privacy policy, rendered from docs/PRIVACY_POLICY.md (the single
+// source) with a tiny converter: headings, paragraphs, lists, **bold**,
+// [links](https://...) and '>' blockquotes. shortcut: no nesting or code spans,
+// swap in a real markdown lib if the policy ever needs them.
+const POLICY_PATH = path.join(__dirname, '..', 'docs', 'PRIVACY_POLICY.md');
+let policyCache = { mtime: 0, html: '' };
+function renderPolicy(md) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const inline = s => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out = [];
+  let para = [], items = [], quote = [], inQuote = false;
+  const flush = () => {
+    if (para.length) out.push(`<p>${inline(para.join(' '))}</p>`);
+    if (items.length) out.push(`<ul>${items.map(i => `<li>${inline(i)}</li>`).join('')}</ul>`);
+    para = []; items = [];
+  };
+  const flushQuote = () => { if (inQuote) { out.push('</blockquote>'); inQuote = false; } };
+  for (const raw of md.split(/\r?\n/)) {
+    let line = raw;
+    if (line.startsWith('>')) {
+      if (!inQuote) { flush(); out.push('<blockquote>'); inQuote = true; }
+      line = line.replace(/^>\s?/, '');
+    } else if (inQuote) { flush(); flushQuote(); }
+    let m;
+    if (!line.trim()) flush();
+    else if ((m = line.match(/^(#{1,3})\s+(.*)/))) { flush(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); }
+    else if ((m = line.match(/^- (.*)/))) { if (para.length) flush(); items.push(m[1]); }
+    else if (items.length && /^\s+\S/.test(line)) items[items.length - 1] += ' ' + line.trim();
+    else { if (items.length) flush(); para.push(line.trim()); }
+  }
+  flush(); flushQuote();
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FoodFindr Privacy Policy</title>
+<style>
+body{margin:0;background:#14110f;color:#eee;font:16px/1.6 -apple-system,system-ui,"Segoe UI",sans-serif}
+main{max-width:720px;margin:0 auto;padding:24px 20px 64px;overflow-wrap:anywhere}
+h1,h2,h3{line-height:1.25}a{color:#ff9d5c}
+blockquote{margin:16px 0;padding:4px 16px;border-left:4px solid #ff9d5c;background:#211c19}
+</style></head><body><main>
+${out.join('\n')}
+</main></body></html>`;
+}
+app.get('/privacy', (req, res, next) => {
+  try {
+    const mtime = fs.statSync(POLICY_PATH).mtimeMs;
+    if (mtime !== policyCache.mtime) policyCache = { mtime, html: renderPolicy(fs.readFileSync(POLICY_PATH, 'utf8')) };
+  } catch (err) { return next(err); }
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(policyCache.html);
+});
+
 // Serves the same config the /api/config JSON endpoint does, but as a plain
 // synchronous script so the client doesn't need to await a fetch before it
 // can inject the Maps <script> tag (see the bootstrap in index.html).
